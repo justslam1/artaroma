@@ -87,7 +87,7 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
   },
 ];
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectQuery = searchParams.get('redirect');
@@ -334,5 +334,22 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-slate-400 text-xs font-semibold">Memuat formulir login...</p>
+          </div>
+        </div>
+      }
+    >
+      <LoginContent />
+    </React.Suspense>
   );
 }
