@@ -17,6 +17,8 @@ import {
   Building2,
   LogOut,
   User,
+  History,
+  BookOpen,
 } from 'lucide-react';
 
 export function AdminTopNav() {
@@ -36,6 +38,7 @@ export function AdminTopNav() {
   const isMasterActive = pathname.startsWith('/admin/master');
   const isStockActive = pathname.startsWith('/admin/stock');
   const isFinanceActive = pathname.startsWith('/admin/finance');
+  const isTransactionsActive = pathname.startsWith('/admin/transactions');
 
   const isPOActive = pathname.startsWith('/admin/procurement');
   const isSOActive = pathname.startsWith('/admin/sales-orders') || pathname.startsWith('/admin/orders');
@@ -234,6 +237,21 @@ export function AdminTopNav() {
               >
                 <Layers className="w-4 h-4" />
                 <span>Lihat Stok</span>
+              </Link>
+            )}
+
+            {/* Log Book Operasional & Riwayat Aktivitas */}
+            {(isSuperAdmin || canAccessSO || canAccessPO || canAccessFinance) && (
+              <Link
+                href="/admin/transactions"
+                className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                  isTransactionsActive
+                    ? 'bg-white/15 text-white border-white'
+                    : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Log Book</span>
               </Link>
             )}
 
