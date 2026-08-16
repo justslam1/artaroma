@@ -56,6 +56,31 @@ export default function StockInventoryPage() {
     return () => window.removeEventListener('artaroma_applications_updated', handleAppUpdate);
   }, []);
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user info in stock page:', err));
+  }, []);
+
+  // Determine permission to edit batch & ED (Restricted: only Super Admin, Admin, Warehouse role, or explicit 'Edit Batch & ED (Gudang)' permission)
+  const canEditBatch =
+    Boolean(currentUser) &&
+    (currentUser.is_super_admin ||
+      currentUser.role === 'ADMIN' ||
+      currentUser.role === 'SUPER_ADMIN' ||
+      currentUser.role === 'WAREHOUSE' ||
+      currentUser.role === 'GUDANG' ||
+      (Array.isArray(currentUser.allowed_modules) &&
+        (currentUser.allowed_modules.includes('Edit Batch & ED (Gudang)') ||
+          currentUser.allowed_modules.includes('Stok & Gudang'))));
+
   // Expanded product IDs for inline lot/batch hierarchy drawers (Expand All by default)
   const [expandedProductIds, setExpandedProductIds] = useState<string[]>([]);
 
@@ -93,6 +118,18 @@ export default function StockInventoryPage() {
     physical_qty_kg: 18.0,
     notes: 'Penyesuaian sampel pengujian lab & QC',
   });
+
+  // Form State for Editing Batch Information (No. Batch & Tanggal ED)
+  const [isEditBatchOpen, setIsEditBatchOpen] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<any>(null);
+  const [editBatchForm, setEditBatchForm] = useState({
+    id: '',
+    batch_number: '',
+    expiry_date: '',
+    production_date: '',
+    notes: '',
+  });
+  const [isEditBatchSubmitting, setIsEditBatchSubmitting] = useState(false);
 
   // Fetch products and stock batches from MySQL Database APIs
   const fetchStockData = async () => {
@@ -258,6 +295,50 @@ export default function StockInventoryPage() {
     }
   };
 
+  // Handlers for Editing Batch
+  const handleOpenEditBatch = (batch: any) => {
+    setEditingBatch(batch);
+    setEditBatchForm({
+      id: batch.id,
+      batch_number: batch.batch_number || '',
+      expiry_date: batch.expiry_date ? String(batch.expiry_date).split('T')[0] : '',
+      production_date: batch.production_date ? String(batch.production_date).split('T')[0] : '',
+      notes: '',
+    });
+    setIsEditBatchOpen(true);
+  };
+
+  const handleSaveEditBatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBatchForm.id || !editBatchForm.batch_number.trim() || !editBatchForm.expiry_date) {
+      alert('Nomor Batch dan Tanggal Expired (ED) wajib diisi!');
+      return;
+    }
+
+    setIsEditBatchSubmitting(true);
+    try {
+      const res = await fetch('/api/stock-batches', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editBatchForm),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || 'Gagal memperbarui batch di server');
+      }
+
+      setIsEditBatchOpen(false);
+      setEditingBatch(null);
+      alert(`Informasi Batch '${editBatchForm.batch_number}' berhasil diperbarui!`);
+      await fetchStockData();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Gagal menyimpan perubahan batch: ${err.message}`);
+    } finally {
+      setIsEditBatchSubmitting(false);
+    }
+  };
+
   // Filter Products (Sorted Alphabetically by Name)
   const filteredProducts = products
     .filter((p) => {
@@ -283,7 +364,7 @@ export default function StockInventoryPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="bg-amber-400 text-slate-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                ROLE: PENGELOLA GUDANG (WAREHOUSE MANAGER)
+                {canEditBatch ? 'ROLE: PENGELOLA GUDANG (WAREHOUSE MANAGER)' : 'ROLE: EKSEKUTIF SALES (VIEW ONLY)'}
               </span>
               <span className="bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 text-[10px] font-mono px-2 py-0.5 rounded font-bold flex items-center gap-1">
                 <Database className="w-3 h-3 text-emerald-300" /> MYSQL DATABASE CONNECTED
@@ -291,50 +372,54 @@ export default function StockInventoryPage() {
             </div>
             <h1 className="text-2xl font-bold mt-1.5 flex items-center gap-2">
               <Boxes className="w-6 h-6 text-amber-400" />
-              Manajemen Stok FEFO & Penyiapan Barang Gudang
+              Manajemen Stok FEFO &amp; Penyiapan Barang Gudang
             </h1>
             <p className="text-xs text-blue-200 mt-1 max-w-2xl">
-              Tugas Pengelola Gudang: Menerima Stok PO Distributor, Menyiapkan Barang untuk Kurir / Customer Ambil Langsung, & Audit Stok Opname.
+              {canEditBatch
+                ? 'Tugas Pengelola Gudang: Menerima Stok PO Distributor, Menyiapkan Barang untuk Kurir / Customer Ambil Langsung, & Audit Stok Opname.'
+                : 'Pantau ketersediaan stok fisik bibit parfum real-time, varian kemasan, dan urutan prioritas FEFO untuk Sales Order.'}
             </p>
           </div>
 
-          {/* 3 Main Action Buttons for Warehouse Manager */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/admin/procurement"
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
-            >
-              <Package className="w-4 h-4" /> 1. Terima Stok PO Vendor
-            </Link>
-            <button
-              onClick={() => {
-                if (batches.length > 0) {
-                  setRepackForm({
-                    source_batch_id: batches[0].id,
-                    target_pack_size: 1,
-                    repack_qty_kg: 1.0,
-                    loss_kg: 0.0,
-                  });
-                }
-                setIsRepackOpen(true);
-              }}
-              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
-            >
-              <RotateCcw className="w-4 h-4" /> 2. Repack Varian Stok
-            </button>
-            <Link
-              href="/admin/sales-orders"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
-            >
-              <Truck className="w-4 h-4" /> 3. Menyiapkan Barang (Pick/Pack)
-            </Link>
-            <Link
-              href="/admin/stock/opname"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
-            >
-              <ClipboardList className="w-4 h-4" /> 3. Stok Opname (Audit)
-            </Link>
-          </div>
+          {/* Action Buttons for Warehouse Manager */}
+          {canEditBatch && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href="/admin/procurement"
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
+              >
+                <Package className="w-4 h-4" /> 1. Terima Stok PO Vendor
+              </Link>
+              <button
+                onClick={() => {
+                  if (batches.length > 0) {
+                    setRepackForm({
+                      source_batch_id: batches[0].id,
+                      target_pack_size: 1,
+                      repack_qty_kg: 1.0,
+                      loss_kg: 0.0,
+                    });
+                  }
+                  setIsRepackOpen(true);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
+              >
+                <RotateCcw className="w-4 h-4" /> 2. Repack Varian Stok
+              </button>
+              <Link
+                href="/admin/sales-orders"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
+              >
+                <Truck className="w-4 h-4" /> 3. Menyiapkan Barang (Pick/Pack)
+              </Link>
+              <Link
+                href="/admin/stock/opname"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
+              >
+                <ClipboardList className="w-4 h-4" /> 3. Stok Opname (Audit)
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Search & Fragrance Family Filter Bar */}
@@ -579,15 +664,17 @@ export default function StockInventoryPage() {
                         <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
                           <Layers className="w-4 h-4 text-blue-600" /> Hirarki Produk Varian Kemasan & Rincian Batch FEFO
                         </h3>
-                        <button
-                          onClick={() => {
-                            setNewBatchForm({ ...newBatchForm, product_id: p.id });
-                            setIsAddBatchOpen(true);
-                          }}
-                          className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Terima Batch PO Vendor
-                        </button>
+                        {canEditBatch && (
+                          <button
+                            onClick={() => {
+                              setNewBatchForm({ ...newBatchForm, product_id: p.id });
+                              setIsAddBatchOpen(true);
+                            }}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Terima Batch PO Vendor
+                          </button>
+                        )}
                       </div>
 
                       {packSizes.map((sizeKg) => {
@@ -669,6 +756,7 @@ export default function StockInventoryPage() {
                                     <th className="px-4 py-2.5">KADALUARSA (FEFO ORDER)</th>
                                     <th className="px-4 py-2.5 text-right">STOK FISIK (UNIT & KG)</th>
                                     <th className="px-4 py-2.5 text-center">STATUS FEFO</th>
+                                    {canEditBatch && <th className="px-4 py-2.5 text-center">AKSI</th>}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -744,12 +832,25 @@ export default function StockInventoryPage() {
                                                 <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] px-2.5 py-1 rounded-full font-extrabold">READY FEFO</span>
                                               )}
                                             </td>
+                                            {canEditBatch && (
+                                              <td className="px-4 py-3 text-center">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleOpenEditBatch(b)}
+                                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                  title="Edit Nomor Batch & Tanggal Expired"
+                                                >
+                                                  <Edit3 className="w-3 h-3 text-blue-600" />
+                                                  Edit
+                                                </button>
+                                              </td>
+                                            )}
                                           </tr>
                                         );
                                       })
                                     ) : (
                                       <tr>
-                                        <td colSpan={6} className="px-4 py-4 text-center text-slate-400 text-xs italic bg-gray-50/50">
+                                        <td colSpan={canEditBatch ? 7 : 6} className="px-4 py-4 text-center text-slate-400 text-xs italic bg-gray-50/50">
                                           Belum ada batch lot fisik untuk varian {sizeKg} Kg ini.
                                         </td>
                                       </tr>
@@ -1234,6 +1335,124 @@ export default function StockInventoryPage() {
                     </>
                   ) : (
                     'Jalankan Repack Varian'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: EDIT INFORMASI NO. BATCH & TANGGAL EXPIRED (ED) */}
+      {isEditBatchOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="bg-blue-700 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-200" />
+                <div>
+                  <h3 className="font-bold text-sm">Edit Informasi Batch Stok (FEFO)</h3>
+                  <p className="text-[11px] text-blue-100">Koreksi nomor batch atau perbarui masa kedaluwarsa</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEditBatchOpen(false);
+                  setEditingBatch(null);
+                }}
+                className="text-blue-200 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditBatch} className="p-6 space-y-4 text-xs">
+              {editingBatch && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <div className="font-bold text-slate-800">{editingBatch.variant_sku || 'Varian Produk'}</div>
+                  <div className="text-slate-500 text-[11px]">
+                    Sisa Stok Fisik: <strong className="text-slate-700 font-mono">{formatKg(editingBatch.current_qty_kg)}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Nomor Batch / Lot Vendor <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editBatchForm.batch_number}
+                  onChange={(e) => setEditBatchForm({ ...editBatchForm, batch_number: e.target.value })}
+                  placeholder="Contoh: LOT-2026-881"
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2.5 font-mono text-xs font-bold text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">Pastikan sesuai dengan kode lot faktur fisik/CoA</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Tanggal Produksi</label>
+                  <input
+                    type="date"
+                    value={editBatchForm.production_date}
+                    onChange={(e) => setEditBatchForm({ ...editBatchForm, production_date: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2.5 font-mono text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tanggal Expired (ED) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editBatchForm.expiry_date}
+                    onChange={(e) => setEditBatchForm({ ...editBatchForm, expiry_date: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2.5 font-mono text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Catatan / Alasan Perubahan (Opsional)</label>
+                <textarea
+                  rows={2}
+                  value={editBatchForm.notes}
+                  onChange={(e) => setEditBatchForm({ ...editBatchForm, notes: e.target.value })}
+                  placeholder="Contoh: Koreksi typo penulisan no lot dari suplier"
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditBatchOpen(false);
+                    setEditingBatch(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditBatchSubmitting}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isEditBatchSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Simpan Perubahan
+                    </>
                   )}
                 </button>
               </div>

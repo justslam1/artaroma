@@ -435,6 +435,7 @@ export default function MasterDataPage() {
     'Purchase Order (PO)',
     'Sales Order (SO)',
     'Lihat Stok (Gudang)',
+    'Edit Batch & ED (Gudang)',
     'Finance & Invoice',
     'Aplikasi Kurir',
     'Katalog Customer',
@@ -448,6 +449,7 @@ export default function MasterDataPage() {
       'Purchase Order (PO)',
       'Sales Order (SO)',
       'Lihat Stok (Gudang)',
+      'Edit Batch & ED (Gudang)',
       'Finance & Invoice',
       'Aplikasi Kurir',
       'Katalog Customer',
@@ -456,7 +458,7 @@ export default function MasterDataPage() {
     ],
     SALES: ['Dashboard', 'Sales Order (SO)', 'Lihat Stok (Gudang)', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
     FINANCE: ['Dashboard', 'Purchase Order (PO)', 'Finance & Invoice', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
-    WAREHOUSE: ['Dashboard', 'Purchase Order (PO)', 'Lihat Stok (Gudang)'],
+    WAREHOUSE: ['Dashboard', 'Purchase Order (PO)', 'Lihat Stok (Gudang)', 'Edit Batch & ED (Gudang)'],
     COURIER: ['Aplikasi Kurir'],
     CUSTOMER: ['Katalog Customer'],
   };
@@ -2130,6 +2132,7 @@ export default function MasterDataPage() {
                       c.pic_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       c.email.toLowerCase().includes(searchTerm.toLowerCase())
                     )
+                    .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'id', { sensitivity: 'base' }))
                     .map((c) => {
                       const allowedCount = c.allowed_product_ids && c.allowed_product_ids.length > 0
                         ? c.allowed_product_ids.length
@@ -2225,7 +2228,14 @@ export default function MasterDataPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {distributors.map((d) => {
+                  {distributors
+                    .filter((d) =>
+                      d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (d.contact_name && d.contact_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                      (d.code && d.code.toLowerCase().includes(searchTerm.toLowerCase()))
+                    )
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' }))
+                    .map((d) => {
                     const suppliedProducts = products.filter((p) => (d.supplied_product_ids || []).includes(p.id));
                     return (
                       <tr key={d.id} className="hover:bg-gray-50 transition-colors">
@@ -2313,7 +2323,14 @@ export default function MasterDataPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {couriers.map((k) => (
+                  {couriers
+                    .filter((k) =>
+                      k.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (k.code && k.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                      (k.phone && k.phone.toLowerCase().includes(searchTerm.toLowerCase()))
+                    )
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' }))
+                    .map((k) => (
                     <tr key={k.id} className="hover:bg-gray-50">
                       <td className="px-6 py-3.5">
                         <div className="font-semibold text-slate-800">{k.name}</div>
@@ -2371,6 +2388,7 @@ export default function MasterDataPage() {
                       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       (userModuleAccess[u.id] || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase())
                     )
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' }))
                     .map((u) => {
                       const assigned = userModuleAccess[u.id] || [];
                       return (

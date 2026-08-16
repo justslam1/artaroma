@@ -258,3 +258,56 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, batch_number, expiry_date, production_date, notes } = body;
+
+    if (!id || !batch_number || !expiry_date) {
+      return NextResponse.json(
+        { success: false, message: 'id, batch_number, and expiry_date are required' },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const isExpired = new Date(expiry_date) < new Date();
+      await executeQuery(
+        `UPDATE stock_batches 
+         SET batch_number = ?, expiry_date = ?, production_date = ?, is_expired = ?
+         WHERE id = ?`,
+        [
+          batch_number.trim(),
+          expiry_date,
+          production_date || null,
+          isExpired,
+          id,
+        ]
+      );
+    } catch (dbErr: any) {
+      console.warn('Database stock batch update error:', dbErr.message);
+      return NextResponse.json(
+        { success: false, message: dbErr.message || 'Failed to update batch in database' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Batch ${batch_number} berhasil diperbarui`,
+      data: {
+        id,
+        batch_number: batch_number.trim(),
+        expiry_date,
+        production_date,
+        notes,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, message: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
