@@ -109,7 +109,71 @@ export async function PUT(
 
     // Run in database transaction to ensure atomicity
     await executeTransaction(async (connection) => {
-      // 1. Update the sales order parent row
+      // Check current status before update
+      const [currentOrderRows]: any = await connection.query(
+        'SELECT status FROM sales_orders WHERE id = ? FOR UPDATE',
+        [realId]
+      );
+      const previousStatus = currentOrderRows?.[0]?.status;
+
+      // 1. If transitioning to 'DIKIRIM', perform physical FEFO deduction from stock_batches
+      if (status === 'DIKIRIM' && previousStatus !== 'DIKIRIM') {
+        const [allocations]: any = await connection.query(
+          `SELECT sib.id, sib.stock_batch_id, sib.qty_taken_kg
+           FROM so_item_batches sib
+           JOIN so_items si ON sib.so_item_id = si.id
+           WHERE si.so_id = ?`,
+          [realId]
+        );
+
+        if (allocations && allocations.length > 0) {
+          for (const alloc of allocations) {
+            const qty = parseFloat(alloc.qty_taken_kg) || 0;
+            if (qty > 0) {
+              await connection.query(
+                `UPDATE stock_batches 
+                 SET current_qty_kg = GREATEST(0, current_qty_kg - ?) 
+                 WHERE id = ?`,
+                [qty, alloc.stock_batch_id]
+              );
+            }
+          }
+        }
+      }
+
+      // 2. If transitioning to 'CANCELLED', restore/refund all deducted batches back to stock_batches
+      if (status === 'CANCELLED') {
+        const [allocations]: any = await connection.query(
+          `SELECT sib.id, sib.stock_batch_id, sib.qty_taken_kg
+           FROM so_item_batches sib
+           JOIN so_items si ON sib.so_item_id = si.id
+           WHERE si.so_id = ?`,
+          [realId]
+        );
+
+        if (allocations && allocations.length > 0) {
+          for (const alloc of allocations) {
+            const qty = parseFloat(alloc.qty_taken_kg) || 0;
+            if (qty > 0) {
+              await connection.query(
+                `UPDATE stock_batches 
+                 SET current_qty_kg = current_qty_kg + ? 
+                 WHERE id = ?`,
+                [qty, alloc.stock_batch_id]
+              );
+            }
+          }
+          // Remove allocations since order is cancelled
+          await connection.query(
+            `DELETE sib FROM so_item_batches sib
+             JOIN so_items si ON sib.so_item_id = si.id
+             WHERE si.so_id = ?`,
+            [realId]
+          );
+        }
+      }
+
+      // 3. Update the sales order parent row
       const updateFields: string[] = [];
       const updateValues: any[] = [];
 

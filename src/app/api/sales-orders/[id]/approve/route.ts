@@ -15,6 +15,13 @@ export async function POST(
     );
   }
 
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch (e) {
+    body = {};
+  }
+
   try {
     let approvalSummary: any = null;
 
@@ -58,6 +65,26 @@ export async function POST(
           };
         }
 
+        // Optional: Update so_items from request body if confirmed/adjusted by admin
+        if (Array.isArray(body.items) && body.items.length > 0) {
+          for (const it of body.items) {
+            if (it.id) {
+              await connection.query(
+                `UPDATE so_items 
+                 SET qty_kg = ?, unit_price_per_kg = ?, subtotal = ? 
+                 WHERE id = ? AND so_id = ?`,
+                [
+                  Number(it.qty_kg) || 0,
+                  Number(it.unit_price_per_kg) || 0,
+                  (Number(it.qty_kg) || 0) * (Number(it.unit_price_per_kg) || 0),
+                  it.id,
+                  soId,
+                ]
+              );
+            }
+          }
+        }
+
         // 2. Fetch Order Items
         const [soItems]: any = await connection.query(
           'SELECT * FROM so_items WHERE so_id = ?',
@@ -70,9 +97,10 @@ export async function POST(
 
         const fefoDeductions: any[] = [];
 
-        // 3. Process FEFO Deduction for each item
+        // 3. Process FEFO Deduction for each item with qty > 0
         for (const item of soItems) {
           let neededQtyKg = parseFloat(item.qty_kg);
+          if (neededQtyKg <= 0) continue; // Skip items with 0 Kg (e.g., postponed to Trip 2)
 
           // Lock available non-expired batches ordered by nearest expiry date (FEFO)
           const [batches]: any = await connection.query(
@@ -96,36 +124,29 @@ export async function POST(
             );
           }
 
-          // Deduct from batches sequentially (First Expired, First Out)
+          // Deduct from batches sequentially (First Expired, First Out) for allocation plan
           for (const batch of batches) {
             if (neededQtyKg <= 0) break;
 
             const currentBatchQty = parseFloat(batch.current_qty_kg);
             const qtyTaken = Math.min(currentBatchQty, neededQtyKg);
 
-            const newBatchQty = Number((currentBatchQty - qtyTaken).toFixed(4));
             neededQtyKg = Number((neededQtyKg - qtyTaken).toFixed(4));
 
-            // Update batch quantity in MySQL
+            // Record allocation in so_item_batches (Physical deduction occurs when status becomes DIKIRIM)
+            const allocationId = `alloc-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
             await connection.query(
-              'UPDATE stock_batches SET current_qty_kg = ? WHERE id = ?',
-              [newBatchQty, batch.id]
-            );
-
-            // Record batch allocation & specific COGS
-            const soItemBatchId = `soib-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-            await connection.query(
-              `INSERT INTO so_item_batches (id, so_item_id, stock_batch_id, qty_taken_kg, cogs_per_kg)
-               VALUES (?, ?, ?, ?, ?)`,
-              [soItemBatchId, item.id, batch.id, qtyTaken, batch.unit_cost_per_kg]
+              `INSERT INTO so_item_batches (id, so_item_id, stock_batch_id, qty_taken_kg)
+               VALUES (?, ?, ?, ?)`,
+              [allocationId, item.id, batch.id, qtyTaken]
             );
 
             fefoDeductions.push({
               so_item_id: item.id,
+              stock_batch_id: batch.id,
               batch_number: batch.batch_number,
               expiry_date: batch.expiry_date,
               qty_taken_kg: qtyTaken,
-              cogs_per_kg: batch.unit_cost_per_kg,
             });
           }
         }

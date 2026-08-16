@@ -43,6 +43,7 @@ import {
   Tag,
   MapPin,
   CheckCircle,
+  XCircle,
   Sparkles,
 } from 'lucide-react';
 
@@ -612,6 +613,11 @@ export default function OrderDetailPage() {
       const res = await fetch(`/api/sales-orders/${order.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: editingItems,
+          shipping_type: shippingType,
+          shipping_cost: shippingCost,
+        }),
       });
       const json = await res.json();
 
@@ -903,42 +909,19 @@ export default function OrderDetailPage() {
     alert(`Trip 2 (${trip2.surat_jalan_number}) berhasil dipindahkan ke PROSES GUDANG! Petugas gudang sekarang dapat memilih lot batch untuk sisa pesanan.`);
   };
 
-  // Action to revert status to previous workflow stage
+  // Action to revert status to previous workflow stage (Restricted: cannot revert once DIKIRIM)
   const handleGoBackToPreviousStage = () => {
+    if (order.status === 'DIKIRIM' || order.status === 'DITERIMA' || (order.status as string) === 'DELIVERED') {
+      alert('Pesanan yang sudah sampai di tahap DIKIRIM tidak dapat dikembalikan ke tahap sebelumnya. Anda hanya dapat menyelesaikan serah terima atau membatalkan pesanan.');
+      return;
+    }
+
     let prevStatus: SalesOrder['status'] | null = null;
     if (order.status === 'DIKONFIRMASI') prevStatus = 'DIAJUKAN';
     else if (order.status === 'PROSES_GUDANG') prevStatus = 'DIKONFIRMASI';
-    else if (order.status === 'DIKIRIM') prevStatus = 'PROSES_GUDANG';
 
     if (prevStatus) {
       if (confirm(`Apakah Anda yakin ingin mengembalikan status pesanan ke "${prevStatus}" untuk melakukan koreksi?`)) {
-        // If reverting from DIKIRIM back to PROSES_GUDANG, restore deducted batch stocks in database
-        if (order.status === 'DIKIRIM') {
-          const batchRestorations: any[] = [];
-          order.items.forEach((item) => {
-            if (item.assigned_batches && item.assigned_batches.length > 0) {
-              item.assigned_batches.forEach((b) => {
-                const batchObj = batches.find((bt) => bt.batch_number === b.batch_number || bt.id === b.batch_number);
-                if (batchObj && Number(b.qty_taken_kg) > 0) {
-                  batchRestorations.push({
-                    id: batchObj.id,
-                    current_qty_kg: Number(batchObj.current_qty_kg) + Number(b.qty_taken_kg),
-                    notes: `Pengembalian Stok (Revisi Pesanan ${order.so_number} ke PROSES GUDANG)`,
-                  });
-                }
-              });
-            }
-          });
-
-          if (batchRestorations.length > 0) {
-            fetch('/api/stock-batches', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ batch_updates: batchRestorations }),
-            }).catch((err) => console.warn('Failed to restore stock batches:', err));
-          }
-        }
-
         updateSalesOrderStatus(order.id, prevStatus);
       }
     }
@@ -966,6 +949,34 @@ export default function OrderDetailPage() {
     }
 
     const now = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+
+    // If cancelling an order that was already DIKIRIM, restore the deducted batch stocks
+    if (order.status === 'DIKIRIM') {
+      const batchRestorations: any[] = [];
+      order.items.forEach((item) => {
+        if (item.assigned_batches && item.assigned_batches.length > 0) {
+          item.assigned_batches.forEach((b) => {
+            const batchObj = batches.find((bt) => bt.batch_number === b.batch_number || bt.id === b.batch_number);
+            if (batchObj && Number(b.qty_taken_kg) > 0) {
+              batchRestorations.push({
+                id: batchObj.id,
+                current_qty_kg: Number(batchObj.current_qty_kg) + Number(b.qty_taken_kg),
+                notes: `Pengembalian Stok (Pembatalan Pesanan ${order.so_number})`,
+              });
+            }
+          });
+        }
+      });
+
+      if (batchRestorations.length > 0) {
+        fetch('/api/stock-batches', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch_updates: batchRestorations }),
+        }).catch((err) => console.warn('Failed to restore stock batches on cancel:', err));
+      }
+    }
+
     updateSalesOrderStatus(order.id, 'CANCELLED', {
       cancellation_reason: reasonText,
       cancelled_at: now,
@@ -1491,10 +1502,10 @@ export default function OrderDetailPage() {
               <Edit3 className="w-4 h-4" /> Form Eksekusi Aksi Alur Kerja
             </h3>
             <div className="flex items-center gap-2">
-              {['DIKONFIRMASI', 'PROSES_GUDANG', 'DIKIRIM'].includes(order.status) && (
+              {['DIKONFIRMASI', 'PROSES_GUDANG'].includes(order.status) && (
                 <button
                   onClick={handleGoBackToPreviousStage}
-                  className="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1 transition-colors"
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1 transition-colors cursor-pointer"
                   title="Kembalikan status pesanan ke tahap sebelumnya untuk mengoreksi data"
                 >
                   ← Koreksi Tahap Sebelumnya
@@ -2542,7 +2553,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {/* Action Step 5: DIKIRIM -> Customer signs POD -> DITERIMA */}
+          {/* Action Step 5: DIKIRIM -> Customer signs POD -> DITERIMA or CANCELLED */}
           {order.status === 'DIKIRIM' && (
             <div className="bg-white p-4 rounded-lg border border-blue-100 text-xs space-y-3">
               <div className="font-bold text-teal-900 flex items-center gap-2">
@@ -2550,14 +2561,22 @@ export default function OrderDetailPage() {
                 Langkah 4: Barang Dalam Perjalanan (Kirim Kurir)
               </div>
               <div className="text-slate-650 leading-relaxed">
-                Kurir sedang mengirimkan barang. Kurir memvalidasi muatan yang dibawa, lalu customer membubuhkan tanda tangan digital pada penerimaan.
+                Kurir sedang mengirimkan barang. Pada tahap ini pesanan tidak dapat diedit/mundur ke tahap sebelumnya. Kurir memvalidasi muatan yang dibawa, lalu customer membubuhkan tanda tangan digital pada penerimaan.
               </div>
-              <button
-                onClick={handleOpenPODModal}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow inline-flex items-center gap-1.5"
-              >
-                <UserCheck className="w-4 h-4" /> Selesaikan Serah Terima POD & Tanda Tangan (Status: DITERIMA)
-              </button>
+              <div className="flex items-center gap-2 pt-2 flex-wrap">
+                <button
+                  onClick={handleOpenPODModal}
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <UserCheck className="w-4 h-4" /> Selesaikan Serah Terima POD & Tanda Tangan (Status: DITERIMA)
+                </button>
+                <button
+                  onClick={handleCancelOrder}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs px-4 py-2 rounded-lg shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" /> Batalkan Pesanan & Kembalikan Stok
+                </button>
+              </div>
             </div>
           )}
 
