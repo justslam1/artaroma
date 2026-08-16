@@ -440,6 +440,7 @@ export default function MasterDataPage() {
     'Aplikasi Kurir',
     'Katalog Customer',
     'Lihat Nilai Finansial (PO/SO)',
+    'Lihat Nilai Finansial (Dashboard)',
   ];
   const defaultModulesByRole: Record<string, string[]> = {
     ADMIN: [
@@ -452,9 +453,10 @@ export default function MasterDataPage() {
       'Aplikasi Kurir',
       'Katalog Customer',
       'Lihat Nilai Finansial (PO/SO)',
+      'Lihat Nilai Finansial (Dashboard)',
     ],
-    SALES: ['Dashboard', 'Sales Order (SO)', 'Lihat Stok (Gudang)', 'Lihat Nilai Finansial (PO/SO)'],
-    FINANCE: ['Dashboard', 'Purchase Order (PO)', 'Finance & Invoice', 'Lihat Nilai Finansial (PO/SO)'],
+    SALES: ['Dashboard', 'Sales Order (SO)', 'Lihat Stok (Gudang)', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
+    FINANCE: ['Dashboard', 'Purchase Order (PO)', 'Finance & Invoice', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
     WAREHOUSE: ['Dashboard', 'Purchase Order (PO)', 'Lihat Stok (Gudang)'],
     COURIER: ['Aplikasi Kurir'],
     CUSTOMER: ['Katalog Customer'],
