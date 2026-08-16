@@ -173,9 +173,6 @@ export default function AdminDashboardPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Dashboard Overview</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Ringkasan Omset, Kurs Harian USD/IDR, FEFO Batch Stok, & Laporan Piutang (Aging AR) — B2B Fragrance Hub
-            </p>
           </div>
         </div>
 

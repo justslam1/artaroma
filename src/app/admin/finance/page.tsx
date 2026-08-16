@@ -174,7 +174,7 @@ export default function FinanceInvoicesPage() {
             href="/admin/finance/payables"
             className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
           >
-            <Building2 className="w-4 h-4 text-purple-600" /> Ke Tagihan Vendor / PO (Hutang) &rarr;
+            <Building2 className="w-4 h-4 text-purple-600" /> Ke Tagihan Suplier / PO (Hutang) &rarr;
           </Link>
         </div>
 

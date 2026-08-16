@@ -286,7 +286,7 @@ export function AdminTopNav() {
                     >
                       <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
                       <div>
-                        <div className="font-bold text-slate-800">2. Tagihan Vendor (Hutang PO)</div>
+                        <div className="font-bold text-slate-800">2. Tagihan Suplier (Hutang PO)</div>
                         <div className="text-[10px] text-slate-400 font-normal">Pembayaran & Bukti Transfer PO</div>
                       </div>
                     </Link>
@@ -321,7 +321,7 @@ export function AdminTopNav() {
                   : 'text-blue-100 hover:bg-blue-700'
               }`}
             >
-              <Building2 className="w-3.5 h-3.5" /> Tagihan Vendor (Hutang PO)
+              <Building2 className="w-3.5 h-3.5" /> Tagihan Suplier (Hutang PO)
             </Link>
           </div>
         </div>

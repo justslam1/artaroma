@@ -122,10 +122,10 @@ export default function FinancePayablesPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-purple-600" />
-              Tagihan Vendor & Hutang Pembelian PO
+              Tagihan Suplier & Hutang PO
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Kelola pembayaran tagihan Purchase Order (PO) ke Distributor Resmi (*Givaudan, Firmenich, IFF*)
+              Kelola pembayaran tagihan Purchase Order (PO)
             </p>
           </div>
           <Link
@@ -188,7 +188,7 @@ export default function FinancePayablesPage() {
                   <th className="px-6 py-3">No. PO / Tanggal</th>
                   <th className="px-6 py-3">Distributor / Vendor</th>
                   <th className="px-6 py-3">Rincian Item Dipesan</th>
-                  <th className="px-6 py-3">Total Tagihan Vendor</th>
+                  <th className="px-6 py-3">Total Tagihan Suplier</th>
                   <th className="px-6 py-3">Status Alur PO</th>
                   <th className="px-6 py-3 text-right">Aksi Pembayaran Vendor</th>
                 </tr>
@@ -281,7 +281,7 @@ export default function FinancePayablesPage() {
             <div className="bg-purple-700 px-6 py-4 flex items-center justify-between text-white">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
-                <h3 className="font-bold text-base">Input Pembayaran Tagihan Vendor PO</h3>
+                <h3 className="font-bold text-base">Input Pembayaran Tagihan Suplier PO</h3>
               </div>
               <button onClick={() => setSelectedPOForPayment(null)} className="text-purple-200 hover:text-white">
                 <X className="w-5 h-5" />
@@ -291,7 +291,7 @@ export default function FinancePayablesPage() {
             <form onSubmit={handlePayVendorSubmit} className="p-6 space-y-4 text-xs">
               <div className="bg-purple-50 border border-purple-200 p-3.5 rounded-xl space-y-1 text-purple-900 font-medium">
                 <div>Ref PO: <strong>{selectedPOForPayment.po_number}</strong></div>
-                <div>Distributor Vendor: <strong>{selectedPOForPayment.distributor_name}</strong></div>
+                <div>Distributor Suplier: <strong>{selectedPOForPayment.distributor_name}</strong></div>
                 <div>Total Nilai Tagihan: <strong className="text-base text-purple-800 font-mono">{formatIDR(selectedPOForPayment.total_amount)}</strong></div>
               </div>
 

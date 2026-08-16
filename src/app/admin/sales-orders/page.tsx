@@ -101,7 +101,7 @@ export default function SalesOrdersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-blue-600" />
-            Sales Order (Pesanan Customer B2B)
+            Sales Order
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Daftar Pesanan Penjualan dari Customer.
