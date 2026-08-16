@@ -204,7 +204,6 @@ export default function MasterDataPage() {
     { key: 'couriers' as Tab, icon: Truck, label: TAB_LABELS.couriers, count: couriers.length },
     { key: 'users' as Tab, icon: ShieldCheck, label: TAB_LABELS.users, count: appUsers.length },
     { key: 'finance' as Tab, icon: Landmark, label: TAB_LABELS.finance, count: 0 },
-    { key: 'access' as Tab, icon: Key, label: TAB_LABELS.access, count: appUsers.length },
     { key: 'config' as Tab, icon: Settings, label: TAB_LABELS.config, count: 1 },
   ];
 
