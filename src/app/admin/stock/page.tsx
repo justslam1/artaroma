@@ -364,7 +364,7 @@ export default function StockInventoryPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="bg-amber-400 text-slate-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                {canEditBatch ? 'ROLE: PENGELOLA GUDANG (WAREHOUSE MANAGER)' : 'ROLE: EKSEKUTIF SALES (VIEW ONLY)'}
+                Inventory
               </span>
               <span className="bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 text-[10px] font-mono px-2 py-0.5 rounded font-bold flex items-center gap-1">
                 <Database className="w-3 h-3 text-emerald-300" /> MYSQL DATABASE CONNECTED
