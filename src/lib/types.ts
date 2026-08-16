@@ -282,6 +282,7 @@ export interface DeliveryCheckitem {
   product_name: string;
   batch_number: string;
   qty_kg: number;
+  pack_size_kg?: number;
   verified: boolean;
 }
 
@@ -289,12 +290,14 @@ export interface DeliveryTask {
   id: string;
   so_id: string;
   so_number: string;
+  surat_jalan_number?: string;
   courier_id: string;
+  customer_id?: string;
   customer_name: string;
   company_name: string;
   delivery_address: string;
   phone: string;
-  status: 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED';
+  status: 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'PENDING';
   items: DeliveryCheckitem[];
   recipient_name?: string;
   proof_photo_url?: string;
