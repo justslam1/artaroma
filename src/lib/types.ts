@@ -238,6 +238,8 @@ export interface SalesOrder {
   surat_jalan_number?: string;
   status: SOStatus;
   payment_method: PaymentMethod;
+  shipping_type?: 'FRANCO' | 'LOCO';
+  shipping_cost?: number;
   total_goods_amount?: number;
   grand_total?: number;
   order_date: string;
@@ -266,6 +268,8 @@ export interface Invoice {
   status: InvoiceStatus;
   issue_date: string;
   due_date: string;
+  shipping_type?: 'FRANCO' | 'LOCO';
+  shipping_cost?: number;
   total_amount: number;
   paid_amount: number;
   faktur_pajak_file_url?: string;

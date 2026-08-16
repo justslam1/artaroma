@@ -144,29 +144,34 @@ export async function POST(req: NextRequest) {
           [targetSoId]
         );
 
+        const orderShippingType = order.shipping_type || 'FRANCO';
+        const orderShippingCost = orderShippingType === 'FRANCO' ? 0 : parseFloat(order.shipping_cost || 0);
+
         let invoiceNumber = '';
         if (existingInvoices && existingInvoices.length > 0) {
           invoiceNumber = existingInvoices[0].invoice_number;
           await connection.query(
             `UPDATE invoices 
-             SET customer_id = ?, total_amount = ?, issue_date = ?, due_date = ?, status = 'UNPAID'
+             SET customer_id = ?, shipping_type = ?, shipping_cost = ?, total_amount = ?, issue_date = ?, due_date = ?, status = 'UNPAID'
              WHERE id = ?`,
-            [order.customer_id, order.grand_total, issueDate, dueDate, existingInvoices[0].id]
+            [order.customer_id, orderShippingType, orderShippingCost, order.grand_total, issueDate, dueDate, existingInvoices[0].id]
           );
         } else {
           invoiceNumber = `INV-2026-${String(Math.floor(100 + Math.random() * 900))}`;
           const invoiceId = `inv-${Date.now()}`;
           await connection.query(
             `INSERT INTO invoices 
-            (id, invoice_number, so_id, customer_id, status, issue_date, due_date, total_amount, paid_amount)
-            VALUES (?, ?, ?, ?, 'UNPAID', ?, ?, ?, 0.00)
+            (id, invoice_number, so_id, customer_id, shipping_type, shipping_cost, status, issue_date, due_date, total_amount, paid_amount)
+            VALUES (?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, 0.00)
             ON DUPLICATE KEY UPDATE 
               customer_id = VALUES(customer_id),
+              shipping_type = VALUES(shipping_type),
+              shipping_cost = VALUES(shipping_cost),
               total_amount = VALUES(total_amount),
               issue_date = VALUES(issue_date),
               due_date = VALUES(due_date),
               status = 'UNPAID'`,
-            [invoiceId, invoiceNumber, targetSoId, order.customer_id, issueDate, dueDate, order.grand_total]
+            [invoiceId, invoiceNumber, targetSoId, order.customer_id, orderShippingType, orderShippingCost, issueDate, dueDate, order.grand_total]
           );
         }
 

@@ -198,8 +198,25 @@ export default function SalesOrdersPage() {
                     </td>
 
                     {showFinancialColumn && (
-                      <td className="px-6 py-3.5 font-mono font-bold text-slate-800">
-                        {so.grand_total ? formatIDR(so.grand_total) : <span className="text-amber-600 italic font-sans text-xs">Menunggu Konfirmasi Admin</span>}
+                      <td className="px-6 py-3.5 font-mono">
+                        {so.grand_total ? (
+                          <>
+                            <div className="font-bold text-slate-800">{formatIDR(so.grand_total)}</div>
+                            <div className="text-[10px] font-sans font-semibold text-slate-400 mt-0.5">
+                              {so.shipping_type === 'LOCO' ? (
+                                <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                  LOCO (+{formatIDR(so.shipping_cost || 0)})
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  FRANCO (Gratis)
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-amber-600 italic font-sans text-xs">Menunggu Konfirmasi Admin</span>
+                        )}
                       </td>
                     )}
 

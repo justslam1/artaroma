@@ -2509,7 +2509,7 @@ export default function MasterDataPage() {
                         setBankForm({
                           bank: '',
                           no: '',
-                          atas_nama: 'PT Artaroma Fragrance Indonesia',
+                          atas_nama: 'PT Artaroma Jayatama',
                           jenis: 'Rekening Operasional',
                           badge: 'bg-blue-100 text-blue-800'
                         });

@@ -79,6 +79,8 @@ export async function PUT(
       status,
       total_goods_amount,
       grand_total,
+      shipping_type,
+      shipping_cost,
       courier_name,
       surat_jalan_number,
       received_by,
@@ -114,6 +116,14 @@ export async function PUT(
       if (status !== undefined) {
         updateFields.push('status = ?');
         updateValues.push(status);
+      }
+      if (shipping_type !== undefined) {
+        updateFields.push('shipping_type = ?');
+        updateValues.push(shipping_type);
+      }
+      if (shipping_cost !== undefined) {
+        updateFields.push('shipping_cost = ?');
+        updateValues.push(shipping_cost);
       }
       if (total_goods_amount !== undefined) {
         updateFields.push('total_goods_amount = ?');

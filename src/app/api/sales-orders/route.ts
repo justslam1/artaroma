@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { customer_id, items, payment_method, courier_id } = body;
+    const { customer_id, items, payment_method, courier_id, shipping_type, shipping_cost } = body;
 
     if (!customer_id || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -118,7 +118,10 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    const grandTotal = totalGoodsAmount;
+    const finalShippingType = shipping_type === 'LOCO' ? 'LOCO' : 'FRANCO';
+    const finalShippingCost = finalShippingType === 'LOCO' ? (parseFloat(shipping_cost) || 0) : 0;
+    const ppn = Math.round(totalGoodsAmount * 0.11);
+    const grandTotal = totalGoodsAmount + ppn + finalShippingCost;
 
     // 2. CREDIT LIMIT & OVERDUE CHECK LOGIC (Critical B2B Requirement)
     if (payment_method === 'TEMPO') {
@@ -155,14 +158,16 @@ export async function POST(req: NextRequest) {
     try {
       await executeQuery(
         `INSERT INTO sales_orders 
-        (id, so_number, customer_id, courier_id, status, payment_method, total_goods_amount, grand_total, order_date)
-        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?)`,
+        (id, so_number, customer_id, courier_id, status, payment_method, shipping_type, shipping_cost, total_goods_amount, grand_total, order_date)
+        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, ?)`,
         [
           soId,
           soNumber,
           customer_id,
           courier_id || null,
           payment_method || 'LUNAS_TRANSFER',
+          finalShippingType,
+          finalShippingCost,
           totalGoodsAmount,
           grandTotal,
           orderDate,

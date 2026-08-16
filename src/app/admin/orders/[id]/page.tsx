@@ -708,6 +708,20 @@ export default function OrderDetailPage() {
     return map;
   });
 
+  const [shippingType, setShippingType] = useState<'FRANCO' | 'LOCO'>(() => {
+    return (order as any)?.shipping_type || 'FRANCO';
+  });
+  const [shippingCost, setShippingCost] = useState<number>(() => {
+    return (order as any)?.shipping_cost || 0;
+  });
+
+  useEffect(() => {
+    if (order) {
+      if ((order as any).shipping_type) setShippingType((order as any).shipping_type);
+      if ((order as any).shipping_cost !== undefined) setShippingCost((order as any).shipping_cost);
+    }
+  }, [order?.shipping_type, order?.shipping_cost]);
+
   // Action 1: Admin Confirm Prices & Issue Invoice -> DIKONFIRMASI (With Multi-Trip Support)
   const handleConfirmPrices = () => {
     // 1. Validation: For items with confirmedQty > 0, check stock
@@ -773,13 +787,13 @@ export default function OrderDetailPage() {
       return;
     }
 
-    let calculatedTotal = 0;
+    let calculatedGoodsTotal = 0;
     const updatedItems = order.items.map((item) => {
       const price = item.unit_price_per_kg || 1500000;
       const initialOrderedQty = item.original_qty_kg !== undefined ? item.original_qty_kg : item.qty_kg;
       const confirmedQty = itemConfirmedKgs[item.id] !== undefined ? itemConfirmedKgs[item.id] : initialOrderedQty;
       const subtotal = confirmedQty * price;
-      calculatedTotal += subtotal;
+      calculatedGoodsTotal += subtotal;
 
       return {
         ...item,
@@ -789,6 +803,11 @@ export default function OrderDetailPage() {
         subtotal: subtotal,
       };
     });
+
+    const finalShippingType = shippingType;
+    const finalShippingCost = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
+    const ppn = Math.round(calculatedGoodsTotal * 0.11);
+    const grandTotal = calculatedGoodsTotal + ppn + finalShippingCost;
 
     const newInvNumber = `INV-2026-07-${Math.floor(100 + Math.random() * 900)}`;
     const newInvoice: Invoice = {
@@ -801,7 +820,9 @@ export default function OrderDetailPage() {
       status: 'UNPAID',
       issue_date: new Date().toISOString().split('T')[0],
       due_date: '2026-08-20',
-      total_amount: calculatedTotal,
+      shipping_type: finalShippingType,
+      shipping_cost: finalShippingCost,
+      total_amount: grandTotal,
       paid_amount: 0,
       faktur_pajak_file_url: '/dummy-faktur-pajak.pdf',
     };
@@ -835,8 +856,10 @@ export default function OrderDetailPage() {
       order.id,
       'DIKONFIRMASI',
       {
-        total_goods_amount: calculatedTotal,
-        grand_total: calculatedTotal,
+        total_goods_amount: calculatedGoodsTotal,
+        grand_total: grandTotal,
+        shipping_type: finalShippingType,
+        shipping_cost: finalShippingCost,
         items: updatedItems,
         invoice_id: newInvoice.id,
         surat_jalan_number: shipments ? shipments[0].surat_jalan_number : (order.surat_jalan_number || `SJ-ART-2026-${order.so_number.split('-').pop()}`),
@@ -1780,6 +1803,99 @@ export default function OrderDetailPage() {
                   </div>
                 )}
 
+                {/* Pengaturan Ongkos Kirim (FRANCO / LOCO) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                      <Truck className="w-4 h-4 text-blue-600" />
+                      Ketentuan &amp; Biaya Ongkos Kirim
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">Pilih tipe pengiriman untuk pesanan ini</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShippingType('FRANCO');
+                        setShippingCost(0);
+                      }}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        shippingType === 'FRANCO'
+                          ? 'border-emerald-500 bg-emerald-50/50 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shipping_type"
+                        checked={shippingType === 'FRANCO'}
+                        onChange={() => {
+                          setShippingType('FRANCO');
+                          setShippingCost(0);
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          FRANCO (Gratis Ongkir)
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-extrabold">GRATIS</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Biaya kirim ditanggung oleh PT Artaroma Jayatama (Rp 0)
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShippingType('LOCO')}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        shippingType === 'LOCO'
+                          ? 'border-blue-500 bg-blue-50/50 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shipping_type"
+                        checked={shippingType === 'LOCO'}
+                        onChange={() => setShippingType('LOCO')}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          LOCO (Ditanggung Customer)
+                          <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-extrabold">BERBAYAR</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Biaya kirim ditagihkan ke invoice pesanan customer
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {shippingType === 'LOCO' && (
+                    <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <label className="text-xs font-bold text-slate-700">
+                        Nominal Ongkos Kirim (Rp):
+                      </label>
+                      <div className="relative w-full sm:w-64">
+                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400 font-mono">Rp</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="10000"
+                          placeholder="Contoh: 150000"
+                          value={shippingCost || ''}
+                          onChange={(e) => setShippingCost(parseFloat(e.target.value) || 0)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="pt-2 flex items-center gap-3">
                   <button
                     type="button"
@@ -2136,7 +2252,14 @@ export default function OrderDetailPage() {
 
                 <div className="pt-2 flex flex-wrap justify-between items-center gap-3 w-full">
                   <div className="font-bold text-slate-700 text-[11px]">
-                    Total Tagihan Baru: <span className="font-mono text-sm text-blue-700">{formatIDR(editingItems.reduce((sum, item) => sum + (item.unit_price_per_kg || 1500000) * item.qty_kg, 0))}</span>
+                    Total Tagihan Baru (Inc. PPN + Ongkir): <span className="font-mono text-sm text-blue-700">
+                      {formatIDR((() => {
+                        const goods = editingItems.reduce((sum, item) => sum + (item.unit_price_per_kg || 1500000) * item.qty_kg, 0);
+                        const ppn = Math.round(goods * 0.11);
+                        const ship = (order.shipping_type || shippingType) === 'FRANCO' ? 0 : Number(order.shipping_cost ?? shippingCost ?? 0);
+                        return goods + ppn + ship;
+                      })())}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <button

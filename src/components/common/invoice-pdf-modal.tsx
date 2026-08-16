@@ -42,7 +42,9 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
     0
   );
   const ppn = Math.round(calculatedTotal * 0.11);
-  const grandTotal = calculatedTotal + ppn;
+  const shippingType = order.shipping_type || invoice?.shipping_type || 'FRANCO';
+  const shippingCost = shippingType === 'FRANCO' ? 0 : Number(order.shipping_cost ?? invoice?.shipping_cost ?? 0);
+  const grandTotal = calculatedTotal + ppn + shippingCost;
 
   const isPaid = invoice?.status === 'PAID' || order.status === 'PROSES_GUDANG' || order.status === 'DIKIRIM' || order.status === 'DITERIMA';
 
@@ -186,6 +188,14 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
                 <tr className="bg-slate-50 font-semibold">
                   <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
                   <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
+                </tr>
+                <tr className="bg-slate-50 font-semibold">
+                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                    Ongkos Kirim ({shippingType === 'FRANCO' ? 'FRANCO / Bebas Ongkir' : 'LOCO / Ditanggung Pembeli'}):
+                  </td>
+                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                    {shippingType === 'FRANCO' ? 'Rp 0 (GRATIS)' : formatIDR(shippingCost)}
+                  </td>
                 </tr>
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-350">
                   <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase text-blue-900">Total Tagihan (Grand Total):</td>
