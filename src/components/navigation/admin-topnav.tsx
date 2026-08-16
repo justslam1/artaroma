@@ -108,6 +108,7 @@ export function AdminTopNav() {
   const canAccessSO = isSuperAdmin || allowedMods.includes('Sales Order (SO)');
   const canAccessStock = isSuperAdmin || allowedMods.includes('Lihat Stok (Gudang)');
   const canAccessFinance = isSuperAdmin || allowedMods.includes('Finance & Invoice');
+  const canAccessLogBook = isSuperAdmin || allowedMods.includes('Log Book & Arsip') || allowedMods.includes('Log Book');
 
   return (
     <>
@@ -241,7 +242,7 @@ export function AdminTopNav() {
             )}
 
             {/* Log Book Operasional & Riwayat Aktivitas */}
-            {(isSuperAdmin || canAccessSO || canAccessPO || canAccessFinance) && (
+            {canAccessLogBook && (
               <Link
                 href="/admin/transactions"
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${

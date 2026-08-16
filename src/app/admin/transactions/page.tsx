@@ -101,6 +101,19 @@ export default function LogBookPage() {
     }
   };
 
+  // Fetch Current User Auth
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          if (json.user.name) setNewLogActorName(json.user.name);
+          if (json.user.role) setNewLogActorRole(json.user.role);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user info in logbook:', err));
+  }, []);
+
   useEffect(() => {
     fetchLogBook();
   }, [activeCategory]);
