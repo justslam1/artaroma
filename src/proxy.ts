@@ -4,7 +4,7 @@ import { verifyJWT, AUTH_COOKIE_NAME, getRedirectPath } from '@/lib/auth';
 // Paths that do not require authentication
 const PUBLIC_PATHS = ['/login', '/favicon.ico'];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Ignore Next.js internals, API routes (except if specified), and static files
