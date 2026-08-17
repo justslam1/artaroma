@@ -402,7 +402,7 @@ export function AdminTopNav() {
       {/* Main Horizontal Navigation Menu Bar */}
       <nav className="bg-blue-700 sticky top-14 z-30 shadow-md">
         <div className="max-w-screen-2xl mx-auto px-6">
-          <div className="flex items-center h-11 gap-1 overflow-x-auto">
+          <div className="flex items-center h-11 gap-1 overflow-visible flex-wrap sm:flex-nowrap">
             {/* Dashboard */}
             {canAccessDashboard && (
               <Link
@@ -551,7 +551,7 @@ export function AdminTopNav() {
 
                 {/* Sub-menu Dropdown Finance */}
                 {isFinanceOpen && (
-                  <div className="absolute top-full right-0 sm:left-0 mt-0.5 w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in">
+                  <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in">
                     <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
                       Pilih Sub-Menu Keuangan:
                     </div>
