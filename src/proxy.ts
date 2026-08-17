@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyJWT, AUTH_COOKIE_NAME, getRedirectPath } from '@/lib/auth';
 
 // Paths that do not require authentication
-const PUBLIC_PATHS = ['/login', '/favicon.ico'];
+const PUBLIC_PATHS = ['/', '/login', '/favicon.ico'];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
