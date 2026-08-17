@@ -1280,11 +1280,43 @@ export default function MasterDataPage() {
       .catch((err) => console.error('Update courier error:', err));
     } else if (editingItem.type === 'users') {
       const userId = editingItem.data.id;
-      fetch('/api/users/access', {
+      
+      // Update core profile details
+      fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, allowed_modules: draftModules }),
-      }).catch((err) => console.error('Save access error on edit:', err));
+        body: JSON.stringify({
+          id: userId,
+          name: userForm.name,
+          email: userForm.email,
+          role: userForm.role,
+          linked_entity_name: userForm.linked_entity_name,
+          is_active: editingItem.data.is_active !== undefined ? editingItem.data.is_active : true,
+        }),
+      })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success) {
+          alert('Gagal memperbarui profil pengguna: ' + json.message);
+        } else {
+          // Update allowed modules/access
+          fetch('/api/users/access', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, allowed_modules: draftModules }),
+          })
+          .then((res) => res.json())
+          .then((accessJson) => {
+            if (accessJson.success) {
+              fetchUsers();
+            } else {
+              alert('Gagal memperbarui hak akses pengguna: ' + accessJson.message);
+            }
+          })
+          .catch((err) => console.error('Save access error on edit:', err));
+        }
+      })
+      .catch((err) => console.error('Update user details error:', err));
 
       setUserModuleAccess((prev) => ({ ...prev, [userId]: draftModules }));
       setAppUsers(
@@ -1294,6 +1326,7 @@ export default function MasterDataPage() {
                 ...u,
                 name: userForm.name,
                 email: userForm.email,
+                role: userForm.role,
                 linked_entity_name: userForm.linked_entity_name,
                 allowed_modules: draftModules,
               }

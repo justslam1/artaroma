@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialAppUsers } from '@/lib/mock-data';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
-    const dbUsers = await executeQuery<any[]>('SELECT id, name, email, linked_entity_name, allowed_modules, is_active, created_at FROM users ORDER BY created_at ASC');
+    const dbUsers = await executeQuery<any[]>('SELECT id, name, email, role, linked_entity_name, allowed_modules, is_active, created_at FROM users ORDER BY created_at ASC');
     
     if (dbUsers && dbUsers.length > 0) {
       const formatted = dbUsers.map((u) => {
@@ -20,6 +22,7 @@ export async function GET() {
           id: u.id,
           name: u.name,
           email: u.email,
+          role: u.role || 'ADMIN',
           linked_entity_name: u.linked_entity_name || 'Artaroma HQ',
           allowed_modules: modules,
           is_active: Boolean(u.is_active),
@@ -32,5 +35,44 @@ export async function GET() {
     return NextResponse.json({ success: true, data: initialAppUsers });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message, data: initialAppUsers }, { status: 500 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, name, email, role, linked_entity_name, is_active } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: 'ID pengguna wajib diisi.' },
+        { status: 400 }
+      );
+    }
+
+    await executeQuery(
+      `UPDATE users 
+       SET name = ?, email = ?, role = ?, linked_entity_name = ?, is_active = ?
+       WHERE id = ?`,
+      [
+        name,
+        email,
+        role,
+        linked_entity_name || null,
+        is_active !== undefined ? (is_active ? 1 : 0) : 1,
+        id
+      ]
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'Profil pengguna berhasil diperbarui.',
+    });
+  } catch (error: any) {
+    console.error('Update User Profile Error:', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Gagal menyimpan profil pengguna.' },
+      { status: 500 }
+    );
   }
 }
