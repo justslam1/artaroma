@@ -69,7 +69,7 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     role: 'KURIR',
-    name: 'Agus Kurir Armada',
+    name: 'Agus Subandi (Driver)',
     email: 'agus@artaroma.co.id',
     pass: 'Artaroma2026!',
     color: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
