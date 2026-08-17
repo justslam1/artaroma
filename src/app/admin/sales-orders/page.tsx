@@ -13,6 +13,30 @@ export default function SalesOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isFinancialHidden, setIsFinancialHidden] = useState(false);
+  const [readOrderIds, setReadOrderIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('artaroma_read_so_ids');
+      if (stored) {
+        setReadOrderIds(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const markAsRead = (id: string) => {
+    if (!readOrderIds.includes(id)) {
+      const updated = [...readOrderIds, id];
+      setReadOrderIds(updated);
+      try {
+        localStorage.setItem('artaroma_read_so_ids', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   useEffect(() => {
     fetch('/api/auth/me', { cache: 'no-store' })
@@ -181,70 +205,94 @@ export default function SalesOrdersPage() {
                       Belum ada Sales Order masuk. Pesanan dari Customer B2B akan muncul di sini.
                     </td>
                   </tr>
-                ) : salesOrders.map((so) => (
-                  <tr key={so.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3.5">
-                      <Link
-                        href={`/admin/orders/${so.id}`}
-                        className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-sm"
-                      >
-                        {so.so_number} <ExternalLink className="w-3 h-3" />
-                      </Link>
-                      <div className="text-[11px] text-slate-400">{so.order_date ? new Date(so.order_date).toLocaleString('id-ID') : '-'}</div>
-                    </td>
-
-                    <td className="px-6 py-3.5">
-                      <div className="font-semibold text-slate-800">{so.customer_company || so.customer_name || so.customer_id}</div>
-                      <div className="text-xs text-slate-400">PIC: {so.customer_name || '-'}</div>
-                    </td>
-
-                    <td className="px-6 py-3.5 text-xs text-slate-600">
-                      {(so.items ?? []).length === 0 ? (
-                        <span className="text-slate-400 italic">Memuat item...</span>
-                      ) : (so.items ?? []).map((item, idx) => (
-                        <div key={idx}>
-                          • {item.product_name} (<span className="font-mono text-emerald-700 font-bold">{formatKg(item.qty_kg)}</span>)
+                ) : salesOrders.map((so) => {
+                  const isRead = readOrderIds.includes(so.id);
+                  return (
+                    <tr
+                      key={so.id}
+                      className={`transition-colors ${
+                        isRead ? 'bg-white hover:bg-gray-50/80 text-slate-600' : 'bg-blue-50/25 hover:bg-blue-50/50 font-medium'
+                      }`}
+                    >
+                      <td className="px-6 py-3.5">
+                        <Link
+                          href={`/admin/orders/${so.id}`}
+                          onClick={() => markAsRead(so.id)}
+                          className={`font-mono flex items-center gap-1.5 text-sm hover:underline ${
+                            isRead ? 'font-normal text-slate-600 hover:text-blue-600' : 'font-extrabold text-blue-700'
+                          }`}
+                        >
+                          {!isRead && (
+                            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 inline-block shadow-2xs" title="Belum Dibaca" />
+                          )}
+                          <span>{so.so_number}</span>
+                          <ExternalLink className="w-3 h-3 opacity-60" />
+                        </Link>
+                        <div className="text-[11px] text-slate-400">
+                          {so.order_date ? new Date(so.order_date).toLocaleString('id-ID') : '-'}
                         </div>
-                      ))}
-                    </td>
-
-                    {showFinancialColumn && (
-                      <td className="px-6 py-3.5 font-mono">
-                        {so.grand_total ? (
-                          <>
-                            <div className="font-bold text-slate-800">{formatIDR(so.grand_total)}</div>
-                            <div className="text-[10px] font-sans font-semibold text-slate-400 mt-0.5">
-                              {so.shipping_type === 'LOCO' ? (
-                                <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                  LOCO (+{formatIDR(so.shipping_cost || 0)})
-                                </span>
-                              ) : (
-                                <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                  FRANCO (Gratis)
-                                </span>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-amber-600 italic font-sans text-xs">Menunggu Konfirmasi Admin</span>
-                        )}
                       </td>
-                    )}
 
-                    <td className="px-6 py-3.5">
-                      {getStatusBadge(so.status)}
-                    </td>
+                      <td className="px-6 py-3.5">
+                        <div className={`text-slate-800 ${isRead ? 'font-normal' : 'font-bold'}`}>
+                          {so.customer_company || so.customer_name || so.customer_id}
+                        </div>
+                        <div className="text-xs text-slate-400">PIC: {so.customer_name || '-'}</div>
+                      </td>
 
-                    <td className="px-6 py-3.5 text-right">
-                      <Link
-                        href={`/admin/orders/${so.id}`}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Detail SO
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-6 py-3.5 text-xs text-slate-600">
+                        {(so.items ?? []).length === 0 ? (
+                          <span className="text-slate-400 italic">Memuat item...</span>
+                        ) : (so.items ?? []).map((item, idx) => (
+                          <div key={idx}>
+                            • {item.product_name} (<span className="font-mono text-emerald-700 font-bold">{formatKg(item.qty_kg)}</span>)
+                          </div>
+                        ))}
+                      </td>
+
+                      {showFinancialColumn && (
+                        <td className="px-6 py-3.5 font-mono">
+                          {so.grand_total ? (
+                            <>
+                              <div className={`text-slate-800 ${isRead ? 'font-medium' : 'font-extrabold'}`}>{formatIDR(so.grand_total)}</div>
+                              <div className="text-[10px] font-sans font-semibold text-slate-400 mt-0.5">
+                                {so.shipping_type === 'LOCO' ? (
+                                  <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                    LOCO (+{formatIDR(so.shipping_cost || 0)})
+                                  </span>
+                                ) : (
+                                  <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    FRANCO (Gratis)
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-amber-600 italic font-sans text-xs">Menunggu Konfirmasi Admin</span>
+                          )}
+                        </td>
+                      )}
+
+                      <td className="px-6 py-3.5">
+                        {getStatusBadge(so.status)}
+                      </td>
+
+                      <td className="px-6 py-3.5 text-right">
+                        <Link
+                          href={`/admin/orders/${so.id}`}
+                          onClick={() => markAsRead(so.id)}
+                          className={`text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-colors ${
+                            isRead
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white font-bold'
+                          }`}
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Detail SO
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
