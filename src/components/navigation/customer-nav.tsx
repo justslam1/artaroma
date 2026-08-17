@@ -17,7 +17,9 @@ interface CustomerNavProps {
 
 export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = [], cartCount = 0, onOpenCart }: CustomerNavProps) {
   const pathname = usePathname();
-  const creditUsedPercent = Math.min(100, Math.round((currentCustomer.current_piutang / currentCustomer.credit_limit) * 100));
+  const currentPiutang = Number(currentCustomer?.current_piutang) || 0;
+  const creditLimit = Number(currentCustomer?.credit_limit) || 0;
+  const creditUsedPercent = creditLimit > 0 ? Math.min(100, Math.round((currentPiutang / creditLimit) * 100)) : 0;
 
   const [companyTagline, setCompanyTagline] = React.useState('B2B Fragrance Oil Supplier & Management Hub');
 
@@ -100,8 +102,8 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
                 )}
               </div>
               <div className="flex items-center gap-1.5 text-xs">
-                <span className="font-bold text-blue-700">{formatIDR(currentCustomer.current_piutang)}</span>
-                <span className="text-slate-400">/ {formatIDR(currentCustomer.credit_limit)}</span>
+                <span className="font-bold text-blue-700">{formatIDR(currentPiutang)}</span>
+                <span className="text-slate-400">/ {formatIDR(creditLimit)}</span>
               </div>
             </div>
             <div className="w-14 bg-gray-200 h-2 rounded-full overflow-hidden">

@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
       customers = initialCustomers;
     }
 
-    // Parse JSON strings if they exist
-    customers = customers.map((c: any) => {
+    // Parse JSON strings if they exist & calculate live piutang and credit status
+    for (let i = 0; i < customers.length; i++) {
+      const c = customers[i];
       let specPrices = c.special_prices;
       if (typeof specPrices === 'string') {
         try {
@@ -32,12 +33,41 @@ export async function GET(req: NextRequest) {
           allowedProds = [];
         }
       }
-      return {
+
+      // Calculate live outstanding piutang from invoices
+      let currentPiutang = 0;
+      let hasOverdue = false;
+      try {
+        const invRows: any[] = await executeQuery(
+          "SELECT total_amount, paid_amount, status, due_date FROM invoices WHERE customer_id = ? AND status IN ('UNPAID', 'PARTIALLY_PAID', 'OVERDUE')",
+          [c.id]
+        );
+        if (invRows && invRows.length > 0) {
+          const now = new Date();
+          for (const inv of invRows) {
+            const remaining = (parseFloat(inv.total_amount) || 0) - (parseFloat(inv.paid_amount) || 0);
+            if (remaining > 0) {
+              currentPiutang += remaining;
+              if (inv.status === 'OVERDUE' || (inv.due_date && new Date(inv.due_date) < now)) {
+                hasOverdue = true;
+              }
+            }
+          }
+        }
+      } catch (invErr) {
+        console.warn('Failed to calculate customer piutang:', invErr);
+      }
+
+      customers[i] = {
         ...c,
         special_prices: specPrices || {},
         allowed_product_ids: allowedProds || [],
+        current_piutang: Number(currentPiutang.toFixed(2)),
+        credit_limit: parseFloat(c.credit_limit) || 0,
+        credit_terms_days: parseInt(c.credit_terms_days, 10) || 0,
+        has_overdue: hasOverdue,
       };
-    });
+    }
 
     return NextResponse.json({
       success: true,
