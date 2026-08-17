@@ -417,6 +417,9 @@ export default function MasterDataPage() {
     name: '',
     phone: '',
     vehicle_number: '',
+    create_user_account: true,
+    login_email: '',
+    password: 'Artaroma2026!',
   });
 
   // Form states for AppUser creation/editing
@@ -697,6 +700,9 @@ export default function MasterDataPage() {
         name: '',
         phone: '',
         vehicle_number: 'B 7721 KFP (Blind Van)',
+        create_user_account: true,
+        login_email: '',
+        password: 'Artaroma2026!',
       });
     } else if (activeTab === 'users' || activeTab === 'access') {
       setUserForm({
@@ -786,6 +792,9 @@ export default function MasterDataPage() {
         name: k.name,
         phone: k.phone,
         vehicle_number: k.vehicle_number,
+        create_user_account: false,
+        login_email: (k as any).linked_user_email || '',
+        password: 'Artaroma2026!',
       });
     } else if (type === 'users') {
       const u = item as AppUser;
@@ -1040,23 +1049,27 @@ export default function MasterDataPage() {
       })
       .catch((err) => console.error('Save distributor error:', err));
     } else if (activeTab === 'couriers') {
-      const newCour: Courier = {
+      const payload = {
         id: `cour-${Date.now()}`,
         code: courierForm.code,
         name: courierForm.name,
         phone: courierForm.phone,
         vehicle_number: courierForm.vehicle_number,
         is_active: true,
+        create_user_account: courierForm.create_user_account,
+        login_email: courierForm.login_email,
+        password: courierForm.password,
       };
       fetch('/api/couriers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCour),
+        body: JSON.stringify(payload),
       })
       .then((res) => res.json())
       .then((json) => {
         if (json.success) {
           fetchCouriers();
+          fetchUsers();
         } else {
           alert('Gagal menyimpan kurir: ' + json.message);
         }
@@ -1259,6 +1272,7 @@ export default function MasterDataPage() {
       .then((json) => {
         if (json.success) {
           fetchCouriers();
+          fetchUsers();
         } else {
           alert('Gagal memperbarui kurir: ' + json.message);
         }
@@ -2336,7 +2350,18 @@ export default function MasterDataPage() {
                     <tr key={k.id} className="hover:bg-gray-50">
                       <td className="px-6 py-3.5">
                         <div className="font-semibold text-slate-800">{k.name}</div>
-                        <span className="font-mono text-[11px] text-blue-600">{k.code}</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[11px] text-blue-600 font-bold">{k.code}</span>
+                          {(k as any).linked_user_email ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              <UserCheck className="w-3 h-3 text-emerald-600" /> {(k as any).linked_user_email}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200">
+                              Belum ada akun login
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-3.5 font-mono text-slate-600">{k.phone}</td>
                       <td className="px-6 py-3.5 text-amber-700 font-semibold text-sm">{k.vehicle_number}</td>
@@ -4131,6 +4156,50 @@ export default function MasterDataPage() {
                       onChange={(e) => setCourierForm({ ...courierForm, vehicle_number: e.target.value })}
                       className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono font-bold text-xs text-amber-700"
                     />
+                  </div>
+
+                  {/* Auto-provision User Account Section */}
+                  <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3.5 space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={courierForm.create_user_account}
+                        onChange={(e) => setCourierForm({ ...courierForm, create_user_account: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-blue-600" />
+                        Buatkan akun login pengguna untuk kurir ini secara otomatis
+                      </span>
+                    </label>
+
+                    {courierForm.create_user_account && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Email Login Driver</label>
+                          <input
+                            type="email"
+                            placeholder={
+                              courierForm.name
+                                ? `${courierForm.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@artaroma.co.id`
+                                : 'driver@artaroma.co.id'
+                            }
+                            value={courierForm.login_email}
+                            onChange={(e) => setCourierForm({ ...courierForm, login_email: e.target.value })}
+                            className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Kata Sandi Default</label>
+                          <input
+                            type="text"
+                            value={courierForm.password}
+                            onChange={(e) => setCourierForm({ ...courierForm, password: e.target.value })}
+                            className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
