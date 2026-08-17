@@ -44,15 +44,26 @@ export default function SalesOrdersPage() {
       const res = await fetch('/api/sales-orders', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        // Ensure each order has an items array (DB may return null)
+        // Ensure each order has an items array and sort newest first
         const normalized = json.data.map((so: any) => ({
           ...so,
           items: Array.isArray(so.items) ? so.items : [],
         }));
+        normalized.sort((a: any, b: any) => {
+          const timeA = a.order_date ? new Date(a.order_date).getTime() : 0;
+          const timeB = b.order_date ? new Date(b.order_date).getTime() : 0;
+          return timeB - timeA;
+        });
         setSalesOrders(normalized);
         saveStoredOrders(normalized, false);
       } else {
-        setSalesOrders(getStoredOrders());
+        const stored = getStoredOrders();
+        stored.sort((a: any, b: any) => {
+          const timeA = a.order_date ? new Date(a.order_date).getTime() : 0;
+          const timeB = b.order_date ? new Date(b.order_date).getTime() : 0;
+          return timeB - timeA;
+        });
+        setSalesOrders(stored);
       }
     } catch (err) {
       console.warn('Failed to fetch sales orders from MySQL, fallback to local:', err);

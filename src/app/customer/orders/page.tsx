@@ -42,10 +42,21 @@ export default function CustomerOrdersPage() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
-          setSalesOrders(json.data);
-          saveStoredOrders(json.data, false);
+          const sorted = [...json.data].sort((a: any, b: any) => {
+            const timeA = a.order_date ? new Date(a.order_date).getTime() : 0;
+            const timeB = b.order_date ? new Date(b.order_date).getTime() : 0;
+            return timeB - timeA;
+          });
+          setSalesOrders(sorted);
+          saveStoredOrders(sorted, false);
         } else {
-          setSalesOrders(getStoredOrders());
+          const stored = getStoredOrders();
+          stored.sort((a: any, b: any) => {
+            const timeA = a.order_date ? new Date(a.order_date).getTime() : 0;
+            const timeB = b.order_date ? new Date(b.order_date).getTime() : 0;
+            return timeB - timeA;
+          });
+          setSalesOrders(stored);
         }
       })
       .catch((err) => {

@@ -59,7 +59,20 @@ export default function ProcurementPage() {
       const res = await fetch('/api/purchase-orders', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setPurchaseOrders(json.data);
+        const sorted = [...json.data].sort((a: any, b: any) => {
+          const timeA = a.created_at
+            ? new Date(a.created_at).getTime()
+            : a.order_date
+            ? new Date(a.order_date).getTime()
+            : 0;
+          const timeB = b.created_at
+            ? new Date(b.created_at).getTime()
+            : b.order_date
+            ? new Date(b.order_date).getTime()
+            : 0;
+          return timeB - timeA;
+        });
+        setPurchaseOrders(sorted);
       }
     } catch (err) {
       console.warn('Failed to fetch purchase orders:', err);
