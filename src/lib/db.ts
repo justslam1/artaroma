@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 // Global singleton pattern to prevent connection leaks across Next.js HMR reloads
 const globalForDb = globalThis as unknown as {
   mysqlPool?: mysql.Pool;
+  schemaMigrated?: boolean;
 };
 
 // Create or reuse singleton pool
@@ -29,6 +30,93 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 /**
+ * Auto-ensure all required columns exist in MySQL schema
+ */
+export async function ensureSchemaMigrations(): Promise<void> {
+  if (globalForDb.schemaMigrated) return;
+
+  try {
+    const conn = await pool.getConnection();
+    try {
+      // 1. Check & Add missing columns in sales_orders
+      const [soCols]: any = await conn.query('SHOW COLUMNS FROM sales_orders');
+      const soColNames = new Set(soCols.map((c: any) => c.Field.toLowerCase()));
+
+      const soMigrations = [
+        { col: 'shipping_type', sql: "ALTER TABLE sales_orders ADD COLUMN shipping_type VARCHAR(20) DEFAULT 'FRANCO'" },
+        { col: 'shipping_cost', sql: "ALTER TABLE sales_orders ADD COLUMN shipping_cost DECIMAL(15,2) DEFAULT 0.00" },
+        { col: 'total_goods_amount', sql: "ALTER TABLE sales_orders ADD COLUMN total_goods_amount DECIMAL(15,2) DEFAULT 0.00" },
+        { col: 'grand_total', sql: "ALTER TABLE sales_orders ADD COLUMN grand_total DECIMAL(15,2) DEFAULT 0.00" },
+        { col: 'surat_jalan_number', sql: "ALTER TABLE sales_orders ADD COLUMN surat_jalan_number VARCHAR(100) DEFAULT NULL" },
+        { col: 'courier_name', sql: "ALTER TABLE sales_orders ADD COLUMN courier_name VARCHAR(100) DEFAULT NULL" },
+        { col: 'delivered_date', sql: "ALTER TABLE sales_orders ADD COLUMN delivered_date DATETIME DEFAULT NULL" },
+        { col: 'received_by', sql: "ALTER TABLE sales_orders ADD COLUMN received_by VARCHAR(100) DEFAULT NULL" },
+        { col: 'received_photo', sql: "ALTER TABLE sales_orders ADD COLUMN received_photo LONGTEXT DEFAULT NULL" },
+        { col: 'received_signature', sql: "ALTER TABLE sales_orders ADD COLUMN received_signature LONGTEXT DEFAULT NULL" },
+        { col: 'cancellation_reason', sql: "ALTER TABLE sales_orders ADD COLUMN cancellation_reason TEXT DEFAULT NULL" },
+        { col: 'cancelled_at', sql: "ALTER TABLE sales_orders ADD COLUMN cancelled_at VARCHAR(100) DEFAULT NULL" },
+        { col: 'cancelled_by', sql: "ALTER TABLE sales_orders ADD COLUMN cancelled_by VARCHAR(100) DEFAULT NULL" },
+      ];
+
+      for (const m of soMigrations) {
+        if (!soColNames.has(m.col.toLowerCase())) {
+          try {
+            await conn.query(m.sql);
+            console.log(`[Schema Migration] Added column sales_orders.${m.col}`);
+          } catch (e: any) {
+            console.warn(`[Schema Migration Warning] ${m.col}:`, e.message);
+          }
+        }
+      }
+
+      // 2. Check & Add missing columns in invoices
+      try {
+        const [invCols]: any = await conn.query('SHOW COLUMNS FROM invoices');
+        const invColNames = new Set(invCols.map((c: any) => c.Field.toLowerCase()));
+
+        if (!invColNames.has('shipping_type')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN shipping_type VARCHAR(20) DEFAULT 'FRANCO'");
+        }
+        if (!invColNames.has('shipping_cost')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN shipping_cost DECIMAL(15,2) DEFAULT 0.00");
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Invoices Warning]:', e.message);
+      }
+
+      // 3. Ensure operational_logs table exists
+      try {
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS operational_logs (
+            id VARCHAR(50) PRIMARY KEY,
+            log_date DATETIME NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            actor_name VARCHAR(100) NOT NULL,
+            actor_role VARCHAR(50),
+            reference_id VARCHAR(100),
+            document_type VARCHAR(50),
+            document_number VARCHAR(100),
+            photo_url LONGTEXT,
+            signature_url LONGTEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+      } catch (e: any) {
+        console.warn('[Schema Migration Logs Warning]:', e.message);
+      }
+
+      globalForDb.schemaMigrated = true;
+    } finally {
+      conn.release();
+    }
+  } catch (err: any) {
+    console.warn('[Schema Migration Connection Warning]:', err.message);
+  }
+}
+
+/**
  * Execute a single SQL query with parameterized inputs to prevent SQL Injection
  */
 export async function executeQuery<T = any>(
@@ -36,9 +124,22 @@ export async function executeQuery<T = any>(
   params: any[] = []
 ): Promise<T> {
   try {
+    await ensureSchemaMigrations();
     const [results] = await pool.execute(query, params);
     return results as T;
   } catch (error: any) {
+    // If unknown column error, retry once after force migration
+    if (error.message && error.message.includes('Unknown column')) {
+      globalForDb.schemaMigrated = false;
+      await ensureSchemaMigrations();
+      try {
+        const [retryResults] = await pool.execute(query, params);
+        return retryResults as T;
+      } catch (retryError: any) {
+        console.error('Database Query Error after Retry:', retryError.message);
+        throw new Error(`DB_QUERY_ERROR: ${retryError.message}`);
+      }
+    }
     console.error('Database Query Error:', error.message);
     throw new Error(`DB_QUERY_ERROR: ${error.message}`);
   }
@@ -51,6 +152,7 @@ export async function executeQuery<T = any>(
 export async function executeTransaction<T>(
   callback: (connection: mysql.PoolConnection) => Promise<T>
 ): Promise<T> {
+  await ensureSchemaMigrations();
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
