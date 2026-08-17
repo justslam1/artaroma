@@ -257,6 +257,12 @@
       "namedRegex": "^/api/stock\\-opname/history(?:/)?$"
     },
     {
+      "page": "/api/test-db",
+      "regex": "^/api/test\\-db(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/test\\-db(?:/)?$"
+    },
+    {
       "page": "/api/transactions/history",
       "regex": "^/api/transactions/history(?:/)?$",
       "routeKeys": {},

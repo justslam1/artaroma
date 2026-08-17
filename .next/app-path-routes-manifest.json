@@ -35,6 +35,7 @@
   "/api/stock-batches/repack/route": "/api/stock-batches/repack",
   "/api/stock-batches/route": "/api/stock-batches",
   "/api/stock-opname/history/route": "/api/stock-opname/history",
+  "/api/test-db/route": "/api/test-db",
   "/api/transactions/history/route": "/api/transactions/history",
   "/api/users/access/route": "/api/users/access",
   "/api/users/route": "/api/users",
