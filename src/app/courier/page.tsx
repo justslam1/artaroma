@@ -27,6 +27,8 @@ export default function CourierPWAPage() {
   const [isSubmittingPOD, setIsSubmittingPOD] = useState(false);
   const [selectedTaskForPOD, setSelectedTaskForPOD] = useState<DeliveryTask | null>(null);
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   // 1. Fetch Couriers and detect logged in courier
   useEffect(() => {
     const initCouriers = async () => {
@@ -48,6 +50,7 @@ export default function CourierPWAPage() {
         if (authRes.ok) {
           const authJson = await authRes.json();
           if (authJson.success && authJson.user) {
+            setCurrentUser(authJson.user);
             const userName = (authJson.user.name || '').toLowerCase();
             const matched = loadedCouriers.find(
               (c) =>
@@ -180,20 +183,28 @@ export default function CourierPWAPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <select
-              value={selectedCourier?.id || ''}
-              onChange={(e) => {
-                const c = couriers.find((cur) => cur.id === e.target.value);
-                if (c) setSelectedCourier(c);
-              }}
-              className="bg-blue-800 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none font-medium cursor-pointer"
-            >
-              {couriers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            {currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.is_super_admin ? (
+              <select
+                value={selectedCourier?.id || ''}
+                onChange={(e) => {
+                  const c = couriers.find((cur) => cur.id === e.target.value);
+                  if (c) setSelectedCourier(c);
+                }}
+                className="bg-blue-800 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none font-medium cursor-pointer"
+                title="Super Admin: Ganti profil driver untuk simulasi"
+              >
+                {couriers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="bg-blue-800/80 border border-blue-600 rounded-lg px-2.5 py-1 text-xs text-white font-bold inline-flex items-center gap-1.5 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                {selectedCourier?.name || currentUser?.name || 'Kurir'}
+              </span>
+            )}
             <button
               onClick={async () => {
                 if (confirm('Keluar dari sesi kurir?')) {
