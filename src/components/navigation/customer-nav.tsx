@@ -134,8 +134,13 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
             <button
               onClick={async () => {
                 if (confirm('Keluar dari sesi akun Customer?')) {
-                  await fetch('/api/auth/logout', { method: 'POST' });
-                  window.location.href = '/login';
+                  try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                  } catch (e) {
+                    console.warn('Customer logout error:', e);
+                  } finally {
+                    window.location.replace('/login');
+                  }
                 }
               }}
               title="Keluar / Logout"

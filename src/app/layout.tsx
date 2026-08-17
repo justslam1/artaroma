@@ -37,6 +37,36 @@ export default function RootLayout({
       lang="id"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var isReloading = false;
+                function handleChunkError(msg) {
+                  if (isReloading) return;
+                  if (/ChunkLoadError|Loading chunk|Failed to load chunk|Failed to fetch/i.test(msg || '')) {
+                    isReloading = true;
+                    console.warn('[Artaroma] Outdated bundle chunk detected. Auto-reloading fresh assets...');
+                    try {
+                      sessionStorage.setItem('artaroma_chunk_reload', Date.now().toString());
+                    } catch(e) {}
+                    window.location.reload();
+                  }
+                }
+                window.addEventListener('error', function(e) {
+                  handleChunkError(e.message || (e.error && e.error.message));
+                });
+                window.addEventListener('unhandledrejection', function(e) {
+                  var reason = e.reason;
+                  var msg = reason ? (reason.message || reason.toString()) : '';
+                  handleChunkError(msg);
+                });
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-[#f5f7fa] text-slate-800">
         {children}
       </body>

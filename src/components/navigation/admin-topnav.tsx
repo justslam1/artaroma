@@ -146,9 +146,10 @@ export function AdminTopNav() {
     if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
       try {
         await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login';
-      } catch {
-        window.location.href = '/login';
+      } catch (e) {
+        console.warn('Logout request warning:', e);
+      } finally {
+        window.location.replace('/login');
       }
     }
   };

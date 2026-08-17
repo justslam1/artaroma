@@ -208,8 +208,13 @@ export default function CourierPWAPage() {
             <button
               onClick={async () => {
                 if (confirm('Keluar dari sesi kurir?')) {
-                  await fetch('/api/auth/logout', { method: 'POST' });
-                  window.location.href = '/login';
+                  try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                  } catch (e) {
+                    console.warn('Courier logout error:', e);
+                  } finally {
+                    window.location.replace('/login');
+                  }
                 }
               }}
               title="Keluar / Logout"
