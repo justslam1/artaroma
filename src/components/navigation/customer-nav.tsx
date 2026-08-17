@@ -167,6 +167,7 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 ${
                     isActive
                       ? 'bg-white/15 text-white border-white'

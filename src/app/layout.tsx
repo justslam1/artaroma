@@ -42,25 +42,40 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                var isReloading = false;
-                function handleChunkError(msg) {
-                  if (isReloading) return;
-                  if (/ChunkLoadError|Loading chunk|Failed to load chunk|Failed to fetch/i.test(msg || '')) {
-                    isReloading = true;
-                    console.warn('[Artaroma] Outdated bundle chunk detected. Auto-reloading fresh assets...');
+                var isNavigating = false;
+                window.__targetHref = '';
+
+                document.addEventListener('click', function(e) {
+                  var el = e.target;
+                  while (el && el.tagName !== 'A') {
+                    el = el.parentElement;
+                  }
+                  if (el && el.tagName === 'A' && el.href) {
                     try {
-                      sessionStorage.setItem('artaroma_chunk_reload', Date.now().toString());
-                    } catch(e) {}
-                    window.location.reload();
+                      var url = new URL(el.href, window.location.origin);
+                      if (url.origin === window.location.origin && !el.target && !el.hasAttribute('download')) {
+                        window.__targetHref = url.href;
+                      }
+                    } catch(err) {}
+                  }
+                }, true);
+
+                function recover(msg) {
+                  if (isNavigating) return;
+                  if (/ChunkLoadError|Loading chunk|Failed to load chunk|Failed to fetch|NetworkError|404/i.test(msg || '')) {
+                    isNavigating = true;
+                    console.warn('[Artaroma] Chunk failure detected. Navigating directly to fresh page...');
+                    var dest = window.__targetHref || window.location.href;
+                    window.location.href = dest;
                   }
                 }
+
                 window.addEventListener('error', function(e) {
-                  handleChunkError(e.message || (e.error && e.error.message));
+                  recover(e.message || (e.error && e.error.message));
                 });
                 window.addEventListener('unhandledrejection', function(e) {
-                  var reason = e.reason;
-                  var msg = reason ? (reason.message || reason.toString()) : '';
-                  handleChunkError(msg);
+                  var r = e.reason;
+                  recover(r ? (r.message || r.toString()) : '');
                 });
               })();
             `,

@@ -408,6 +408,7 @@ export function AdminTopNav() {
             {canAccessDashboard && (
               <Link
                 href="/admin"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isDashboardActive
                     ? 'bg-white/15 text-white border-white'
@@ -423,6 +424,7 @@ export function AdminTopNav() {
             {canAccessMaster && (
               <Link
                 href="/admin/master"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isMasterActive
                     ? 'bg-white/15 text-white border-white'
@@ -438,6 +440,7 @@ export function AdminTopNav() {
             {canAccessPO && (
               <Link
                 href="/admin/procurement"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isPOActive
                     ? 'bg-white/15 text-white border-white'
@@ -453,6 +456,7 @@ export function AdminTopNav() {
             {canAccessSO && (
               <Link
                 href="/admin/sales-orders"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap relative ${
                   isSOActive
                     ? 'bg-white/15 text-white border-white'
@@ -473,6 +477,7 @@ export function AdminTopNav() {
             {canAccessStock && (
               <Link
                 href="/admin/stock"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isStockActive
                     ? 'bg-white/15 text-white border-white'
@@ -488,6 +493,7 @@ export function AdminTopNav() {
             {canAccessLogBook && (
               <Link
                 href="/admin/transactions"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isTransactionsActive
                     ? 'bg-white/15 text-white border-white'
@@ -503,6 +509,7 @@ export function AdminTopNav() {
             {canAccessCustomerCatalog && (
               <Link
                 href="/customer/catalog"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isCatalogActive
                     ? 'bg-white/15 text-white border-white'
@@ -518,6 +525,7 @@ export function AdminTopNav() {
             {canAccessCourierApp && (
               <Link
                 href="/courier"
+                prefetch={false}
                 className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
                   isCourierActive
                     ? 'bg-white/15 text-white border-white'
