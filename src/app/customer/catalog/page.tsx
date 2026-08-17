@@ -542,6 +542,7 @@ export default function CustomerCatalogPage() {
             setCartItems([]);
             fetchProducts();
             window.dispatchEvent(new Event('artaroma_orders_updated'));
+            window.dispatchEvent(new Event('artaroma_new_so_created'));
             alert(`✅ Pesanan B2B (${savedSoNumber}) Berhasil Diajukan!\nMenunggu verifikasi pembayaran & konfirmasi stok dari Admin.`);
 
           } catch (err: any) {
