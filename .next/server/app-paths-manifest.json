@@ -35,7 +35,6 @@
   "/api/stock-batches/repack/route": "app/api/stock-batches/repack/route.js",
   "/api/stock-batches/route": "app/api/stock-batches/route.js",
   "/api/stock-opname/history/route": "app/api/stock-opname/history/route.js",
-  "/api/test-db/route": "app/api/test-db/route.js",
   "/api/transactions/history/route": "app/api/transactions/history/route.js",
   "/api/users/access/route": "app/api/users/access/route.js",
   "/api/users/route": "app/api/users/route.js",
