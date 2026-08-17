@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const couriers = await executeQuery('SELECT * FROM couriers ORDER BY code ASC');
