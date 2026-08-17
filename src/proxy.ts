@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyJWT, AUTH_COOKIE_NAME, getRedirectPath } from '@/lib/auth';
 
 // Paths that do not require authentication
-const PUBLIC_PATHS = ['/', '/login', '/favicon.ico'];
+const PUBLIC_PATHS = ['/login', '/favicon.ico'];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -27,14 +27,21 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check auth cookie for internal app routes (/admin, /customer, /courier)
+  // Check auth cookie for all protected routes (including root '/')
   const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
   const payload = token ? await verifyJWT(token) : null;
 
   if (!payload) {
     const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('redirect', pathname);
+    }
     return NextResponse.redirect(loginUrl);
+  }
+
+  // If authenticated user visits root '/', redirect to their designated dashboard
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
   }
 
   // Super Admin bypasses all checks
