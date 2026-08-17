@@ -257,7 +257,7 @@ export function CustomerOrderDetailModal({
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-5 h-5 text-blue-600" />
                   <h3 className="font-bold text-slate-800 text-sm">
-                    Nomor Rekening Resmi Pembayaran (PT Artaroma Fragrance Hub)
+                    Nomor Rekening Resmi Pembayaran (PT Artaroma)
                   </h3>
                 </div>
                 <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">
