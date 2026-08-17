@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { generateNextSONumber } from '@/lib/sequences';
 import { initialCustomers, initialInvoices, initialSalesOrders } from '@/lib/mock-data';
 
 export async function GET(req: NextRequest) {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
     }
 
     const soId = `so-${Date.now()}`;
-    const soNumber = `SO-2026-${String(Math.floor(100 + Math.random() * 900))}`;
+    const soNumber = await generateNextSONumber();
     const orderDate = new Date().toISOString();
 
     try {

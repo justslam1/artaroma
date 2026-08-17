@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { generateNextPONumber } from '@/lib/sequences';
 import { initialPurchaseOrders } from '@/lib/mock-data';
 
 export async function GET(req: NextRequest) {
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
 
     const poId = `po-${Date.now()}`;
-    const poNumber = `PO-2026-${String(Math.floor(100 + Math.random() * 900))}`;
+    const poNumber = await generateNextPONumber();
     const orderDate = new Date().toISOString().split('T')[0];
 
     let totalAmount = 0;
