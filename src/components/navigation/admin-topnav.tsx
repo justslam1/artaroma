@@ -19,6 +19,8 @@ import {
   User,
   History,
   BookOpen,
+  Truck,
+  Store,
 } from 'lucide-react';
 
 export function AdminTopNav() {
@@ -39,6 +41,8 @@ export function AdminTopNav() {
   const isStockActive = pathname.startsWith('/admin/stock');
   const isFinanceActive = pathname.startsWith('/admin/finance');
   const isTransactionsActive = pathname.startsWith('/admin/transactions');
+  const isCatalogActive = pathname.startsWith('/customer');
+  const isCourierActive = pathname.startsWith('/courier');
 
   const isPOActive = pathname.startsWith('/admin/procurement');
   const isSOActive = pathname.startsWith('/admin/sales-orders') || pathname.startsWith('/admin/orders');
@@ -109,6 +113,8 @@ export function AdminTopNav() {
   const canAccessStock = isSuperAdmin || allowedMods.includes('Lihat Stok (Gudang)');
   const canAccessFinance = isSuperAdmin || allowedMods.includes('Finance & Invoice');
   const canAccessLogBook = isSuperAdmin || allowedMods.includes('Log Book & Arsip') || allowedMods.includes('Log Book');
+  const canAccessCustomerCatalog = isSuperAdmin || allowedMods.includes('Katalog Customer');
+  const canAccessCourierApp = isSuperAdmin || allowedMods.includes('Aplikasi Kurir');
 
   return (
     <>
@@ -253,6 +259,36 @@ export function AdminTopNav() {
               >
                 <BookOpen className="w-4 h-4" />
                 <span>Log Book</span>
+              </Link>
+            )}
+
+            {/* Katalog Customer */}
+            {canAccessCustomerCatalog && (
+              <Link
+                href="/customer/catalog"
+                className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                  isCatalogActive
+                    ? 'bg-white/15 text-white border-white'
+                    : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Store className="w-4 h-4" />
+                <span>Katalog Customer</span>
+              </Link>
+            )}
+
+            {/* Aplikasi Kurir */}
+            {canAccessCourierApp && (
+              <Link
+                href="/courier"
+                className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                  isCourierActive
+                    ? 'bg-white/15 text-white border-white'
+                    : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                <span>Aplikasi Kurir</span>
               </Link>
             )}
 
