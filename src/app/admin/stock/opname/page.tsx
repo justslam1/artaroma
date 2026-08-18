@@ -21,7 +21,9 @@ import {
   Search,
   Plus,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportToXLSX } from '@/lib/export-excel';
 
 export default function StockOpnamePage() {
   const router = useRouter();
@@ -234,27 +236,74 @@ export default function StockOpnamePage() {
     }
   };
 
+  const handleExportOpnameXLSX = () => {
+    if (subTab === 'history') {
+      const data = historyLogs.map((h, idx) => ({
+        'No': idx + 1,
+        'Waktu Audit': h.created_at ? formatDateTime(h.created_at) : '-',
+        'Batch Number': h.batch_number || '-',
+        'Nama Produk': h.product_name || '-',
+        'Stok Sistem (Kg)': h.qty_before ?? 0,
+        'Stok Fisik Riil (Kg)': h.qty_after ?? 0,
+        'Selisih (Kg)': h.difference_qty ?? 0,
+        'Petugas Audit': h.adjusted_by || 'Staff Gudang',
+        'Alasan / Catatan': h.reason || '-',
+      }));
+      exportToXLSX(data, {
+        fileName: `Riwayat_Stok_Opname_${new Date().toISOString().split('T')[0]}.xlsx`,
+        sheetName: 'Riwayat Opname',
+      });
+    } else {
+      const rows: any[] = [];
+      let no = 1;
+      products.forEach((prod) => {
+        const prodBatches = batches.filter((b) => b.product_id === prod.id);
+        prodBatches.forEach((batch) => {
+          const sys = batch.current_qty_kg ?? 0;
+          const phys = parseFloat(physicalQtys[batch.id] || '0');
+          const diff = isNaN(phys) ? 0 : phys - sys;
+          rows.push({
+            'No': no++,
+            'Nama Produk': prod.name,
+            'SKU': prod.sku,
+            'Batch Lot': batch.batch_number,
+            'Kemasan': batch.pack_size_kg ? `${batch.pack_size_kg} Kg` : '-',
+            'Stok Sistem (Kg)': sys,
+            'Input Stok Fisik (Kg)': isNaN(phys) ? sys : phys,
+            'Selisih (Kg)': diff,
+            'Status Selisih': diff === 0 ? 'COCOK' : diff > 0 ? `SURPLUS (+${diff} Kg)` : `DEFISIT (${diff} Kg)`,
+            'Catatan Opname': opnameNotes[batch.id] || '-',
+          });
+        });
+      });
+      exportToXLSX(rows, {
+        fileName: `Audit_Stok_Opname_${new Date().toISOString().split('T')[0]}.xlsx`,
+        sheetName: 'Audit Fisik vs Sistem',
+      });
+    }
+  };
+
   return (
-    <div className="bg-[#f5f7fa] min-h-screen pb-20">
+    <div className="bg-[#f5f7fa] min-h-screen pb-24">
       <AdminTopNav />
 
       <main className="max-w-screen-2xl mx-auto px-6 py-6 space-y-6">
-        {/* Navigation back and header */}
+        {/* Back Link */}
         <div className="flex items-center justify-between">
           <Link
             href="/admin/stock"
-            className="text-xs font-semibold text-blue-750 hover:underline flex items-center gap-1.5"
+            className="text-xs font-semibold text-blue-700 hover:underline flex items-center gap-1.5"
           >
-            <ArrowLeft className="w-4 h-4" /> Kembali ke Manajemen Stok
+            <ArrowLeft className="w-4 h-4" /> Kembali ke Manajemen Stok & Gudang
           </Link>
         </div>
 
-        {/* Title bar */}
-        <div className="bg-gradient-to-r from-blue-900 via-slate-800 to-indigo-900 p-6 rounded-2xl text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* Page Header Card */}
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="bg-blue-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                AUDIT GUDANG
+              <span className="bg-blue-700 text-blue-100 text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full">
+                AUDIT & KONTROL INVENTORI
               </span>
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
                 MYSQL LIVE
@@ -269,13 +318,22 @@ export default function StockOpnamePage() {
             </p>
           </div>
 
-          <button
-            onClick={fetchData}
-            disabled={isLoading || isSaving}
-            className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/10"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Segarkan Data
-          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleExportOpnameXLSX}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+              title="Ekspor Data Opname ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+            </button>
+            <button
+              onClick={fetchData}
+              disabled={isLoading || isSaving}
+              className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/10"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Segarkan Data
+            </button>
+          </div>
         </div>
 
         {/* Warning info panel if there are pending modifications */}
@@ -303,26 +361,36 @@ export default function StockOpnamePage() {
         )}
 
         {/* Sub-tab Navigation */}
-        <div className="flex border-b border-gray-200 gap-6 text-xs font-bold bg-white px-6 py-3 rounded-xl shadow-xs">
+        <div className="flex border-b border-gray-200 justify-between items-center bg-white px-6 py-3 rounded-xl shadow-xs flex-wrap gap-3">
+          <div className="flex gap-6 text-xs font-bold">
+            <button
+              onClick={() => setSubTab('audit')}
+              className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                subTab === 'audit'
+                  ? 'border-blue-600 text-blue-700 font-extrabold'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" /> Lakukan Audit Opname
+            </button>
+            <button
+              onClick={() => setSubTab('history')}
+              className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                subTab === 'history'
+                  ? 'border-blue-600 text-blue-700 font-extrabold'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <History className="w-4 h-4" /> Riwayat Audit & Penyesuaian ({historyLogs.length})
+            </button>
+          </div>
           <button
-            onClick={() => setSubTab('audit')}
-            className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 ${
-              subTab === 'audit'
-                ? 'border-blue-600 text-blue-700 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            onClick={handleExportOpnameXLSX}
+            className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="Ekspor ke Excel (.xlsx)"
           >
-            <ClipboardList className="w-4 h-4" /> Lakukan Audit Opname
-          </button>
-          <button
-            onClick={() => setSubTab('history')}
-            className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 ${
-              subTab === 'history'
-                ? 'border-blue-600 text-blue-700 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <History className="w-4 h-4" /> Riwayat Audit & Penyesuaian ({historyLogs.length})
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            Ekspor {subTab === 'history' ? 'Riwayat' : 'Audit'} XLSX
           </button>
         </div>
 

@@ -31,7 +31,9 @@ import {
   ShieldCheck,
   XCircle,
   AlertTriangle,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportToXLSX } from '@/lib/export-excel';
 
 export default function PODetailPage() {
   const params = useParams();
@@ -523,6 +525,25 @@ export default function PODetailPage() {
       });
     });
   }
+
+  const handleExportPODetailXLSX = () => {
+    const data = po.items.map((item, index) => ({
+      'No': index + 1,
+      'No PO': po.po_number,
+      'Tanggal PO': po.order_date,
+      'Suplier': po.distributor_name,
+      'SKU Varian': item.variant_sku || '-',
+      'Deskripsi Produk': item.product_name,
+      'Qty Pesanan (Kg)': item.qty_ordered_kg,
+      'Harga Beli / Kg (IDR)': item.cost_per_kg,
+      'Subtotal (IDR)': item.subtotal,
+    }));
+    exportToXLSX(data, {
+      fileName: `PO_${po.po_number}_Items_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: `Rincian PO ${po.po_number}`,
+    });
+  };
+
   const totalShippedKg = Object.values(shippedPerItem).reduce((a, b) => a + b, 0);
 
   // Derived flags
@@ -763,6 +784,14 @@ export default function PODetailPage() {
             className="bg-white hover:bg-gray-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
           >
             <FileText className="w-3.5 h-3.5 text-blue-600" /> Purchase order PDF
+          </button>
+
+          <button
+            onClick={handleExportPODetailXLSX}
+            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            title="Ekspor Rincian Item PO ke File Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian PO (XLSX)
           </button>
 
           <button

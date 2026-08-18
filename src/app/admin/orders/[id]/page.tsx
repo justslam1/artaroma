@@ -45,7 +45,9 @@ import {
   CheckCircle,
   XCircle,
   Sparkles,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportToXLSX } from '@/lib/export-excel';
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -192,6 +194,25 @@ export default function OrderDetailPage() {
       inv.so_id === order.id ||
       (order.invoice_id && inv.id === order.invoice_id)
   );
+
+  const handleExportSODetailXLSX = () => {
+    if (!order) return;
+    const data = (order.items || []).map((item, index) => ({
+      'No': index + 1,
+      'No SO': order.so_number,
+      'Tanggal SO': order.order_date,
+      'Nama Customer': order.customer_name,
+      'Perusahaan': order.customer_company,
+      'Deskripsi Produk': item.product_name,
+      'Qty (Kg)': item.qty_kg,
+      'Harga Satuan / Kg (IDR)': item.unit_price_per_kg || 0,
+      'Subtotal (IDR)': item.subtotal || 0,
+    }));
+    exportToXLSX(data, {
+      fileName: `SO_${order.so_number}_Items_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: `Rincian SO ${order.so_number}`,
+    });
+  };
 
   // Local state for items in DIKONFIRMASI editing
   const [editingItems, setEditingItems] = useState<any[]>([]);
@@ -1348,6 +1369,14 @@ export default function OrderDetailPage() {
             className="bg-white hover:bg-gray-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5 text-blue-600" /> Sales Order
+          </button>
+
+          <button
+            onClick={handleExportSODetailXLSX}
+            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            title="Ekspor Rincian Item SO ke File Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian SO (XLSX)
           </button>
 
           <button

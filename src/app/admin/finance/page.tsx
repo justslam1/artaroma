@@ -19,7 +19,9 @@ import {
   Download,
   Building2,
   DollarSign,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportInvoicesToXLSX } from '@/lib/export-excel';
 
 export default function FinanceInvoicesPage() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
@@ -170,12 +172,21 @@ export default function FinanceInvoicesPage() {
               Kelola penagihan invoice, verifikasi bukti transfer pembayaran customer, & unggah Faktur Pajak PDF
             </p>
           </div>
-          <Link
-            href="/admin/finance/payables"
-            className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
-          >
-            <Building2 className="w-4 h-4 text-purple-600" /> Ke Tagihan Suplier / PO (Hutang) &rarr;
-          </Link>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={() => exportInvoicesToXLSX(invoices)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+              title="Ekspor Seluruh Invoice Piutang ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+            </button>
+            <Link
+              href="/admin/finance/payables"
+              className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
+            >
+              <Building2 className="w-4 h-4 text-purple-600" /> Ke Tagihan Suplier / PO (Hutang) &rarr;
+            </Link>
+          </div>
         </div>
 
         {/* 4 Summary Cards */}
@@ -228,7 +239,17 @@ export default function FinanceInvoicesPage() {
               <FileText className="w-4.5 h-4.5 text-blue-600" />
               <h2 className="text-base font-bold text-slate-700">Daftar Tagihan Invoice Customer B2B</h2>
             </div>
-            <span className="text-xs text-slate-400 font-medium">{invoices.length} Invoice</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => exportInvoicesToXLSX(invoices)}
+                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                title="Ekspor ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Ekspor XLSX
+              </button>
+              <span className="text-xs text-slate-400 font-medium">{invoices.length} Invoice</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

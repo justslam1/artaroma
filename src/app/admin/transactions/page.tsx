@@ -38,6 +38,7 @@ import {
   ChevronRight,
   MessageSquare,
 } from 'lucide-react';
+import { exportTransactionsToXLSX } from '@/lib/export-excel';
 
 export default function LogBookPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -306,8 +307,16 @@ export default function LogBookPage() {
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => exportTransactionsToXLSX(logs)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
+              title="Ekspor Seluruh Log Book Transaksi ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Ekspor ke XLSX
+            </button>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               + Catat Entri Log Baru
@@ -421,12 +430,22 @@ export default function LogBookPage() {
 
         {/* LOG BOOK TABLE VIEW */}
         <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden">
-          <div className="px-5 py-3.5 bg-slate-50 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-5 py-3.5 bg-slate-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-bold text-slate-800 text-xs flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-blue-600" />
               Daftar Catatan &amp; Riwayat Log Book ({logs.length} Entri Ditampilkan)
             </h2>
-            <span className="text-[11px] text-slate-400">Diurutkan berdasarkan waktu terbaru</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => exportTransactionsToXLSX(logs)}
+                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                title="Ekspor ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Ekspor XLSX
+              </button>
+              <span className="text-[11px] text-slate-400">Diurutkan berdasarkan waktu terbaru</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

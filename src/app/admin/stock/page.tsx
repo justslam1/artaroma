@@ -32,7 +32,9 @@ import {
   Loader2,
   Database,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportStockInventoryToXLSX } from '@/lib/export-excel';
 
 export default function StockInventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -436,6 +438,15 @@ export default function StockInventoryPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => exportStockInventoryToXLSX(batches)}
+              className="text-xs font-bold text-emerald-700 hover:bg-emerald-100 bg-emerald-50 border border-emerald-300 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Ekspor Seluruh Data Batch Stok Gudang ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Ekspor Stok (XLSX)
+            </button>
+
             <button
               onClick={() => {
                 if (expandedProductIds.length === filteredProducts.length) {

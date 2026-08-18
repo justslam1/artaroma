@@ -15,9 +15,10 @@ import {
   UserCheck,
   LogOut,
   RefreshCw,
-  Loader2,
   Package,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportToXLSX } from '@/lib/export-excel';
 
 export default function CourierPWAPage() {
   const [couriers, setCouriers] = useState<Courier[]>(initialCouriers);
@@ -167,6 +168,25 @@ export default function CourierPWAPage() {
     }
   };
 
+  const handleExportTasks = () => {
+    const data = tasks.map((t, idx) => ({
+      'No': idx + 1,
+      'No Surat Jalan': t.surat_jalan_number || '-',
+      'No SO': t.so_number || '-',
+      'Nama Customer': t.customer_name || '-',
+      'Perusahaan': t.company_name || '-',
+      'Alamat Kirim': t.delivery_address || '-',
+      'Telepon': t.phone || '-',
+      'Status Pengiriman': t.status || 'PROSES_GUDANG',
+      'Total Berat (Kg)': (t.items || []).reduce((s: number, i: any) => s + (Number(i.qty_kg) || 0), 0),
+      'Rincian Item': (t.items || []).map(i => `${i.product_name} (${i.qty_kg} kg)`).join('; '),
+    }));
+    exportToXLSX(data, {
+      fileName: `Tugas_Kurir_${(selectedCourier?.name || 'Driver').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: 'Tugas Pengiriman',
+    });
+  };
+
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-16 flex flex-col items-center">
       {/* Mobile View Wrapper */}
@@ -256,11 +276,14 @@ export default function CourierPWAPage() {
               <Package className="w-3.5 h-3.5 text-blue-600" />
               Tugas Pengiriman ({tasks.length})
             </h2>
-            {isLoading && (
-              <span className="text-[11px] text-blue-600 font-medium flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
-              </span>
-            )}
+            <button
+              onClick={handleExportTasks}
+              className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+              title="Ekspor Tugas Pengiriman ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+              Ekspor XLSX
+            </button>
           </div>
 
           {tasks.length === 0 && !isLoading ? (

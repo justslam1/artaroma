@@ -8,7 +8,8 @@ import { POPDFModal } from '@/components/common/po-pdf-modal';
 import { initialPurchaseOrders, initialBatches, initialDistributors, initialProducts } from '@/lib/mock-data';
 import { PurchaseOrder, StockBatch, Product, Distributor } from '@/lib/types';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
-import { ShoppingBag, Plus, FileText, PackageCheck, CheckCircle2, Eye, EyeOff, Lock, ExternalLink, XCircle } from 'lucide-react';
+import { ShoppingBag, Plus, FileText, PackageCheck, CheckCircle2, Eye, EyeOff, Lock, ExternalLink, XCircle, FileSpreadsheet } from 'lucide-react';
+import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 
 export default function ProcurementPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(initialPurchaseOrders);
@@ -254,12 +255,21 @@ export default function ProcurementPage() {
               Kelola Alur Kerja PO 3 Tahap (Buat Email &rarr; Pesanan Dikirim &rarr; Pesanan Diterima)
             </p>
           </div>
-          <button
-            onClick={() => setIsPOModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
-          >
-            <Plus className="w-4 h-4" /> Buat Purchase Order Baru
-          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={() => exportPurchaseOrdersToXLSX(purchaseOrders)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+              title="Ekspor Seluruh Purchase Orders ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+            </button>
+            <button
+              onClick={() => setIsPOModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Buat Purchase Order Baru
+            </button>
+          </div>
         </div>
 
         {/* PO Table */}

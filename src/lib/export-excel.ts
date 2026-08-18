@@ -1,5 +1,14 @@
 import * as XLSX from 'xlsx';
-import { AppUser } from './types';
+import {
+  AppUser,
+  Product,
+  Customer,
+  Distributor,
+  Courier,
+  PurchaseOrder,
+  SalesOrder,
+  StockBatch,
+} from './types';
 
 export interface ExportExcelOptions {
   fileName?: string;
@@ -28,10 +37,8 @@ export function exportToXLSX<T extends Record<string, any>>(
   } = options;
 
   try {
-    // 1. Buat worksheet dari array objek JSON
     const worksheet = XLSX.utils.json_to_sheet(data);
 
-    // 2. Hitung lebar kolom otomatis
     if (autoWidth) {
       const keys = Object.keys(data[0] || {});
       const colWidths = keys.map((key) => {
@@ -45,17 +52,14 @@ export function exportToXLSX<T extends Record<string, any>>(
             }
           }
         });
-        // Beri padding ekstra dan batas minimum/maksimum
-        return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+        return { wch: Math.min(Math.max(maxLen + 4, 12), 65) };
       });
       worksheet['!cols'] = colWidths;
     }
 
-    // 3. Buat workbook baru dan tambahkan worksheet
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31)); // Batas nama sheet Excel 31 karakter
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
 
-    // 4. Download file xlsx ke client browser
     const finalFileName = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`;
     XLSX.writeFile(workbook, finalFileName);
     return true;
@@ -69,7 +73,7 @@ export function exportToXLSX<T extends Record<string, any>>(
 }
 
 /**
- * Helper khusus untuk mengekspor Master Data Pengguna ke file Excel (.xlsx)
+ * Helper khusus ekspor Master Data Pengguna
  */
 export function exportUsersToXLSX(
   users: AppUser[],
@@ -77,15 +81,13 @@ export function exportUsersToXLSX(
   customFileName?: string
 ): boolean {
   if (!users || users.length === 0) {
-    if (typeof window !== 'undefined') {
-      alert('Tidak ada data pengguna yang dapat diekspor.');
-    }
+    if (typeof window !== 'undefined') alert('Tidak ada data pengguna yang dapat diekspor.');
     return false;
   }
 
   const formattedData = users.map((u, index) => {
     const modules = userModuleAccess[u.id] || u.allowed_modules || [];
-    const moduleStr = Array.isArray(modules) && modules.length > 0 ? modules.join(', ') : 'Belum ditentukan';
+    const moduleStr = Array.isArray(modules) && modules.length > 0 ? modules.join(', ') : 'Semua Modul';
 
     return {
       'No': index + 1,
@@ -101,10 +103,387 @@ export function exportUsersToXLSX(
   });
 
   const timestamp = new Date().toISOString().split('T')[0];
-  const fileName = customFileName || `Master_Data_Pengguna_Artaroma_${timestamp}.xlsx`;
-
   return exportToXLSX(formattedData, {
-    fileName,
+    fileName: customFileName || `Master_Data_Pengguna_Artaroma_${timestamp}.xlsx`,
     sheetName: 'Pengguna Sistem',
+  });
+}
+
+/**
+ * Helper khusus ekspor Master Data Produk & Varian
+ */
+export function exportProductsToXLSX(products: Product[], customFileName?: string): boolean {
+  if (!products || products.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data produk yang dapat diekspor.');
+    return false;
+  }
+
+  const rows: any[] = [];
+  let no = 1;
+
+  products.forEach((p) => {
+    const appStr = Array.isArray(p.applications)
+      ? p.applications.join(', ')
+      : p.application || p.fragrance_family || '-';
+
+    if (p.variants && p.variants.length > 0) {
+      p.variants.forEach((v) => {
+        rows.push({
+          'No': no++,
+          'SKU Produk': v.variant_sku || v.sku || p.sku,
+          'Nama Produk / Varian': v.variant_name || p.name,
+          'Kategori Aplikasi': appStr,
+          'Ukuran Kemasan (Kg)': v.pack_size_kg ?? '-',
+          'Harga Jual / Kg (IDR)': v.selling_price_per_kg || p.selling_price_per_kg || 0,
+          'Harga Jual / Kg (USD)': v.selling_price_usd_per_kg ? `$${v.selling_price_usd_per_kg}` : '-',
+          'Stok Aktif (Kg)': Math.round(v.total_stock_kg || 0),
+          'Min. Stok Alert (Kg)': v.min_stock_kg ?? p.min_stock_kg ?? 0,
+          'Top Notes': p.top_notes || '-',
+          'Middle Notes': p.middle_notes || '-',
+          'Base Notes': p.base_notes || '-',
+        });
+      });
+    } else {
+      rows.push({
+        'No': no++,
+        'SKU Produk': p.sku,
+        'Nama Produk / Varian': p.name,
+        'Kategori Aplikasi': appStr,
+        'Ukuran Kemasan (Kg)': (p.pack_sizes || []).join(', ') || '-',
+        'Harga Jual / Kg (IDR)': p.selling_price_per_kg || 0,
+        'Harga Jual / Kg (USD)': '-',
+        'Stok Aktif (Kg)': Math.round(p.total_stock_kg || 0),
+        'Min. Stok Alert (Kg)': p.min_stock_kg || 0,
+        'Top Notes': p.top_notes || '-',
+        'Middle Notes': p.middle_notes || '-',
+        'Base Notes': p.base_notes || '-',
+      });
+    }
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Master_Data_Produk_Artaroma_${timestamp}.xlsx`,
+    sheetName: 'Katalog Produk',
+  });
+}
+
+/**
+ * Helper khusus ekspor Pricelist
+ */
+export function exportPricelistToXLSX(products: Product[], usdRate: number, customFileName?: string): boolean {
+  if (!products || products.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data pricelist untuk diekspor.');
+    return false;
+  }
+
+  const rows: any[] = [];
+  let no = 1;
+
+  products.forEach((p) => {
+    if (p.variants && p.variants.length > 0) {
+      p.variants.forEach((v) => {
+        const hasUsd = Number(v.selling_price_usd_per_kg || 0) > 0;
+        const idrPrice = v.selling_price_per_kg || (hasUsd ? Math.round(Number(v.selling_price_usd_per_kg) * usdRate) : 0);
+        rows.push({
+          'No': no++,
+          'SKU': v.variant_sku || v.sku || p.sku,
+          'Nama Produk': v.variant_name || p.name,
+          'Kemasan (Kg)': v.pack_size_kg ?? '-',
+          'Mata Uang Acuan': hasUsd ? 'USD' : 'IDR',
+          'Harga USD / Kg': hasUsd ? Number(v.selling_price_usd_per_kg) : '-',
+          'Harga IDR / Kg': idrPrice,
+          'Kurs Acuan USD': hasUsd ? `Rp ${usdRate.toLocaleString('id-ID')}` : '-',
+        });
+      });
+    } else {
+      rows.push({
+        'No': no++,
+        'SKU': p.sku,
+        'Nama Produk': p.name,
+        'Kemasan (Kg)': (p.pack_sizes || []).join(', ') || '-',
+        'Mata Uang Acuan': 'IDR',
+        'Harga USD / Kg': '-',
+        'Harga IDR / Kg': p.selling_price_per_kg || 0,
+        'Kurs Acuan USD': '-',
+      });
+    }
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Pricelist_Produk_Artaroma_${timestamp}.xlsx`,
+    sheetName: 'Pricelist Umum',
+  });
+}
+
+/**
+ * Helper khusus ekspor Master Data Customer
+ */
+export function exportCustomersToXLSX(customers: Customer[], customFileName?: string): boolean {
+  if (!customers || customers.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data customer untuk diekspor.');
+    return false;
+  }
+
+  const rows = customers.map((c, index) => ({
+    'No': index + 1,
+    'Kode Customer': c.code || '-',
+    'Nama Perusahaan': c.company_name || '-',
+    'Nama PIC': c.pic_name || '-',
+    'Email': c.email || '-',
+    'Nomor Telepon': c.phone || '-',
+    'Alamat Pengiriman': c.address || '-',
+    'Alamat Kantor': (c as any).office_address || '-',
+    'NPWP': c.npwp || '-',
+    'Bank': c.bank_name || '-',
+    'No Rekening': c.bank_account_number || '-',
+    'Atas Nama Rekening': c.bank_account_name || '-',
+    'Kelayakan Kredit': c.is_credit_eligible ? 'LAYAK' : 'CASH ONLY',
+    'Limit Kredit (IDR)': c.credit_limit || 0,
+    'TOP Kredit (Hari)': c.credit_terms_days || 0,
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Master_Data_Customer_${timestamp}.xlsx`,
+    sheetName: 'Customer B2B',
+  });
+}
+
+/**
+ * Helper khusus ekspor Master Data Suplier / Distributor
+ */
+export function exportDistributorsToXLSX(distributors: Distributor[], customFileName?: string): boolean {
+  if (!distributors || distributors.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data suplier untuk diekspor.');
+    return false;
+  }
+
+  const rows = distributors.map((d, index) => ({
+    'No': index + 1,
+    'Kode Suplier': d.code || '-',
+    'Nama Suplier': d.name || '-',
+    'Kontak PIC': d.contact_name || '-',
+    'Email': d.email || '-',
+    'Nomor Telepon': d.phone || '-',
+    'Alamat': d.address || '-',
+    'TOP Pembayaran (Hari)': d.top_payable_days || 30,
+    'Rekening Bank': d.bank_account || '-',
+    'NPWP': d.npwp || '-',
+    'Catatan': d.notes || '-',
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Master_Data_Suplier_${timestamp}.xlsx`,
+    sheetName: 'Suplier & Distributor',
+  });
+}
+
+/**
+ * Helper khusus ekspor Master Data Kurir
+ */
+export function exportCouriersToXLSX(couriers: Courier[], customFileName?: string): boolean {
+  if (!couriers || couriers.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data kurir untuk diekspor.');
+    return false;
+  }
+
+  const rows = couriers.map((k, index) => ({
+    'No': index + 1,
+    'Kode Kurir': k.code || '-',
+    'Nama Driver': k.name || '-',
+    'Nomor Telepon': k.phone || '-',
+    'Nomor Plat Kendaraan': k.vehicle_number || '-',
+    'Status': k.is_active !== false ? 'AKTIF / SIAP TUGAS' : 'NONAKTIF',
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Master_Data_Kurir_${timestamp}.xlsx`,
+    sheetName: 'Armada Kurir',
+  });
+}
+
+/**
+ * Helper khusus ekspor Purchase Orders
+ */
+export function exportPurchaseOrdersToXLSX(pos: PurchaseOrder[], customFileName?: string): boolean {
+  if (!pos || pos.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data PO untuk diekspor.');
+    return false;
+  }
+
+  const rows = pos.map((po, index) => {
+    const totalQty = po.items.reduce((s, i) => s + (i.qty_ordered_kg || 0), 0);
+    const itemNames = po.items.map((i) => `${i.product_name} (${i.qty_ordered_kg} kg)`).join('; ');
+
+    return {
+      'No': index + 1,
+      'No PO': po.po_number || '-',
+      'Tanggal Order': po.order_date || '-',
+      'Nama Suplier': po.distributor_name || '-',
+      'Status PO': po.status || '-',
+      'Metode Bayar': po.payment_method || 'KREDIT',
+      'TOP (Hari)': po.payment_terms_days || 30,
+      'Total Item (Kg)': totalQty,
+      'Total Nilai PO (IDR)': po.total_amount || 0,
+      'Rincian Produk': itemNames,
+    };
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Daftar_Purchase_Orders_${timestamp}.xlsx`,
+    sheetName: 'Purchase Orders',
+  });
+}
+
+/**
+ * Helper khusus ekspor Sales Orders
+ */
+export function exportSalesOrdersToXLSX(sos: SalesOrder[], customFileName?: string): boolean {
+  if (!sos || sos.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data Sales Order untuk diekspor.');
+    return false;
+  }
+
+  const rows = sos.map((so, index) => {
+    const totalQty = (so.items || []).reduce((s, i) => s + (i.qty_kg || 0), 0);
+    const itemNames = (so.items || []).map((i) => `${i.product_name} (${i.qty_kg} kg)`).join('; ');
+
+    return {
+      'No': index + 1,
+      'No SO': so.so_number || '-',
+      'Tanggal Order': so.order_date || '-',
+      'Nama Customer': so.customer_name || '-',
+      'Perusahaan': so.customer_company || '-',
+      'Status SO': so.status || '-',
+      'Metode Bayar': so.payment_method || '-',
+      'Tipe Kirim': so.shipping_type || 'FRANCO',
+      'Kurir Pengantar': so.courier_name || '-',
+      'Total Berat (Kg)': totalQty,
+      'Subtotal Barang (IDR)': so.total_goods_amount || 0,
+      'Biaya Ongkir (IDR)': so.shipping_cost || 0,
+      'Grand Total (IDR)': so.grand_total || 0,
+      'Rincian Produk': itemNames,
+    };
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Daftar_Sales_Orders_${timestamp}.xlsx`,
+    sheetName: 'Sales Orders',
+  });
+}
+
+/**
+ * Helper khusus ekspor Stok Gudang & Batches FEFO
+ */
+export function exportStockInventoryToXLSX(batches: StockBatch[], customFileName?: string): boolean {
+  if (!batches || batches.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data stok gudang untuk diekspor.');
+    return false;
+  }
+
+  const rows = batches.map((b, index) => ({
+    'No': index + 1,
+    'Nomor Batch': b.batch_number || '-',
+    'SKU Varian': b.variant_sku || '-',
+    'Nama Produk': b.product_name || '-',
+    'Ukuran Kemasan': b.pack_size_kg ? `${b.pack_size_kg} Kg` : '-',
+    'Sisa Stok (Kg)': Math.round(b.current_qty_kg || 0),
+    'Unit / Jerigen': b.unit_count || 1,
+    'Tgl Produksi': b.production_date || '-',
+    'Expired Date': b.expiry_date || '-',
+    'Status Expired': b.is_expired ? 'EXPIRED' : 'AKTIF',
+    'Biaya Pokok (HPP) / Kg': b.unit_cost_per_kg || 0,
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Laporan_Stok_Gudang_FEFO_${timestamp}.xlsx`,
+    sheetName: 'Stok Gudang FEFO',
+  });
+}
+
+/**
+ * Helper khusus ekspor Invoices Piutang
+ */
+export function exportInvoicesToXLSX(invoices: any[], customFileName?: string): boolean {
+  if (!invoices || invoices.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data tagihan/invoice untuk diekspor.');
+    return false;
+  }
+
+  const rows = invoices.map((inv, index) => ({
+    'No': index + 1,
+    'No Invoice': inv.invoice_number || inv.id || '-',
+    'No SO Terkait': inv.so_number || '-',
+    'Nama Customer': inv.customer_name || '-',
+    'Perusahaan': inv.customer_company || '-',
+    'Tanggal Invoice': inv.invoice_date || inv.order_date || '-',
+    'Jatuh Tempo': inv.due_date || '-',
+    'Total Tagihan (IDR)': inv.total_amount || inv.grand_total || 0,
+    'Status Pembayaran': inv.payment_status || inv.status || 'BELUM LUNAS',
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Laporan_Piutang_Invoices_${timestamp}.xlsx`,
+    sheetName: 'Piutang Customer',
+  });
+}
+
+/**
+ * Helper khusus ekspor Hutang Suplier / Payables
+ */
+export function exportPayablesToXLSX(payables: any[], customFileName?: string): boolean {
+  if (!payables || payables.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data hutang suplier untuk diekspor.');
+    return false;
+  }
+
+  const rows = payables.map((p, index) => ({
+    'No': index + 1,
+    'No PO': p.po_number || '-',
+    'Nama Suplier': p.distributor_name || '-',
+    'Tanggal Order': p.order_date || '-',
+    'Jatuh Tempo': p.due_date || '-',
+    'Total Hutang (IDR)': p.total_amount || 0,
+    'Status Hutang': p.payment_status || p.status || 'BELUM LUNAS',
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Laporan_Hutang_Suplier_${timestamp}.xlsx`,
+    sheetName: 'Hutang Suplier',
+  });
+}
+
+/**
+ * Helper khusus ekspor Log Book / Audit Trail Transaksi
+ */
+export function exportTransactionsToXLSX(transactions: any[], customFileName?: string): boolean {
+  if (!transactions || transactions.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada log transaksi untuk diekspor.');
+    return false;
+  }
+
+  const rows = transactions.map((t, index) => ({
+    'No': index + 1,
+    'Waktu': t.created_at || t.timestamp || '-',
+    'Tipe Transaksi': t.type || t.action || '-',
+    'No Dokumen / Referensi': t.reference_number || t.doc_no || '-',
+    'Keterangan': t.description || t.notes || '-',
+    'User Pelaksana': t.user_name || t.actor || '-',
+    'Perubahan Stok (Kg)': t.qty_change ?? '-',
+  }));
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Log_Book_Audit_Transaksi_${timestamp}.xlsx`,
+    sheetName: 'Log Transaksi',
   });
 }

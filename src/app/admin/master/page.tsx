@@ -53,7 +53,15 @@ import {
   Globe,
   FileSpreadsheet,
 } from 'lucide-react';
-import { exportUsersToXLSX } from '@/lib/export-excel';
+import {
+  exportUsersToXLSX,
+  exportProductsToXLSX,
+  exportPricelistToXLSX,
+  exportCustomersToXLSX,
+  exportDistributorsToXLSX,
+  exportCouriersToXLSX,
+  exportToXLSX,
+} from '@/lib/export-excel';
 
 type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config';
 
@@ -1340,17 +1348,66 @@ export default function MasterDataPage() {
     setEditingItem(null);
   };
 
-  // --- EXPORT USERS TO XLSX ---
-  const handleExportUsers = () => {
-    const filteredUsers = appUsers.filter((u) =>
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (userModuleAccess[u.id] || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const usersToExport = searchTerm.trim() ? filteredUsers : appUsers;
-    exportUsersToXLSX(usersToExport, userModuleAccess);
+  // --- EXPORT TO XLSX HANDLER ---
+  const handleExportCurrentTab = () => {
+    if (activeTab === 'products') {
+      const filtered = products.filter((p) =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.application || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportProductsToXLSX(searchTerm.trim() ? filtered : products);
+    } else if (activeTab === 'pricelist') {
+      const filtered = products.filter((p) =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportPricelistToXLSX(searchTerm.trim() ? filtered : products, usdRate);
+    } else if (activeTab === 'customers') {
+      const filtered = customers.filter((c) =>
+        c.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.pic_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportCustomersToXLSX(searchTerm.trim() ? filtered : customers);
+    } else if (activeTab === 'distributors') {
+      const filtered = distributors.filter((d) =>
+        d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.contact_name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportDistributorsToXLSX(searchTerm.trim() ? filtered : distributors);
+    } else if (activeTab === 'couriers') {
+      const filtered = couriers.filter((k) =>
+        k.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        k.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        k.vehicle_number.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportCouriersToXLSX(searchTerm.trim() ? filtered : couriers);
+    } else if (activeTab === 'users' || activeTab === 'access') {
+      const filtered = appUsers.filter((u) =>
+        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (userModuleAccess[u.id] || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      exportUsersToXLSX(searchTerm.trim() ? filtered : appUsers, userModuleAccess);
+    } else if (activeTab === 'finance') {
+      const bankData = (companyConfig.bank_accounts || []).map((b: any, i: number) => ({
+        'No': i + 1,
+        'Bank': b.bank,
+        'Nomor Rekening': b.no,
+        'Atas Nama': b.atas_nama,
+        'Jenis Rekening': b.jenis,
+      }));
+      exportToXLSX(bankData, {
+        fileName: `Rekening_Bank_Artaroma_${new Date().toISOString().split('T')[0]}.xlsx`,
+        sheetName: 'Rekening Bank',
+      });
+    }
   };
+
+  const handleExportUsers = handleExportCurrentTab;
 
   // --- RESET PASSWORD ACTION ---
   const handleResetPassword = (userName: string, email: string) => {
@@ -1614,11 +1671,11 @@ export default function MasterDataPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            {activeTab === 'users' && (
+            {activeTab !== 'config' && (
               <button
-                onClick={handleExportUsers}
+                onClick={handleExportCurrentTab}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
-                title="Ekspor Data Pengguna ke Excel (.xlsx)"
+                title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
               >
                 <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
               </button>
@@ -1675,11 +1732,11 @@ export default function MasterDataPage() {
               />
             </div>
             <div className="flex items-center gap-2">
-              {activeTab === 'users' && (
+              {activeTab !== 'config' && (
                 <button
-                  onClick={handleExportUsers}
+                  onClick={handleExportCurrentTab}
                   className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  title="Ekspor Data Pengguna ke Excel (.xlsx)"
+                  title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor XLSX
                 </button>

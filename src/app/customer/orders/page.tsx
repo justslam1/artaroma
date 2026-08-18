@@ -22,7 +22,9 @@ import {
   FileCheck,
   RefreshCw,
   ExternalLink,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 
 export default function CustomerOrdersPage() {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
@@ -185,6 +187,13 @@ export default function CustomerOrdersPage() {
     }
   };
 
+  const handleExportCustomerOrders = () => {
+    exportSalesOrdersToXLSX(
+      customerOrders,
+      `Histori_Pesanan_${currentCustomer.company_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+    );
+  };
+
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-20">
       <CustomerNav
@@ -201,7 +210,7 @@ export default function CustomerOrdersPage() {
 
       <main className="max-w-screen-xl mx-auto px-6 py-8 space-y-6">
         {/* Title & Sync Button */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
@@ -212,12 +221,21 @@ export default function CustomerOrdersPage() {
             </p>
           </div>
 
-          <button
-            onClick={syncOrdersAndInvoices}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh Status Pesanan
-          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleExportCustomerOrders}
+              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Ekspor Histori Pesanan ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+            </button>
+            <button
+              onClick={syncOrdersAndInvoices}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+            </button>
+          </div>
         </div>
 
         {/* Workflow Lifecycle Summary Banner (5 Steps) */}

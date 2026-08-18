@@ -6,7 +6,8 @@ import { AdminTopNav } from '@/components/navigation/admin-topnav';
 import { getStoredOrders, saveStoredOrders } from '@/lib/order-store';
 import { SalesOrder } from '@/lib/types';
 import { formatIDR, formatKg } from '@/lib/utils';
-import { FileText, Eye, EyeOff, Lock, ExternalLink, ShoppingCart, RefreshCw } from 'lucide-react';
+import { FileText, Eye, EyeOff, Lock, ExternalLink, ShoppingCart, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 
 export default function SalesOrdersPage() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
@@ -133,14 +134,23 @@ export default function SalesOrdersPage() {
 
       <main className="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
         {/* Title */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-blue-600" />
-            Sales Order
-          </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Daftar Pesanan Penjualan dari Customer.
-          </p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-blue-600" />
+              Sales Order
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Daftar Pesanan Penjualan dari Customer.
+            </p>
+          </div>
+          <button
+            onClick={() => exportSalesOrdersToXLSX(salesOrders)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+            title="Ekspor Seluruh Sales Orders ke File Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+          </button>
         </div>
 
         {/* Sales Orders List Table */}
@@ -151,6 +161,14 @@ export default function SalesOrdersPage() {
               <h2 className="text-base font-bold text-slate-700">Daftar Sales Order (SO)</h2>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => exportSalesOrdersToXLSX(salesOrders)}
+                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                title="Ekspor ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Ekspor XLSX
+              </button>
               {canViewFinancials && (
                 <button
                   onClick={() => setIsFinancialHidden((prev) => !prev)}

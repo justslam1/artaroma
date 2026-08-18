@@ -20,7 +20,9 @@ import {
   AlertCircle,
   Tag,
   Package,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportPricelistToXLSX } from '@/lib/export-excel';
 
 const getProductReferencePrice = (product: Product, usdRate: number) => {
   if (product.variants && product.variants.length > 0) {
@@ -209,13 +211,20 @@ export default function CustomerCatalogPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => exportPricelistToXLSX(products, usdRate, `Katalog_Pricelist_Artaroma_${new Date().toISOString().split('T')[0]}.xlsx`)}
+              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Ekspor Katalog & Pricelist ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor Pricelist (XLSX)
+            </button>
             <span className="bg-blue-50 text-blue-800 border border-blue-200 text-xs font-mono font-bold px-3 py-1.5 rounded-lg">
               Kurs Hari Ini: 1 USD = {formatIDR(usdRate)}
             </span>
             <button
               onClick={fetchProducts}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '↻ Refresh Data'}
             </button>

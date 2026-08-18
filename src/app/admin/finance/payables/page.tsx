@@ -18,7 +18,9 @@ import {
   Send,
   DollarSign,
   ExternalLink,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportPayablesToXLSX } from '@/lib/export-excel';
 
 export default function FinancePayablesPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -128,12 +130,21 @@ export default function FinancePayablesPage() {
               Kelola pembayaran tagihan Purchase Order (PO)
             </p>
           </div>
-          <Link
-            href="/admin/finance"
-            className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
-          >
-            <CreditCard className="w-4 h-4 text-blue-600" /> Ke Invoice Customer (Piutang) &rarr;
-          </Link>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={() => exportPayablesToXLSX(purchaseOrders)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+              title="Ekspor Seluruh Tagihan Hutang PO ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+            </button>
+            <Link
+              href="/admin/finance"
+              className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
+            >
+              <CreditCard className="w-4 h-4 text-blue-600" /> Ke Invoice Customer (Piutang) &rarr;
+            </Link>
+          </div>
         </div>
 
         {/* 3 Summary Cards */}
@@ -178,7 +189,17 @@ export default function FinancePayablesPage() {
               <Building2 className="w-4.5 h-4.5 text-purple-600" />
               <h2 className="text-base font-bold text-slate-700">Daftar Tagihan Purchase Order (PO) Distributor</h2>
             </div>
-            <span className="text-xs text-slate-400 font-medium">{purchaseOrders.length} Tagihan PO</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => exportPayablesToXLSX(purchaseOrders)}
+                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                title="Ekspor ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Ekspor XLSX
+              </button>
+              <span className="text-xs text-slate-400 font-medium">{purchaseOrders.length} Tagihan PO</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

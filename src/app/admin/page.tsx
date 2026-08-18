@@ -32,7 +32,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportToXLSX } from '@/lib/export-excel';
 
 export default function AdminDashboardPage() {
   const [invoices, setInvoices] = useState<any[]>(initialInvoices);
@@ -164,16 +166,44 @@ export default function AdminDashboardPage() {
   const lowStockList = stockDashboardData !== null ? (stockDashboardData.low_stock_products || []) : lowStockProducts;
   const expiringBatchesList = stockDashboardData !== null ? (stockDashboardData.expiring_batches || []) : nearExpiryBatches;
 
+  const handleExportDashboardXLSX = () => {
+    const summaryData = [
+      { 'Indikator / Metrik': 'Kurs Acuan USD', 'Nilai': `Rp ${activeRate.toLocaleString('id-ID')}` },
+      { 'Indikator / Metrik': 'Total Piutang Customer Aktif', 'Nilai': formatIDR(totalPiutang) },
+      { 'Indikator / Metrik': 'Total Piutang Lancar (0-30 Hari)', 'Nilai': formatIDR(agingCurrent) },
+      { 'Indikator / Metrik': 'Total Piutang Jatuh Tempo (>30 Hari)', 'Nilai': formatIDR(agingOverdue) },
+      { 'Indikator / Metrik': 'Jumlah Customer Overdue', 'Nilai': `${countOverdue} Customer` },
+      { 'Indikator / Metrik': 'Jumlah Produk Terdaftar', 'Nilai': `${products.length} Produk` },
+      { 'Indikator / Metrik': 'Jumlah Batch Stok Gudang', 'Nilai': `${batches.length} Batch Lot` },
+      { 'Indikator / Metrik': 'Alert Stok Kosong / Habis', 'Nilai': `${lowStockCount} Produk` },
+      { 'Indikator / Metrik': 'Alert Mendekati Expired (<= 3 Bulan)', 'Nilai': `${nearExpiryCount} Batch` },
+      { 'Indikator / Metrik': 'Total Sales Order', 'Nilai': `${salesOrders.length} Order` },
+    ];
+    exportToXLSX(summaryData, {
+      fileName: `Executive_Dashboard_Artaroma_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: 'Ringkasan Eksekutif',
+    });
+  };
+
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-20">
       <AdminTopNav />
 
       <main className="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
         {/* Page Title */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Dashboard Overview</h1>
+            <p className="text-xs text-slate-500 mt-0.5">Ringkasan eksekutif penjualan, piutang, dan ketersediaan stok</p>
           </div>
+          <button
+            onClick={handleExportDashboardXLSX}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+            title="Ekspor Ringkasan Dashboard ke File Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Ekspor Ringkasan (XLSX)
+          </button>
         </div>
 
         {/* Live Product Pricing Preview Table (Pricelist Varian) */}
