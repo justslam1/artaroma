@@ -39,8 +39,22 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { exportTransactionsToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function LogBookPage() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user in transactions:', err));
+  }, []);
+
   const [logs, setLogs] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({
     total_logs: 0,
@@ -306,14 +320,16 @@ export default function LogBookPage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={() => exportTransactionsToXLSX(logs)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
-              title="Ekspor Seluruh Log Book Transaksi ke File Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Ekspor ke XLSX
-            </button>
+            {canUserExportXLSX(currentUser) && (
+              <button
+                onClick={() => exportTransactionsToXLSX(logs)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
+                title="Ekspor Seluruh Log Book Transaksi ke File Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Ekspor ke XLSX
+              </button>
+            )}
             <button
               onClick={() => setIsCreateModalOpen(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
@@ -436,14 +452,16 @@ export default function LogBookPage() {
               Daftar Catatan &amp; Riwayat Log Book ({logs.length} Entri Ditampilkan)
             </h2>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => exportTransactionsToXLSX(logs)}
-                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
-                title="Ekspor ke Excel (.xlsx)"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                Ekspor XLSX
-              </button>
+              {canUserExportXLSX(currentUser) && (
+                <button
+                  onClick={() => exportTransactionsToXLSX(logs)}
+                  className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                  title="Ekspor ke Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  Ekspor XLSX
+                </button>
+              )}
               <span className="text-[11px] text-slate-400">Diurutkan berdasarkan waktu terbaru</span>
             </div>
           </div>

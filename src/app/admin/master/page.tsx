@@ -52,6 +52,15 @@ import {
   Coins,
   Globe,
   FileSpreadsheet,
+  Palette,
+  Sparkles,
+  Sliders,
+  Sun,
+  Moon,
+  Contrast,
+  LayoutGrid,
+  Type,
+  Eye,
 } from 'lucide-react';
 import {
   exportUsersToXLSX,
@@ -62,8 +71,16 @@ import {
   exportCouriersToXLSX,
   exportToXLSX,
 } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
+import {
+  ThemeSettings,
+  THEME_PRESETS,
+  getThemeSettings,
+  saveThemeSettings,
+  resetThemeSettings,
+} from '@/lib/theme-store';
 
-type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config';
+type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config' | 'appearance';
 
 const TAB_LABELS: Record<string, string> = {
   products: 'PRODUK',
@@ -75,6 +92,7 @@ const TAB_LABELS: Record<string, string> = {
   access: 'AKSES PENGGUNA',
   pricelist: 'PRICELIST UMUM',
   config: 'PENGATURAN',
+  appearance: 'TAMPILAN & TEMA',
 };
 
 export default function MasterDataPage() {
@@ -168,11 +186,64 @@ export default function MasterDataPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
 
+  // Appearance & Theme Settings States & Handlers
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => getThemeSettings());
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [themeSavedAlert, setThemeSavedAlert] = useState<string | null>(null);
+
+  const handleApplyPreset = (presetKey: string) => {
+    const preset = THEME_PRESETS[presetKey];
+    if (!preset) return;
+    const updated: ThemeSettings = {
+      ...themeSettings,
+      colorPreset: preset.id,
+      primaryColor: preset.primaryColor,
+      primaryHover: preset.primaryHover,
+      primaryLight: preset.primaryLight,
+      primaryText: preset.primaryText,
+      backgroundTone: preset.backgroundTone,
+    };
+    setThemeSettings(updated);
+    saveThemeSettings(updated);
+    setThemeSavedAlert(`Tema "${preset.name}" berhasil diaktifkan dan diterapkan!`);
+    setTimeout(() => setThemeSavedAlert(null), 3500);
+  };
+
+  const handleUpdateThemeField = <K extends keyof ThemeSettings>(key: K, value: ThemeSettings[K]) => {
+    const updated = { ...themeSettings, [key]: value };
+    if (key === 'primaryColor') {
+      updated.colorPreset = 'custom';
+    }
+    setThemeSettings(updated);
+    saveThemeSettings(updated);
+  };
+
+  const handleSaveAppearance = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setThemeSaving(true);
+    saveThemeSettings(themeSettings);
+    setTimeout(() => {
+      setThemeSaving(false);
+      setThemeSavedAlert('Pengaturan tampilan berhasil disimpan dan diterapkan ke seluruh sistem!');
+      setTimeout(() => setThemeSavedAlert(null), 3500);
+    }, 250);
+  };
+
+  const handleResetAppearance = () => {
+    if (confirm('Kembalikan seluruh pengaturan tampilan ke default pabrik Artaroma?')) {
+      const def = resetThemeSettings();
+      setThemeSettings(def);
+      setThemeSavedAlert('Pengaturan tampilan telah dikembalikan ke default pabrik.');
+      setTimeout(() => setThemeSavedAlert(null), 3500);
+    }
+  };
+
   React.useEffect(() => {
     const rate = getUsdExchangeRate();
     setUsdRate(rate);
     setUsdRateInput(rate);
     setApplicationCategories(getApplications());
+    setThemeSettings(getThemeSettings());
 
     const handleUpdate = () => {
       const updatedRate = getUsdExchangeRate();
@@ -215,6 +286,7 @@ export default function MasterDataPage() {
     { key: 'users' as Tab, icon: ShieldCheck, label: TAB_LABELS.users, count: appUsers.length },
     { key: 'finance' as Tab, icon: Landmark, label: TAB_LABELS.finance, count: 0 },
     { key: 'config' as Tab, icon: Settings, label: TAB_LABELS.config, count: 1 },
+    { key: 'appearance' as Tab, icon: Palette, label: TAB_LABELS.appearance, count: 0 },
   ];
 
   const fetchPriceLogs = async () => {
@@ -441,6 +513,20 @@ export default function MasterDataPage() {
     password: 'Artaroma2026!',
   });
 
+  // Current logged in user info for permission checks
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user in master page:', err));
+  }, []);
+
   // Per-user module access state (Super Admin can assign freely)
   const ALL_MODULES = [
     'Dashboard',
@@ -455,6 +541,7 @@ export default function MasterDataPage() {
     'Katalog Customer',
     'Lihat Nilai Finansial (PO/SO)',
     'Lihat Nilai Finansial (Dashboard)',
+    'Ekspor Data (XLSX)',
   ];
   const defaultModulesByRole: Record<string, string[]> = {
     ADMIN: [
@@ -470,10 +557,11 @@ export default function MasterDataPage() {
       'Katalog Customer',
       'Lihat Nilai Finansial (PO/SO)',
       'Lihat Nilai Finansial (Dashboard)',
+      'Ekspor Data (XLSX)',
     ],
-    SALES: ['Dashboard', 'Sales Order (SO)', 'Lihat Stok (Gudang)', 'Log Book & Arsip', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
-    FINANCE: ['Dashboard', 'Purchase Order (PO)', 'Finance & Invoice', 'Log Book & Arsip', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)'],
-    WAREHOUSE: ['Dashboard', 'Purchase Order (PO)', 'Lihat Stok (Gudang)', 'Edit Batch & ED (Gudang)', 'Log Book & Arsip'],
+    SALES: ['Dashboard', 'Sales Order (SO)', 'Lihat Stok (Gudang)', 'Log Book & Arsip', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)', 'Ekspor Data (XLSX)'],
+    FINANCE: ['Dashboard', 'Purchase Order (PO)', 'Finance & Invoice', 'Log Book & Arsip', 'Lihat Nilai Finansial (PO/SO)', 'Lihat Nilai Finansial (Dashboard)', 'Ekspor Data (XLSX)'],
+    WAREHOUSE: ['Dashboard', 'Purchase Order (PO)', 'Lihat Stok (Gudang)', 'Edit Batch & ED (Gudang)', 'Log Book & Arsip', 'Ekspor Data (XLSX)'],
     COURIER: ['Aplikasi Kurir'],
     CUSTOMER: ['Katalog Customer'],
   };
@@ -1350,6 +1438,11 @@ export default function MasterDataPage() {
 
   // --- EXPORT TO XLSX HANDLER ---
   const handleExportCurrentTab = () => {
+    if (!canUserExportXLSX(currentUser)) {
+      alert('Akses Ditolak: Akun Anda tidak memiliki hak akses modul "Ekspor Data (XLSX)". Silakan hubungi Super Admin.');
+      return;
+    }
+
     if (activeTab === 'products') {
       const filtered = products.filter((p) =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1671,7 +1764,7 @@ export default function MasterDataPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            {activeTab !== 'config' && (
+            {canUserExportXLSX(currentUser) && activeTab !== 'config' && activeTab !== 'appearance' && (
               <button
                 onClick={handleExportCurrentTab}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
@@ -1680,7 +1773,7 @@ export default function MasterDataPage() {
                 <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
               </button>
             )}
-            {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && (
+            {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && activeTab !== 'appearance' && (
               <button
                 onClick={handleOpenAddModal}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
@@ -1709,56 +1802,60 @@ export default function MasterDataPage() {
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
-                  <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold ${
-                    activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {tab.count}
-                  </span>
+                  {tab.key !== 'appearance' && (
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold ${
+                      activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
 
-          {/* Search */}
-          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-            <div className="relative max-w-sm w-full">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder={`Cari ${activeTab}...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
-              />
+          {/* Search Toolbar */}
+          {activeTab !== 'config' && activeTab !== 'appearance' && (
+            <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div className="relative max-w-sm w-full">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder={`Cari ${activeTab}...`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                {canUserExportXLSX(currentUser) && (
+                  <button
+                    onClick={handleExportCurrentTab}
+                    className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                    title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor XLSX
+                  </button>
+                )}
+                {activeTab === 'products' && (
+                  <button
+                    onClick={() => setIsAppModalOpen(true)}
+                    className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                  >
+                    <Settings className="w-3.5 h-3.5" /> Kelola Pilihan Aplikasi
+                  </button>
+                )}
+                {activeTab !== 'pricelist' && activeTab !== 'finance' && (
+                  <button
+                    onClick={handleOpenAddModal}
+                    className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tambah {activeTab.slice(0, -1)} baru
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {activeTab !== 'config' && (
-                <button
-                  onClick={handleExportCurrentTab}
-                  className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor XLSX
-                </button>
-              )}
-              {activeTab === 'products' && (
-                <button
-                  onClick={() => setIsAppModalOpen(true)}
-                  className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
-                >
-                  <Settings className="w-3.5 h-3.5" /> Kelola Pilihan Aplikasi
-                </button>
-              )}
-              {activeTab !== 'pricelist' && activeTab !== 'finance' && activeTab !== 'config' && (
-                <button
-                  onClick={handleOpenAddModal}
-                  className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Tambah {activeTab.slice(0, -1)} baru
-                </button>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* TAB: Products */}
           {activeTab === 'products' && (
@@ -3087,6 +3184,466 @@ export default function MasterDataPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* TAB: KUSTOMISASI TAMPILAN & TEMA */}
+          {activeTab === 'appearance' && (
+            <div className="p-6 max-w-5xl mx-auto space-y-6">
+              {/* Header Banner */}
+              <div
+                className="text-white rounded-2xl p-6 shadow-lg relative overflow-hidden transition-all duration-300"
+                style={{
+                  background: `linear-gradient(135deg, ${themeSettings.primaryColor} 0%, #1e1b4b 100%)`,
+                }}
+              >
+                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center flex-shrink-0 border border-white/20">
+                      <Palette className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-white/20 text-white text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full backdrop-blur-sm">
+                          UI ERGONOMICS &amp; BRANDING
+                        </span>
+                        <span className="bg-emerald-400/25 text-emerald-200 border border-emerald-300/30 text-[9px] font-mono px-2 py-0.5 rounded font-bold">
+                          LIVE CSS SYNC
+                        </span>
+                      </div>
+                      <h2 className="font-extrabold text-xl mt-1">Kustomisasi Tampilan &amp; Tema Antarmuka</h2>
+                      <p className="text-white/80 text-xs mt-1 max-w-2xl leading-relaxed">
+                        Sesuaikan palet warna aksen, ukuran font, kerapatan tabel data, dan nuansa latar belakang. Perubahan langsung aktif di layar dan tersimpan otomatis.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetAppearance}
+                    className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3.5 py-2 rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-sm flex-shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset ke Default
+                  </button>
+                </div>
+              </div>
+
+              {/* Alert Notification */}
+              {themeSavedAlert && (
+                <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl p-4 flex items-center gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <div className="text-xs font-semibold">{themeSavedAlert}</div>
+                </div>
+              )}
+
+              {/* SECTION 1: 1-Click Preset Theme Gallery */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      Pilihan Tema Cepat (1-Klik Preset)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Pilih salah satu preset tema siap pakai yang dirancang khusus untuk Artaroma Hub</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {Object.values(THEME_PRESETS).map((preset) => {
+                    const isActive = themeSettings.colorPreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleApplyPreset(preset.id)}
+                        className={`p-4 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                          isActive
+                            ? 'border-blue-600 ring-2 ring-blue-500/20 bg-blue-50/30 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50/60 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-5 h-5 rounded-full shadow-inner flex-shrink-0 border border-black/10"
+                              style={{ backgroundColor: preset.primaryColor }}
+                            />
+                            <span className="font-bold text-xs text-slate-800">{preset.name}</span>
+                          </div>
+                          {isActive && (
+                            <span className="bg-blue-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                              <Check className="w-3 h-3 stroke-[3]" /> Aktif
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-snug">{preset.subtitle}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 2: Custom Controls & Live Preview Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Form: Detailed Settings (7 Cols) */}
+                <div className="lg:col-span-7 space-y-6">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 text-xs">
+                    <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2 pb-3 border-b border-gray-100">
+                      <Sliders className="w-4 h-4 text-blue-600" />
+                      Detail Kustomisasi Antarmuka
+                    </h3>
+
+                    {/* 1. Primary Hue */}
+                    <div className="space-y-2">
+                      <label className="block font-bold text-slate-700">
+                        1. Warna Aksen Utama (*Primary Color*)
+                      </label>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {[
+                          { name: 'Royal Blue', hex: '#1d4ed8', hover: '#1e40af', light: '#eff6ff', text: '#1e40af' },
+                          { name: 'Indigo', hex: '#4338ca', hover: '#3730a3', light: '#eef2ff', text: '#3730a3' },
+                          { name: 'Emerald', hex: '#059669', hover: '#047857', light: '#ecfdf5', text: '#065f46' },
+                          { name: 'Teal', hex: '#0f766e', hover: '#115e59', light: '#f0fdfa', text: '#115e59' },
+                          { name: 'Violet', hex: '#7c3aed', hover: '#6d28d9', light: '#f5f3ff', text: '#5b21b6' },
+                          { name: 'Rose', hex: '#e11d48', hover: '#be123c', light: '#fff1f2', text: '#9f1239' },
+                          { name: 'Amber', hex: '#d97706', hover: '#b45309', light: '#fffbeb', text: '#92400e' },
+                          { name: 'Slate', hex: '#334155', hover: '#1e293b', light: '#f8fafc', text: '#0f172a' },
+                        ].map((swatch) => {
+                          const isSelected = themeSettings.primaryColor.toLowerCase() === swatch.hex.toLowerCase();
+                          return (
+                            <button
+                              key={swatch.hex}
+                              type="button"
+                              onClick={() => {
+                                const updated: ThemeSettings = {
+                                  ...themeSettings,
+                                  colorPreset: 'custom',
+                                  primaryColor: swatch.hex,
+                                  primaryHover: swatch.hover,
+                                  primaryLight: swatch.light,
+                                  primaryText: swatch.text,
+                                };
+                                setThemeSettings(updated);
+                                saveThemeSettings(updated);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-slate-800 ring-2 ring-slate-400/40 bg-slate-50 text-slate-900 shadow-2xs font-bold'
+                                  : 'border-gray-200 hover:border-gray-300 text-slate-700 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-2xs"
+                                style={{ backgroundColor: swatch.hex }}
+                              />
+                              {swatch.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Custom Hex input */}
+                      <div className="flex items-center gap-3 pt-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[11px] text-slate-500 font-medium">Kustom Hex:</label>
+                          <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2 py-1 bg-white">
+                            <input
+                              type="color"
+                              value={themeSettings.primaryColor}
+                              onChange={(e) => {
+                                const hex = e.target.value;
+                                handleUpdateThemeField('primaryColor', hex);
+                              }}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0"
+                            />
+                            <input
+                              type="text"
+                              value={themeSettings.primaryColor}
+                              onChange={(e) => {
+                                const hex = e.target.value;
+                                handleUpdateThemeField('primaryColor', hex);
+                              }}
+                              className="w-20 text-xs font-mono text-slate-700 focus:outline-none"
+                              placeholder="#1d4ed8"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Font Size Scaling */}
+                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                      <label className="block font-bold text-slate-700 flex items-center gap-1.5">
+                        <Type className="w-3.5 h-3.5 text-blue-600" />
+                        2. Ukuran Font Antarmuka (*Font Scaling*)
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { id: 'compact', name: 'Kompak', size: '13px', desc: 'Data Padat' },
+                          { id: 'normal', name: 'Standar', size: '14px', desc: 'Default' },
+                          { id: 'medium', name: 'Nyaman', size: '15px', desc: 'Mudah Dibaca' },
+                          { id: 'large', name: 'Besar', size: '16px', desc: 'Ekstra Jelas' },
+                        ].map((item) => {
+                          const isSelected = themeSettings.fontSize === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleUpdateThemeField('fontSize', item.id as any)}
+                              className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/50 text-blue-900 font-bold ring-1 ring-blue-500'
+                                  : 'border-gray-200 hover:border-gray-300 text-slate-700 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="text-xs font-bold">{item.name}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">{item.size} • {item.desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 3. Table Density */}
+                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                      <label className="block font-bold text-slate-700 flex items-center gap-1.5">
+                        <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
+                        3. Kerapatan Baris Tabel (*Table Density*)
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'compact', name: 'Padat / Compact', desc: 'Padding 6px (Muat banyak baris)' },
+                          { id: 'normal', name: 'Standar / Normal', desc: 'Padding 10px (Seimbang)' },
+                          { id: 'spacious', name: 'Longgar / Relaxed', desc: 'Padding 15px (Rileks)' },
+                        ].map((item) => {
+                          const isSelected = themeSettings.tableDensity === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleUpdateThemeField('tableDensity', item.id as any)}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/50 text-blue-900 font-bold ring-1 ring-blue-500'
+                                  : 'border-gray-200 hover:border-gray-300 text-slate-700 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="text-xs font-bold">{item.name}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">{item.desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 4. Border Radius */}
+                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                      <label className="block font-bold text-slate-700">
+                        4. Kebulatan Sudut Kartu &amp; Tombol (*Border Radius*)
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'sharp', name: 'Tajam / Sharp (6px)' },
+                          { id: 'normal', name: 'Modern (12px)' },
+                          { id: 'soft', name: 'Soft Pill (18px)' },
+                        ].map((item) => {
+                          const isSelected = themeSettings.borderRadius === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleUpdateThemeField('borderRadius', item.id as any)}
+                              className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/50 text-blue-900 font-bold ring-1 ring-blue-500'
+                                  : 'border-gray-200 hover:border-gray-300 text-slate-700 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="text-xs font-bold">{item.name}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 5. Background Tone */}
+                    <div className="space-y-2 pt-3 border-t border-gray-100">
+                      <label className="block font-bold text-slate-700 flex items-center gap-1.5">
+                        <Sun className="w-3.5 h-3.5 text-blue-600" />
+                        5. Nuansa Latar Belakang (*Background Tone*)
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'slate', name: 'Cool Slate', color: '#f5f7fa', desc: 'Standar Artaroma' },
+                          { id: 'warm', name: 'Warm Paper', color: '#faf8f5', desc: 'Sangat Ramah di Mata' },
+                          { id: 'white', name: 'Pure White', color: '#ffffff', desc: 'Kontras Bersih' },
+                        ].map((item) => {
+                          const isSelected = themeSettings.backgroundTone === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleUpdateThemeField('backgroundTone', item.id as any)}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-blue-600 bg-blue-50/50 text-blue-900 font-bold ring-1 ring-blue-500'
+                                  : 'border-gray-200 hover:border-gray-300 text-slate-700 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="w-3.5 h-3.5 rounded-full border border-gray-300" style={{ backgroundColor: item.color }} />
+                                <span className="text-xs font-bold">{item.name}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">{item.desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 6. High Contrast Mode Toggle */}
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-700 flex items-center gap-1.5">
+                          <Contrast className="w-3.5 h-3.5 text-blue-600" />
+                          Mode Kontras Tinggi (*High Contrast Borders*)
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">Memperjelas garis batas tabel dan kontras teks untuk visibilitas maksimal di monitor redup</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateThemeField('highContrast', !themeSettings.highContrast)}
+                        className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                          themeSettings.highContrast ? 'bg-blue-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-5 h-5 rounded-full bg-white shadow-md absolute top-0.5 transition-transform ${
+                            themeSettings.highContrast ? 'left-6.5' : 'left-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Live Interactive Preview (5 Cols) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4 sticky top-6">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                      <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Eye className="w-4 h-4 text-emerald-600" />
+                        Pratinjau Langsung (*Live UI Preview*)
+                      </div>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                        REAL-TIME
+                      </span>
+                    </div>
+
+                    {/* Preview Box Container */}
+                    <div
+                      className="p-4 rounded-xl border border-gray-200 space-y-4 transition-all"
+                      style={{
+                        backgroundColor:
+                          themeSettings.backgroundTone === 'warm'
+                            ? '#faf8f5'
+                            : themeSettings.backgroundTone === 'white'
+                            ? '#ffffff'
+                            : '#f5f7fa',
+                      }}
+                    >
+                      {/* Sample Card */}
+                      <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-7 h-7 rounded-lg text-white flex items-center justify-center font-bold text-xs shadow-2xs"
+                              style={{ backgroundColor: themeSettings.primaryColor }}
+                            >
+                              A
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-slate-800">Artaroma Fragrance</div>
+                              <div className="text-[10px] text-slate-400">Order Penjualan #SO-2026-091</div>
+                            </div>
+                          </div>
+                          <span
+                            className="text-[10px] font-extrabold px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: themeSettings.primaryLight,
+                              color: themeSettings.primaryText,
+                            }}
+                          >
+                            DIPROSES
+                          </span>
+                        </div>
+
+                        {/* Sample Buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            className="text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1"
+                            style={{ backgroundColor: themeSettings.primaryColor }}
+                          >
+                            <Save className="w-3 h-3" /> Tombol Utama
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-gray-100 hover:bg-gray-200 text-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Sample Table with Density */}
+                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-slate-700">
+                          Contoh Tabel Data
+                        </div>
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-slate-50/70 border-b border-gray-200 text-[10px] uppercase font-bold text-slate-400">
+                              <th className="px-3 py-1.5">Produk</th>
+                              <th className="px-2 py-1.5 text-center">Batch</th>
+                              <th className="px-3 py-1.5 text-right">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            <tr>
+                              <td className="px-3 py-2 font-medium text-slate-800">Vanilla Deluxe</td>
+                              <td className="px-2 py-2 text-center text-slate-500 font-mono text-[11px]">B-8821</td>
+                              <td className="px-3 py-2 text-right font-bold text-slate-800">25.0 Kg</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 font-medium text-slate-800">Black Opium Lux</td>
+                              <td className="px-2 py-2 text-center text-slate-500 font-mono text-[11px]">B-8834</td>
+                              <td className="px-3 py-2 text-right font-bold text-slate-800">50.0 Kg</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveAppearance}
+                        disabled={themeSaving}
+                        className="w-full text-white font-bold text-xs py-2.5 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                        style={{ backgroundColor: themeSettings.primaryColor }}
+                      >
+                        {themeSaving ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Menerapkan Tema...</>
+                        ) : (
+                          <><Save className="w-4 h-4" /> Simpan Pengaturan Tampilan</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

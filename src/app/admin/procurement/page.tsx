@@ -10,6 +10,7 @@ import { PurchaseOrder, StockBatch, Product, Distributor } from '@/lib/types';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
 import { ShoppingBag, Plus, FileText, PackageCheck, CheckCircle2, Eye, EyeOff, Lock, ExternalLink, XCircle, FileSpreadsheet } from 'lucide-react';
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function ProcurementPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(initialPurchaseOrders);
@@ -256,13 +257,15 @@ export default function ProcurementPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={() => exportPurchaseOrdersToXLSX(purchaseOrders)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
-              title="Ekspor Seluruh Purchase Orders ke File Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
-            </button>
+            {canUserExportXLSX(currentUser) && (
+              <button
+                onClick={() => exportPurchaseOrdersToXLSX(purchaseOrders)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+                title="Ekspor Seluruh Purchase Orders ke File Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+              </button>
+            )}
             <button
               onClick={() => setIsPOModalOpen(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"

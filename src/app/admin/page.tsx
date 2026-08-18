@@ -35,6 +35,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
   const [invoices, setInvoices] = useState<any[]>(initialInvoices);
@@ -167,6 +168,10 @@ export default function AdminDashboardPage() {
   const expiringBatchesList = stockDashboardData !== null ? (stockDashboardData.expiring_batches || []) : nearExpiryBatches;
 
   const handleExportDashboardXLSX = () => {
+    if (!canUserExportXLSX(currentUser)) {
+      alert('Akses Ditolak: Akun Anda tidak memiliki hak akses modul "Ekspor Data (XLSX)". Silakan hubungi Super Admin.');
+      return;
+    }
     const summaryData = [
       { 'Indikator / Metrik': 'Kurs Acuan USD', 'Nilai': `Rp ${activeRate.toLocaleString('id-ID')}` },
       { 'Indikator / Metrik': 'Total Piutang Customer Aktif', 'Nilai': formatIDR(totalPiutang) },
@@ -196,14 +201,16 @@ export default function AdminDashboardPage() {
             <h1 className="text-2xl font-bold text-slate-800">Dashboard Overview</h1>
             <p className="text-xs text-slate-500 mt-0.5">Ringkasan eksekutif penjualan, piutang, dan ketersediaan stok</p>
           </div>
-          <button
-            onClick={handleExportDashboardXLSX}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
-            title="Ekspor Ringkasan Dashboard ke File Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Ekspor Ringkasan (XLSX)
-          </button>
+          {canUserExportXLSX(currentUser) && (
+            <button
+              onClick={handleExportDashboardXLSX}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+              title="Ekspor Ringkasan Dashboard ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Ekspor Ringkasan (XLSX)
+            </button>
+          )}
         </div>
 
         {/* Live Product Pricing Preview Table (Pricelist Varian) */}

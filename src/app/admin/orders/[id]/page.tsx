@@ -48,10 +48,25 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function OrderDetailPage() {
   const params = useParams();
   const orderId = (params?.id as string) || 'so-101';
+
+  // Current user for permissions
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user info in SO detail:', err));
+  }, []);
 
   // State
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
@@ -197,6 +212,10 @@ export default function OrderDetailPage() {
 
   const handleExportSODetailXLSX = () => {
     if (!order) return;
+    if (!canUserExportXLSX(currentUser)) {
+      alert('Akses Ditolak: Akun Anda tidak memiliki hak akses modul "Ekspor Data (XLSX)". Silakan hubungi Super Admin.');
+      return;
+    }
     const data = (order.items || []).map((item, index) => ({
       'No': index + 1,
       'No SO': order.so_number,
@@ -1371,13 +1390,15 @@ export default function OrderDetailPage() {
             <FileText className="w-3.5 h-3.5 text-blue-600" /> Sales Order
           </button>
 
-          <button
-            onClick={handleExportSODetailXLSX}
-            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-            title="Ekspor Rincian Item SO ke File Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian SO (XLSX)
-          </button>
+          {canUserExportXLSX(currentUser) && (
+            <button
+              onClick={handleExportSODetailXLSX}
+              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              title="Ekspor Rincian Item SO ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian SO (XLSX)
+            </button>
+          )}
 
           <button
             onClick={() => setIsInvoicePDFOpen(true)}

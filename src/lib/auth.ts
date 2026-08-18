@@ -113,3 +113,26 @@ export function getRedirectPathByRole(role: UserRole | string): string {
       return '/admin';
   }
 }
+
+/**
+ * Check if a user has permission to export data to Excel (.xlsx)
+ */
+export function canUserExportXLSX(user: any): boolean {
+  if (!user) return false;
+  if (
+    user.is_super_admin ||
+    user.role === 'SUPER ADMIN' ||
+    user.role === 'SUPER_ADMIN' ||
+    user.role === 'ADMIN'
+  ) {
+    return true;
+  }
+  if (Array.isArray(user.allowed_modules)) {
+    return (
+      user.allowed_modules.includes('Ekspor Data (XLSX)') ||
+      user.allowed_modules.includes('Ekspor XLSX') ||
+      user.allowed_modules.includes('Ekspor Excel')
+    );
+  }
+  return false;
+}

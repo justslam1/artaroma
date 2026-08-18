@@ -24,9 +24,23 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function StockOpnamePage() {
   const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user info in opname:', err));
+  }, []);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<StockBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -237,6 +251,10 @@ export default function StockOpnamePage() {
   };
 
   const handleExportOpnameXLSX = () => {
+    if (!canUserExportXLSX(currentUser)) {
+      alert('Akses Ditolak: Akun Anda tidak memiliki hak akses modul "Ekspor Data (XLSX)". Silakan hubungi Super Admin.');
+      return;
+    }
     if (subTab === 'history') {
       const data = historyLogs.map((h, idx) => ({
         'No': idx + 1,
@@ -319,13 +337,15 @@ export default function StockOpnamePage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={handleExportOpnameXLSX}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-              title="Ekspor Data Opname ke File Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
-            </button>
+            {canUserExportXLSX(currentUser) && (
+              <button
+                onClick={handleExportOpnameXLSX}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                title="Ekspor Data Opname ke File Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+              </button>
+            )}
             <button
               onClick={fetchData}
               disabled={isLoading || isSaving}
@@ -384,14 +404,16 @@ export default function StockOpnamePage() {
               <History className="w-4 h-4" /> Riwayat Audit & Penyesuaian ({historyLogs.length})
             </button>
           </div>
-          <button
-            onClick={handleExportOpnameXLSX}
-            className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-            title="Ekspor ke Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            Ekspor {subTab === 'history' ? 'Riwayat' : 'Audit'} XLSX
-          </button>
+          {canUserExportXLSX(currentUser) && (
+            <button
+              onClick={handleExportOpnameXLSX}
+              className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              title="Ekspor ke Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              Ekspor {subTab === 'history' ? 'Riwayat' : 'Audit'} XLSX
+            </button>
+          )}
         </div>
 
         {/* TAB 1: FORM AUDIT OPNAME */}

@@ -111,6 +111,24 @@ export interface Courier {
   is_active: boolean;
 }
 
+export const SYSTEM_MODULES = [
+  'Dashboard',
+  'Master Data',
+  'Purchase Order (PO)',
+  'Sales Order (SO)',
+  'Lihat Stok (Gudang)',
+  'Edit Batch & ED (Gudang)',
+  'Finance & Invoice',
+  'Log Book & Arsip',
+  'Aplikasi Kurir',
+  'Katalog Customer',
+  'Lihat Nilai Finansial (PO/SO)',
+  'Lihat Nilai Finansial (Dashboard)',
+  'Ekspor Data (XLSX)',
+] as const;
+
+export type SystemModule = (typeof SYSTEM_MODULES)[number];
+
 export interface AppUser {
   id: string;
   name: string;

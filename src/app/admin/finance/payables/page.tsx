@@ -21,8 +21,22 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportPayablesToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function FinancePayablesPage() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user in payables:', err));
+  }, []);
+
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [selectedPOForPayment, setSelectedPOForPayment] = useState<PurchaseOrder | null>(null);
 
@@ -131,13 +145,15 @@ export default function FinancePayablesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={() => exportPayablesToXLSX(purchaseOrders)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
-              title="Ekspor Seluruh Tagihan Hutang PO ke File Excel (.xlsx)"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
-            </button>
+            {canUserExportXLSX(currentUser) && (
+              <button
+                onClick={() => exportPayablesToXLSX(purchaseOrders)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+                title="Ekspor Seluruh Tagihan Hutang PO ke File Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+              </button>
+            )}
             <Link
               href="/admin/finance"
               className="bg-white border border-gray-200 hover:bg-gray-50 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
@@ -190,14 +206,16 @@ export default function FinancePayablesPage() {
               <h2 className="text-base font-bold text-slate-700">Daftar Tagihan Purchase Order (PO) Distributor</h2>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => exportPayablesToXLSX(purchaseOrders)}
-                className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
-                title="Ekspor ke Excel (.xlsx)"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                Ekspor XLSX
-              </button>
+              {canUserExportXLSX(currentUser) && (
+                <button
+                  onClick={() => exportPayablesToXLSX(purchaseOrders)}
+                  className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                  title="Ekspor ke Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  Ekspor XLSX
+                </button>
+              )}
               <span className="text-xs text-slate-400 font-medium">{purchaseOrders.length} Tagihan PO</span>
             </div>
           </div>

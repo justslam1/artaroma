@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
@@ -34,10 +34,25 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
+import { canUserExportXLSX } from '@/lib/auth';
 
 export default function PODetailPage() {
   const params = useParams();
   const poId = (params?.id as string) || 'po-001';
+
+  // Current user for permissions
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch((err) => console.warn('Failed to load user info in PO detail:', err));
+  }, []);
 
   // State
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(initialPurchaseOrders);
@@ -527,6 +542,10 @@ export default function PODetailPage() {
   }
 
   const handleExportPODetailXLSX = () => {
+    if (!canUserExportXLSX(currentUser)) {
+      alert('Akses Ditolak: Akun Anda tidak memiliki hak akses modul "Ekspor Data (XLSX)". Silakan hubungi Super Admin.');
+      return;
+    }
     const data = po.items.map((item, index) => ({
       'No': index + 1,
       'No PO': po.po_number,
@@ -786,13 +805,15 @@ export default function PODetailPage() {
             <FileText className="w-3.5 h-3.5 text-blue-600" /> Purchase order PDF
           </button>
 
-          <button
-            onClick={handleExportPODetailXLSX}
-            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-            title="Ekspor Rincian Item PO ke File Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian PO (XLSX)
-          </button>
+          {canUserExportXLSX(currentUser) && (
+            <button
+              onClick={handleExportPODetailXLSX}
+              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              title="Ekspor Rincian Item PO ke File Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor Rincian PO (XLSX)
+            </button>
+          )}
 
           <button
             onClick={handleOpenSuratJalan}
