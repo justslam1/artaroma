@@ -51,7 +51,9 @@ import {
   Info,
   Coins,
   Globe,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportUsersToXLSX } from '@/lib/export-excel';
 
 type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config';
 
@@ -1338,6 +1340,18 @@ export default function MasterDataPage() {
     setEditingItem(null);
   };
 
+  // --- EXPORT USERS TO XLSX ---
+  const handleExportUsers = () => {
+    const filteredUsers = appUsers.filter((u) =>
+      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (userModuleAccess[u.id] || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const usersToExport = searchTerm.trim() ? filteredUsers : appUsers;
+    exportUsersToXLSX(usersToExport, userModuleAccess);
+  };
+
   // --- RESET PASSWORD ACTION ---
   const handleResetPassword = (userName: string, email: string) => {
     alert(`Password untuk pengguna ${userName} (${email}) berhasil di-reset!\n\nPassword Sementara: Artaroma2026!`);
@@ -1599,14 +1613,25 @@ export default function MasterDataPage() {
               Kelola database Produk Bibit Parfum, Pendaftaran Customer B2B, Suplier, Armada Kurir, & Manajemen Pengguna (Users)
             </p>
           </div>
-          {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && (
-          <button
-            onClick={handleOpenAddModal}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
-          >
-            <Plus className="w-4 h-4" /> Tambah Data {TAB_LABELS[activeTab] ?? activeTab.toUpperCase()} Baru
-          </button>
-          )}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {activeTab === 'users' && (
+              <button
+                onClick={handleExportUsers}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+                title="Ekspor Data Pengguna ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
+              </button>
+            )}
+            {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && (
+              <button
+                onClick={handleOpenAddModal}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
+              >
+                <Plus className="w-4 h-4" /> Tambah Data {TAB_LABELS[activeTab] ?? activeTab.toUpperCase()} Baru
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Card Container */}
@@ -1650,6 +1675,15 @@ export default function MasterDataPage() {
               />
             </div>
             <div className="flex items-center gap-2">
+              {activeTab === 'users' && (
+                <button
+                  onClick={handleExportUsers}
+                  className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Ekspor Data Pengguna ke Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor XLSX
+                </button>
+              )}
               {activeTab === 'products' && (
                 <button
                   onClick={() => setIsAppModalOpen(true)}
@@ -2519,6 +2553,19 @@ export default function MasterDataPage() {
                       </tr>
                     );
                   })}
+                  {appUsers.filter((u) =>
+                    u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (userModuleAccess[u.id] || []).join(' ').toLowerCase().includes(searchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                        <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="font-semibold text-slate-600">Tidak ada data pengguna yang sesuai.</p>
+                        {searchTerm && <p className="text-xs mt-1 text-slate-400">Coba ubah kata kunci pencarian Anda.</p>}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
