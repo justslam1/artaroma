@@ -401,7 +401,10 @@ export function AdminTopNav() {
       </header>
 
       {/* Main Horizontal Navigation Menu Bar */}
-      <nav className="bg-blue-700 sticky top-14 z-30 shadow-md">
+      <nav
+        className="bg-blue-700 sticky top-14 z-30 shadow-md transition-colors duration-200"
+        style={{ backgroundColor: 'var(--artaroma-primary, #1d4ed8)' }}
+      >
         <div className="max-w-screen-2xl mx-auto px-6">
           <div className="flex items-center h-11 gap-1 overflow-visible flex-wrap sm:flex-nowrap">
             {/* Dashboard */}

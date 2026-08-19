@@ -90,8 +90,64 @@ html.artaroma-high-contrast .border-gray-100 {
   border-color: #cbd5e1 !important;
 }
 
+/* Dynamic Primary Brand Color Overrides across all pages */
+.bg-blue-700,
+nav.bg-blue-700 {
+  background-color: var(--artaroma-primary, #1d4ed8) !important;
+}
+
+.bg-blue-600,
+button.bg-blue-600,
+a.bg-blue-600 {
+  background-color: var(--artaroma-primary, #1d4ed8) !important;
+}
+
+.hover\:bg-blue-700:hover,
+button.bg-blue-600:hover,
+a.bg-blue-600:hover,
+.hover\:bg-blue-800:hover {
+  background-color: var(--artaroma-primary-hover, #1e40af) !important;
+}
+
+.text-blue-600,
+.text-blue-700 {
+  color: var(--artaroma-primary, #1d4ed8) !important;
+}
+
+.text-blue-800 {
+  color: var(--artaroma-primary-text, #1e40af) !important;
+}
+
+.border-blue-600,
+.border-blue-500 {
+  border-color: var(--artaroma-primary, #1d4ed8) !important;
+}
+
+.border-blue-200,
+.border-blue-300 {
+  border-color: color-mix(in srgb, var(--artaroma-primary, #1d4ed8) 35%, transparent) !important;
+}
+
+.bg-blue-50 {
+  background-color: var(--artaroma-primary-light, #eff6ff) !important;
+}
+
+.bg-blue-100 {
+  background-color: color-mix(in srgb, var(--artaroma-primary, #1d4ed8) 18%, white) !important;
+}
+
+.focus\:border-blue-500:focus,
+.focus\:border-blue-400:focus {
+  border-color: var(--artaroma-primary, #1d4ed8) !important;
+}
+
+.focus\:ring-blue-200:focus {
+  --tw-ring-color: color-mix(in srgb, var(--artaroma-primary, #1d4ed8) 25%, transparent) !important;
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+

@@ -111,34 +111,40 @@ export function applyThemeToDOM(theme: ThemeSettings) {
 
   // 1. Primary Colors
   root.style.setProperty('--artaroma-primary', theme.primaryColor);
-  root.style.setProperty('--artaroma-primary-hover', theme.primaryHover);
-  root.style.setProperty('--artaroma-primary-light', theme.primaryLight);
-  root.style.setProperty('--artaroma-primary-text', theme.primaryText);
+  root.style.setProperty('--artaroma-primary-hover', theme.primaryHover || theme.primaryColor);
+  root.style.setProperty('--artaroma-primary-light', theme.primaryLight || `${theme.primaryColor}15`);
+  root.style.setProperty('--artaroma-primary-text', theme.primaryText || theme.primaryColor);
+
+  root.style.setProperty('--primary', theme.primaryColor);
+  root.style.setProperty('--primary-hover', theme.primaryHover || theme.primaryColor);
+  root.style.setProperty('--primary-light', theme.primaryLight || `${theme.primaryColor}15`);
+
+  root.setAttribute('data-theme', theme.colorPreset || 'custom');
 
   // 2. Font Size Scaling
   const fontSizes = {
     compact: '13px',
     normal: '14px',
     medium: '15px',
-    large: '16px',
+    large: '16.5px',
   };
   root.style.setProperty('--artaroma-font-size-base', fontSizes[theme.fontSize] || '14px');
   root.setAttribute('data-font-size', theme.fontSize);
 
   // 3. Table Density
   const tablePaddings = {
-    compact: '6px 12px',
+    compact: '5px 10px',
     normal: '10px 16px',
-    spacious: '14px 20px',
+    spacious: '16px 20px',
   };
   root.style.setProperty('--artaroma-table-padding', tablePaddings[theme.tableDensity] || '10px 16px');
   root.setAttribute('data-density', theme.tableDensity);
 
   // 4. Border Radius
   const radii = {
-    sharp: '6px',
+    sharp: '4px',
     normal: '12px',
-    soft: '18px',
+    soft: '16px',
   };
   root.style.setProperty('--artaroma-radius', radii[theme.borderRadius] || '12px');
   root.setAttribute('data-radius', theme.borderRadius);
