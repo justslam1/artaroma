@@ -768,7 +768,9 @@ export default function OrderDetailPage() {
     }
   }, [order?.shipping_type, order?.shipping_cost]);
 
-  // Action 1: Admin Confirm Prices & Issue Invoice -> DIKONFIRMASI (With Multi-Trip Support)
+  const [fulfillmentMode, setFulfillmentMode] = useState<'ADJUST_SO' | 'MULTI_TRIP'>('ADJUST_SO');
+
+  // Action 1: Admin Confirm Prices & Issue Invoice -> DIKONFIRMASI (With Multi-Trip or SO Adjustment Support)
   const handleConfirmPrices = () => {
     // 1. Validation: For items with confirmedQty > 0, check stock
     let totalConfirmedKg = 0;
@@ -803,7 +805,7 @@ export default function OrderDetailPage() {
             `Sisa stok tidak mencukupi untuk '${item.product_name}'!\n` +
             `• Kuantitas Dikonfirmasi: ${confirmedQty} Kg\n` +
             `• Sisa Stok Tersedia: ${stockKg} Kg\n\n` +
-            `Kurangi jumlah konfirmasi sesuai stok tersedia, atau ubah menjadi 0 kg agar produk dialokasikan ke Multi-Trip selanjutnya.`
+            `Kurangi jumlah konfirmasi sesuai stok tersedia, atau ubah menjadi 0 kg.`
           );
           return;
         }
@@ -816,7 +818,7 @@ export default function OrderDetailPage() {
         });
       }
 
-      // Remaining unfulfilled quantity goes to Trip 2
+      // Remaining unfulfilled quantity goes to Trip 2 (if Multi-Trip mode selected)
       const remainingQty = initialOrderedQty - confirmedQty;
       if (remainingQty > 0) {
         trip2Items.push({
@@ -829,7 +831,7 @@ export default function OrderDetailPage() {
     }
 
     if (totalConfirmedKg === 0) {
-      alert('Kuantitas yang dikonfirmasi pada Trip 1 tidak boleh 0 kg untuk semua item! Minimal 1 item harus dikirim pada Trip 1. Jika tidak ada stok sama sekali, silakan batalkan pesanan.');
+      alert('Kuantitas yang dikonfirmasi tidak boleh 0 kg untuk semua item! Minimal 1 item harus dikirim. Jika tidak ada stok sama sekali, silakan batalkan pesanan.');
       return;
     }
 
@@ -873,9 +875,13 @@ export default function OrderDetailPage() {
       faktur_pajak_file_url: '/dummy-faktur-pajak.pdf',
     };
 
-    // Construct Multi-Trip Shipments if partial fulfillment
+    // Construct Multi-Trip Shipments if multi-trip mode is selected and there are remaining items
     let shipments: any[] | undefined = undefined;
-    if (trip2Items.length > 0) {
+    let finalItemsToSave = updatedItems;
+
+    const hasMultiTripSplit = trip2Items.length > 0;
+
+    if (hasMultiTripSplit && fulfillmentMode === 'MULTI_TRIP') {
       shipments = [
         {
           id: `trip-1-${Date.now()}`,
@@ -896,6 +902,10 @@ export default function OrderDetailPage() {
           notes: 'Pengiriman Multi-Trip Selanjutnya (Menunggu ketersediaan stok)',
         },
       ];
+    } else if (hasMultiTripSplit && fulfillmentMode === 'ADJUST_SO') {
+      // Menyesuaikan Pesanan SO: Filter SO items to only those with confirmedQty > 0
+      finalItemsToSave = updatedItems.filter((it) => it.qty_kg > 0);
+      shipments = undefined;
     }
 
     updateSalesOrderStatus(
@@ -906,7 +916,7 @@ export default function OrderDetailPage() {
         grand_total: grandTotal,
         shipping_type: finalShippingType,
         shipping_cost: finalShippingCost,
-        items: updatedItems,
+        items: finalItemsToSave,
         invoice_id: newInvoice.id,
         surat_jalan_number: shipments ? shipments[0].surat_jalan_number : (order.surat_jalan_number || `SJ-ART-2026-${order.so_number.split('-').pop()}`),
         shipments: shipments,
@@ -914,8 +924,12 @@ export default function OrderDetailPage() {
       newInvoice
     );
 
-    if (shipments && shipments.length > 1) {
-      alert(`Pesanan '${order.so_number}' berhasil dikonfirmasi dengan Multi-Trip!\n• Trip 1: Siap diproses gudang (${trip1Items.reduce((s, it) => s + it.qty_shipped_kg, 0)} kg)\n• Trip 2: Otomatis dialokasikan untuk sisa pesanan / item 0 kg (${trip2Items.reduce((s, it) => s + it.qty_shipped_kg, 0)} kg)`);
+    if (hasMultiTripSplit && fulfillmentMode === 'MULTI_TRIP' && shipments && shipments.length > 1) {
+      alert(`Pesanan '${order.so_number}' berhasil dikonfirmasi dengan Pengiriman Multi-Trip!\n• Trip 1: Siap diproses gudang (${trip1Items.reduce((s, it) => s + it.qty_shipped_kg, 0)} kg)\n• Trip 2: Otomatis dialokasikan untuk sisa pesanan (${trip2Items.reduce((s, it) => s + it.qty_shipped_kg, 0)} kg)`);
+    } else if (hasMultiTripSplit && fulfillmentMode === 'ADJUST_SO') {
+      alert(`Pesanan '${order.so_number}' berhasil disesuaikan secara final menjadi ${totalConfirmedKg} kg dan Invoice resmi telah diterbitkan!`);
+    } else {
+      alert(`Pesanan '${order.so_number}' berhasil dikonfirmasi dan Invoice resmi telah diterbitkan!`);
     }
   };
 
@@ -1799,19 +1813,80 @@ export default function OrderDetailPage() {
                   </div>
                 )}
 
-                {/* Multi-Trip Alert Notice */}
+                {/* Pilihan: Penyesuaian Pesanan SO vs Pengiriman Multi-Trip */}
                 {hasMultiTripSplit && !isBlocked && (
-                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5 font-medium shadow-xs">
-                    <Truck className="w-5 h-5 text-amber-650 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-extrabold text-amber-800 block text-sm">
-                        Sistem Mendeteksi Pengiriman Multi-Trip:
+                  <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-5 h-5 text-amber-700 shrink-0" />
+                        <div>
+                          <span className="font-extrabold text-amber-900 text-sm block">
+                            Stok Tidak Lengkap: Pilih Opsi Pemenuhan Pesanan
+                          </span>
+                          <span className="text-[11px] text-amber-800">
+                            Terdapat kuantitas atau item yang tidak dapat dipenuhi penuh saat ini.
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-extrabold bg-amber-200 text-amber-950 px-2.5 py-1 rounded-full w-max">
+                        Siap Kirim: {totalConfirmedKg} Kg | Sisa: {totalRemainingKg} Kg
                       </span>
-                      Pesanan tidak dapat dikirim secara penuh saat ini. Sistem akan otomatis membagi pengiriman menjadi <strong>2 Trip</strong>:
-                      <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
-                        <li><strong>Trip 1 (Siap Kirim Sekarang):</strong> Total {totalConfirmedKg} Kg</li>
-                        <li><strong>Trip 2 (Multi-Trip Selanjutnya / Sisa &amp; Item 0 Kg):</strong> Total {totalRemainingKg} Kg (Menunggu Stok)</li>
-                      </ul>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* Opsi 1: Menyesuaikan Pesanan SO (Penyesuaian Final) */}
+                      <div
+                        onClick={() => setFulfillmentMode('ADJUST_SO')}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                          fulfillmentMode === 'ADJUST_SO'
+                            ? 'border-blue-600 bg-white shadow-sm ring-2 ring-blue-100'
+                            : 'border-amber-200/80 bg-white/70 hover:bg-white hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              fulfillmentMode === 'ADJUST_SO' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
+                            }`}>
+                              {fulfillmentMode === 'ADJUST_SO' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </span>
+                            1. Menyesuaikan Pesanan SO (Final)
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            Tanpa Trip 2
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Pesanan disesuaikan secara final menjadi <strong>{totalConfirmedKg} Kg</strong>. Item/kuantitas yang kosong dihapus dari pesanan dan <strong>tidak ada pengiriman susulan (Trip 2)</strong>.
+                        </p>
+                      </div>
+
+                      {/* Opsi 2: Pengiriman Multi-Trip (Kirim Bertahap) */}
+                      <div
+                        onClick={() => setFulfillmentMode('MULTI_TRIP')}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                          fulfillmentMode === 'MULTI_TRIP'
+                            ? 'border-blue-600 bg-white shadow-sm ring-2 ring-blue-100'
+                            : 'border-amber-200/80 bg-white/70 hover:bg-white hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              fulfillmentMode === 'MULTI_TRIP' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
+                            }`}>
+                              {fulfillmentMode === 'MULTI_TRIP' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </span>
+                            2. Pengiriman Multi-Trip (Bertahap)
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                            Trip 1 + Trip 2
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Bagi pesanan menjadi 2 tahap: <strong>Trip 1 ({totalConfirmedKg} Kg)</strong> siap dikirim sekarang, dan sisa <strong>Trip 2 ({totalRemainingKg} Kg)</strong> menunggu ketersediaan stok gudang.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1968,7 +2043,9 @@ export default function OrderDetailPage() {
                           ? 'Stok Tidak Mencukupi (Konfirmasi Dikunci)'
                           : 'Kuantitas 0 Kg Semua (Minimal 1 Item)')
                       : (hasMultiTripSplit
-                          ? `Konfirmasi Stok & Terbitkan Invoice Multi-Trip (Trip 1: ${totalConfirmedKg} Kg)`
+                          ? (fulfillmentMode === 'ADJUST_SO'
+                              ? `Sesuaikan Pesanan SO & Terbitkan Invoice (${totalConfirmedKg} Kg)`
+                              : `Konfirmasi Multi-Trip & Terbitkan Invoice (Trip 1: ${totalConfirmedKg} Kg)`)
                           : 'Konfirmasi Stok & Terbitkan Invoice Resmi')}
                   </button>
                   <button
