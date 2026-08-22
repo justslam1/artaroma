@@ -151,17 +151,36 @@ export default function FinanceInvoicesPage() {
     saveStoredInvoices(updated);
   };
 
-  const handleVerifyPayment = (invoiceId: string, status: 'VERIFIED' | 'REJECTED') => {
-    const updated = invoices.map((inv) =>
-      inv.id === invoiceId
-        ? {
-            ...inv,
-            status: status === 'VERIFIED' ? ('PAID' as const) : ('UNPAID' as const),
-            paid_amount: status === 'VERIFIED' ? inv.total_amount : 0,
-            payment_verification_status: status,
-          }
-        : inv
-    );
+  const handleVerifyPayment = (
+    invoiceId: string,
+    status: 'VERIFIED' | 'REJECTED',
+    newPaymentAmount?: number,
+    paymentNotes?: string
+  ) => {
+    const updated = invoices.map((inv) => {
+      if (inv.id !== invoiceId) return inv;
+
+      if (status === 'REJECTED') {
+        return {
+          ...inv,
+          payment_verification_status: 'REJECTED' as const,
+        };
+      }
+
+      const prevPaid = Number(inv.paid_amount || 0);
+      const incomingPayment = newPaymentAmount !== undefined ? Number(newPaymentAmount) : Number(inv.total_amount) - prevPaid;
+      const totalAccumulatedPaid = Math.min(Number(inv.total_amount), prevPaid + incomingPayment);
+      const isFullyPaid = totalAccumulatedPaid >= Number(inv.total_amount);
+
+      return {
+        ...inv,
+        paid_amount: totalAccumulatedPaid,
+        status: (isFullyPaid ? 'PAID' : 'PARTIALLY_PAID') as any,
+        payment_verification_status: 'VERIFIED' as const,
+        payment_notes: paymentNotes || inv.payment_notes,
+        last_payment_date: new Date().toISOString().split('T')[0],
+      };
+    });
     setInvoices(updated);
     saveStoredInvoices(updated);
   };
@@ -377,7 +396,14 @@ export default function FinanceInvoicesPage() {
 
                       <td className="px-6 py-3.5 font-semibold text-slate-800">{inv.customer_name}</td>
 
-                      <td className="px-6 py-3.5 font-mono font-bold text-slate-900">{formatIDR(Number(inv.total_amount) || 0)}</td>
+                      <td className="px-6 py-3.5">
+                        <div className="font-mono font-bold text-slate-900">{formatIDR(Number(inv.total_amount) || 0)}</div>
+                        {Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.total_amount) && (
+                          <div className="text-[11px] font-mono text-amber-700 font-bold">
+                            Sisa: {formatIDR(Number(inv.total_amount) - Number(inv.paid_amount))}
+                          </div>
+                        )}
+                      </td>
 
                       <td className="px-6 py-3.5 text-xs text-slate-600 font-mono">{inv.due_date}</td>
 
@@ -389,11 +415,13 @@ export default function FinanceInvoicesPage() {
                         <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
                           inv.status === 'PAID'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : (inv.status as string) === 'PARTIALLY_PAID'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
                             : inv.status === 'OVERDUE'
                             ? 'bg-red-50 text-red-700 border-red-200'
                             : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {inv.status}
+                          {(inv.status as string) === 'PARTIALLY_PAID' ? 'SEBAGIAN' : inv.status}
                         </span>
                       </td>
 
@@ -416,7 +444,7 @@ export default function FinanceInvoicesPage() {
                       {inv.payment_verification_status === 'PENDING' ? (
                         <button
                           onClick={() => setSelectedInvoiceForVerify(inv)}
-                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-all animate-pulse"
+                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-all animate-pulse cursor-pointer"
                         >
                           <Clock className="w-3.5 h-3.5" /> Verifikasi Transfer
                         </button>
@@ -424,10 +452,17 @@ export default function FinanceInvoicesPage() {
                         <span className="text-xs text-emerald-600 font-semibold flex items-center justify-end gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Terverifikasi Lunas
                         </span>
+                      ) : (inv.status as string) === 'PARTIALLY_PAID' ? (
+                        <button
+                          onClick={() => setSelectedInvoiceForVerify(inv)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" /> Input Pelunasan Sisa
+                        </button>
                       ) : (
                         <button
                           onClick={() => setSelectedInvoiceForVerify(inv)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-all"
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-all cursor-pointer"
                         >
                           <CreditCard className="w-3.5 h-3.5" /> Cek Pembayaran
                         </button>

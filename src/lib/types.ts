@@ -327,6 +327,8 @@ export interface Invoice {
   faktur_pajak_file_url?: string;
   payment_proof_url?: string;
   payment_verification_status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  payment_notes?: string;
+  last_payment_date?: string;
 }
 
 export interface DeliveryCheckitem {
