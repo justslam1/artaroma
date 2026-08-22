@@ -372,6 +372,13 @@ export function CreatePOModal({
   const totalKgOrdered = items.reduce((s, i) => s + i.jumlah * i.packSizeKg, 0);
   const activeCurrencyConfig = CURRENCY_OPTIONS.find(c => c.code === currency) || CURRENCY_OPTIONS[0];
 
+  const ppnRate = 0.11;
+  const ppnAmountIdr = Math.round(totalAmount * ppnRate);
+  const grandTotalIdr = totalAmount + ppnAmountIdr;
+
+  const ppnAmountForeign = totalForeignAmount * ppnRate;
+  const grandTotalForeign = totalForeignAmount + ppnAmountForeign;
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className={`bg-slate-900 border border-slate-800 rounded-2xl ${step === 'CONFIRM' ? 'max-w-3xl' : 'max-w-2xl'} w-full text-slate-100 shadow-2xl overflow-hidden my-8 animate-in fade-in transition-all`}>
@@ -809,28 +816,45 @@ export function CreatePOModal({
             </div>
 
             {/* Grand Total Footer */}
-            <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-400 font-semibold">Total Nilai Purchase Order:</span>
-                <div className="text-[10px] text-slate-500 mt-0.5">
-                  Total Kg: {totalKgOrdered.toLocaleString('id-ID')} Kg
-                </div>
+            <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Subtotal ({items.length} varian, {totalKgOrdered.toLocaleString('id-ID')} Kg):</span>
+                <span className="font-mono font-bold text-slate-200">
+                  {currency !== 'IDR' ? (
+                    <span>{activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({formatIDR(totalAmount)})</span>
+                  ) : (
+                    formatIDR(totalAmount)
+                  )}
+                </span>
               </div>
-              <div className="text-right">
-                {currency !== 'IDR' ? (
-                  <>
-                    <div className="text-lg font-extrabold font-mono text-amber-300">
-                      {activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
-                    </div>
-                    <div className="text-xs font-bold font-mono text-emerald-400">
-                      ≈ {formatIDR(totalAmount)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-lg font-extrabold font-mono text-emerald-400">
-                    {formatIDR(totalAmount)}
-                  </span>
-                )}
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="flex items-center gap-1">PPN (11%): <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold">Pajak</span></span>
+                <span className="font-mono font-bold text-blue-300">
+                  {currency !== 'IDR' ? (
+                    <span>{activeCurrencyConfig.symbol} {ppnAmountForeign.toLocaleString('en-US', { minimumFractionDigits: 2 })} ({formatIDR(ppnAmountIdr)})</span>
+                  ) : (
+                    formatIDR(ppnAmountIdr)
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Total PO (Inc. PPN):</span>
+                <div className="text-right">
+                  {currency !== 'IDR' ? (
+                    <>
+                      <div className="text-lg font-extrabold font-mono text-amber-300">
+                        {activeCurrencyConfig.symbol} {grandTotalForeign.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                      </div>
+                      <div className="text-xs font-bold font-mono text-emerald-400">
+                        ≈ {formatIDR(grandTotalIdr)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-lg font-extrabold font-mono text-emerald-400">
+                      {formatIDR(grandTotalIdr)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -949,29 +973,67 @@ export function CreatePOModal({
               </div>
             </div>
 
-            {/* Grand Total Summary Box */}
-            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-400 font-semibold">Total Nilai Purchase Order:</span>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  <strong className="text-white">{items.length} Varian</strong> | Total Berat: <strong className="text-white">{totalKgOrdered.toLocaleString('id-ID')} Kg</strong>
+            {/* Subtotal, PPN & Grand Total Summary Box */}
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+              {/* Row 1: Subtotal Barang */}
+              <div className="flex items-center justify-between text-xs text-slate-300 pb-2 border-b border-slate-800/80">
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-slate-400">Subtotal Nilai Barang:</span>
+                  <div className="text-[10px] text-slate-500">
+                    <strong className="text-slate-300">{items.length} Varian</strong> | Total Berat: <strong className="text-slate-300">{totalKgOrdered.toLocaleString('id-ID')} Kg</strong>
+                  </div>
+                </div>
+                <div className="text-right font-mono font-bold">
+                  {currency !== 'IDR' ? (
+                    <div>
+                      <span className="text-amber-300">{activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span className="text-[10px] text-slate-400 font-normal ml-1.5">({formatIDR(totalAmount)})</span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-200">{formatIDR(totalAmount)}</span>
+                  )}
                 </div>
               </div>
-              <div className="text-right">
-                {currency !== 'IDR' ? (
-                  <>
-                    <div className="text-xl font-extrabold font-mono text-amber-300">
-                      {activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+
+              {/* Row 2: PPN (11%) */}
+              <div className="flex items-center justify-between text-xs text-slate-300 pb-2 border-b border-slate-800/80">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-400">PPN (11%):</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">Pajak Pertambahan Nilai</span>
+                </div>
+                <div className="text-right font-mono font-bold">
+                  {currency !== 'IDR' ? (
+                    <div>
+                      <span className="text-amber-300">{activeCurrencyConfig.symbol} {ppnAmountForeign.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span className="text-[10px] text-slate-400 font-normal ml-1.5">({formatIDR(ppnAmountIdr)})</span>
                     </div>
-                    <div className="text-xs font-bold font-mono text-emerald-400">
-                      ≈ {formatIDR(totalAmount)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-xl font-extrabold font-mono text-emerald-400">
-                    {formatIDR(totalAmount)}
-                  </span>
-                )}
+                  ) : (
+                    <span className="text-blue-300">{formatIDR(ppnAmountIdr)}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Grand Total */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <span className="text-xs text-emerald-400 font-extrabold uppercase tracking-wider">Total Tagihan PO (Inc. PPN 11%):</span>
+                </div>
+                <div className="text-right">
+                  {currency !== 'IDR' ? (
+                    <>
+                      <div className="text-xl font-extrabold font-mono text-amber-300">
+                        {activeCurrencyConfig.symbol} {grandTotalForeign.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                      </div>
+                      <div className="text-xs font-bold font-mono text-emerald-400">
+                        ≈ {formatIDR(grandTotalIdr)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-2xl font-extrabold font-mono text-emerald-400">
+                      {formatIDR(grandTotalIdr)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
