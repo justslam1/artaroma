@@ -74,6 +74,14 @@ export interface Customer {
   pic_name_3?: string;
   phone_3?: string;
   address: string;
+  office_address?: string;
+  shipping_lat?: string;
+  shipping_lng?: string;
+  default_courier_id?: string;
+  default_courier_name?: string;
+  default_shipping_cost?: number;
+  default_shipping_type?: 'FRANCO' | 'LOCO';
+  delivery_notes?: string;
   npwp?: string;
   ktp_file?: string;        // filename/URL of uploaded KTP scan
   npwp_file?: string;       // filename/URL of uploaded NPWP scan

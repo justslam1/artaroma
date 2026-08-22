@@ -461,12 +461,17 @@ export default function MasterDataPage() {
     is_credit_eligible: true,
     credit_limit: 40000000,
     credit_terms_days: 30,
+    default_courier_id: '',
+    default_courier_name: '',
+    default_shipping_cost: 0,
+    default_shipping_type: 'FRANCO' as 'FRANCO' | 'LOCO',
+    delivery_notes: '',
     allowed_product_ids: [] as string[],
     special_prices: {} as Record<string, number>, // variantKey -> price_per_kg
   });
 
-  // Inner-tab state for Customer form modal: 'info' | 'bank' | 'price'
-  const [customerFormTab, setCustomerFormTab] = useState<'info' | 'bank' | 'price'>('info');
+  // Inner-tab state for Customer form modal: 'info' | 'bank' | 'shipping' | 'price'
+  const [customerFormTab, setCustomerFormTab] = useState<'info' | 'bank' | 'shipping' | 'price'>('info');
   // Per-variant price input mode: 'pct' (percent discount) | 'fix' (fixed price)
   const [specialPriceMode, setSpecialPriceMode] = useState<Record<string, 'pct' | 'fix'>>({});
   // Per-variant discount percent input (temporary, for pct mode)
@@ -779,6 +784,11 @@ export default function MasterDataPage() {
         is_credit_eligible: true,
         credit_limit: 40000000,
         credit_terms_days: 30,
+        default_courier_id: '',
+        default_courier_name: '',
+        default_shipping_cost: 0,
+        default_shipping_type: 'FRANCO',
+        delivery_notes: '',
         allowed_product_ids: [],
         special_prices: {},
       });
@@ -860,6 +870,11 @@ export default function MasterDataPage() {
         office_address: (c as any).office_address || '',
         shipping_lat: (c as any).shipping_lat || '',
         shipping_lng: (c as any).shipping_lng || '',
+        default_courier_id: (c as any).default_courier_id || '',
+        default_courier_name: (c as any).default_courier_name || '',
+        default_shipping_cost: Number((c as any).default_shipping_cost) || 0,
+        default_shipping_type: (c as any).default_shipping_type || 'FRANCO',
+        delivery_notes: (c as any).delivery_notes || '',
         npwp: c.npwp || '',
         ktp_file: c.ktp_file || '',
         npwp_file: c.npwp_file || '',
@@ -1107,6 +1122,11 @@ export default function MasterDataPage() {
         office_address: (customerForm as any).office_address || '',
         shipping_lat: (customerForm as any).shipping_lat || '',
         shipping_lng: (customerForm as any).shipping_lng || '',
+        default_courier_id: customerForm.default_courier_id || '',
+        default_courier_name: customerForm.default_courier_name || '',
+        default_shipping_cost: Number(customerForm.default_shipping_cost) || 0,
+        default_shipping_type: customerForm.default_shipping_type || 'FRANCO',
+        delivery_notes: customerForm.delivery_notes || '',
         npwp: customerForm.npwp,
         is_credit_eligible: customerForm.is_credit_eligible,
         credit_limit: customerForm.is_credit_eligible ? Number(customerForm.credit_limit) : 0,
@@ -1319,6 +1339,11 @@ export default function MasterDataPage() {
         office_address: (customerForm as any).office_address || '',
         shipping_lat: (customerForm as any).shipping_lat || '',
         shipping_lng: (customerForm as any).shipping_lng || '',
+        default_courier_id: customerForm.default_courier_id || '',
+        default_courier_name: customerForm.default_courier_name || '',
+        default_shipping_cost: Number(customerForm.default_shipping_cost) || 0,
+        default_shipping_type: customerForm.default_shipping_type || 'FRANCO',
+        delivery_notes: customerForm.delivery_notes || '',
         credit_limit: customerForm.is_credit_eligible ? Number(customerForm.credit_limit) : 0,
         credit_terms_days: customerForm.is_credit_eligible ? Number(customerForm.credit_terms_days) : 0,
         special_prices: customerForm.special_prices,
@@ -2374,6 +2399,7 @@ export default function MasterDataPage() {
                     <th className="px-6 py-3">PIC & Akun Login B2B (Username)</th>
                     <th className="px-6 py-3">Plafon Kredit B2B</th>
                     <th className="px-6 py-3">Status Tempo</th>
+                    <th className="px-6 py-3">Kurir & Ongkir Default</th>
                     <th className="px-6 py-3">Tampilan Katalog Produk</th>
                     <th className="px-6 py-3 text-right">Aksi Super Admin</th>
                   </tr>
@@ -2392,6 +2418,9 @@ export default function MasterDataPage() {
                       const allowedCount = Array.isArray(c.allowed_product_ids) ? c.allowed_product_ids.length : 0;
 
                       const isCreditActive = (c.is_credit_eligible ?? true) && c.credit_limit > 0;
+                      const courierName = (c as any).default_courier_name || ((c as any).default_courier_id ? couriers.find(k => k.id === (c as any).default_courier_id)?.name : null);
+                      const shippingType = (c as any).default_shipping_type || 'FRANCO';
+                      const shippingCost = Number((c as any).default_shipping_cost) || 0;
 
                       return (
                         <tr key={c.id} className="hover:bg-gray-50 transition-colors">
@@ -2440,6 +2469,28 @@ export default function MasterDataPage() {
                               <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
                                 <CheckCircle2 className="w-3 h-3" /> AKTIF
                               </span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5 text-xs">
+                            {courierName ? (
+                              <div className="space-y-0.5">
+                                <div className="font-semibold text-slate-800 flex items-center gap-1">
+                                  <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                  <span className="truncate max-w-[140px]">{courierName}</span>
+                                </div>
+                                <div className="font-mono text-[11px]">
+                                  {shippingType === 'FRANCO' ? (
+                                    <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">FRANCO (Gratis)</span>
+                                  ) : (
+                                    <span className="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                      LOCO: {formatIDR(shippingCost)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">— Default (Manual) —</span>
                             )}
                           </td>
 
@@ -3975,6 +4026,17 @@ export default function MasterDataPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setCustomerFormTab('shipping')}
+                      className={`flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-all border-l border-gray-200 ${
+                        customerFormTab === 'shipping'
+                          ? 'bg-blue-700 text-white shadow-inner'
+                          : 'bg-gray-50 text-slate-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Truck className="w-3.5 h-3.5" /> Pengiriman & Kurir
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setCustomerFormTab('price')}
                       className={`flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-all border-l border-gray-200 ${
                         customerFormTab === 'price'
@@ -4423,17 +4485,173 @@ export default function MasterDataPage() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setCustomerFormTab('info')}
-                        className="w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        ← Kembali ke Informasi Umum
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('info')}
+                          className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          ← Kembali ke Informasi Umum
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('shipping')}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          Lanjut ke Pengiriman & Kurir →
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {/* ── TAB 3: Harga Khusus ── */}
+                  {/* ── TAB 3: Pengiriman & Kurir ── */}
+                  {customerFormTab === 'shipping' && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-start gap-2.5">
+                        <Truck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-blue-900">Pengaturan Ekspedisi & Ongkir Default</h4>
+                          <div className="text-[11px] text-blue-700 mt-0.5">
+                            Pilih kurir/ekspedisi langganan dan tentukan tarif ongkos kirim default yang otomatis terpasang saat membuat Sales Order (SO) untuk customer ini.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+                        {/* Pilihan Kurir Default */}
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1 text-xs flex items-center justify-between">
+                            <span>Kurir / Ekspedisi Default</span>
+                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Kurir</span>
+                          </label>
+                          <select
+                            value={customerForm.default_courier_id}
+                            onChange={(e) => {
+                              const selId = e.target.value;
+                              const found = couriers.find((k) => k.id === selId);
+                              setCustomerForm({
+                                ...customerForm,
+                                default_courier_id: selId,
+                                default_courier_name: found ? `${found.name} (${found.vehicle_number})` : (selId === 'INTERNAL' ? 'Armada Internal Artaroma' : (selId === 'EKSPEDISI' ? 'Ekspedisi Luar (JNE/Cargo/dll)' : ''))
+                              });
+                            }}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">— Belum Ditentukan (Pilih saat buat SO) —</option>
+                            <option value="INTERNAL">🚛 Armada Internal Artaroma (Pusat)</option>
+                            <option value="EKSPEDISI">📦 Ekspedisi Cargo Luar (JNE Trucking / Indah / Dakota / dll)</option>
+                            {couriers.map((k) => (
+                              <option key={k.id} value={k.id}>
+                                🚚 {k.name} — {k.vehicle_number} ({k.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Tipe Ongkir & Nominal */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1 text-xs">Skema Ongkir Default</label>
+                            <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-lg border border-gray-200">
+                              <button
+                                type="button"
+                                onClick={() => setCustomerForm({ ...customerForm, default_shipping_type: 'FRANCO', default_shipping_cost: 0 })}
+                                className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all ${
+                                  customerForm.default_shipping_type === 'FRANCO'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                FRANCO (Gratis)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomerForm({ ...customerForm, default_shipping_type: 'LOCO' })}
+                                className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all ${
+                                  customerForm.default_shipping_type === 'LOCO'
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                LOCO (Dikenakan)
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block mt-1">
+                              {customerForm.default_shipping_type === 'FRANCO'
+                                ? 'FRANCO: Ongkir ditanggung penjual (Artaroma).'
+                                : 'LOCO: Ongkir ditagihkan ke customer pada Invoice.'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1 text-xs">Nominal Default Ongkir (Rp)</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">Rp</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="5000"
+                                disabled={customerForm.default_shipping_type === 'FRANCO'}
+                                value={customerForm.default_shipping_cost}
+                                onChange={(e) => setCustomerForm({ ...customerForm, default_shipping_cost: Number(e.target.value) })}
+                                className={`w-full border rounded-lg pl-9 pr-3 py-2 text-slate-800 font-mono font-bold text-xs ${
+                                  customerForm.default_shipping_type === 'FRANCO'
+                                    ? 'bg-gray-100 border-gray-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-white border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'
+                                }`}
+                                placeholder="0"
+                              />
+                            </div>
+                            {customerForm.default_shipping_type === 'LOCO' && (
+                              <div className="flex gap-1 mt-1.5 flex-wrap">
+                                {[50000, 100000, 150000, 250000].map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => setCustomerForm({ ...customerForm, default_shipping_cost: preset })}
+                                    className="px-2 py-0.5 text-[10px] font-mono font-semibold bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded border border-gray-200 transition-colors"
+                                  >
+                                    {preset.toLocaleString('id-ID')}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Catatan / Titik Bongkar Muat */}
+                        <div className="pt-2 border-t border-gray-100">
+                          <label className="font-bold text-slate-700 block mb-1 text-xs">Instruksi Pengiriman Khusus / Titik Bongkar</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Contoh: Masuk lewat gerbang barat gudang. Harap konfirmasi ke PIC 1 jam sebelum tiba."
+                            value={customerForm.delivery_notes || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, delivery_notes: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('bank')}
+                          className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          ← Kembali ke Data Bank
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('price')}
+                          className="flex-1 bg-orange-600 hover:bg-orange-700 text-white rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          Lanjut ke Harga Khusus →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TAB 4: Harga Khusus ── */}
                   {customerFormTab === 'price' && (
                     <div className="space-y-4">
                       <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-start gap-2">
@@ -5321,6 +5539,17 @@ export default function MasterDataPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setCustomerFormTab('shipping')}
+                      className={`flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-all border-l border-gray-200 ${
+                        customerFormTab === 'shipping'
+                          ? 'bg-blue-700 text-white shadow-inner'
+                          : 'bg-gray-50 text-slate-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Truck className="w-3.5 h-3.5" /> Pengiriman & Kurir
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setCustomerFormTab('price')}
                       className={`flex-1 py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-all border-l border-gray-200 ${
                         customerFormTab === 'price'
@@ -5741,17 +5970,173 @@ export default function MasterDataPage() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setCustomerFormTab('info')}
-                        className="w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        ← Kembali ke Informasi Umum
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('info')}
+                          className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          ← Kembali ke Informasi Umum
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('shipping')}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          Lanjut ke Pengiriman & Kurir →
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {/* ── TAB 3: Harga Khusus (EDIT) ── */}
+                  {/* ── TAB 3: Pengiriman & Kurir (EDIT) ── */}
+                  {customerFormTab === 'shipping' && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-start gap-2.5">
+                        <Truck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-blue-900">Pengaturan Ekspedisi & Ongkir Default</h4>
+                          <div className="text-[11px] text-blue-700 mt-0.5">
+                            Pilih kurir/ekspedisi langganan dan tentukan tarif ongkos kirim default yang otomatis terpasang saat membuat Sales Order (SO) untuk <strong>{customerForm.company_name || 'customer ini'}</strong>.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+                        {/* Pilihan Kurir Default */}
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1 text-xs flex items-center justify-between">
+                            <span>Kurir / Ekspedisi Default</span>
+                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Kurir</span>
+                          </label>
+                          <select
+                            value={customerForm.default_courier_id}
+                            onChange={(e) => {
+                              const selId = e.target.value;
+                              const found = couriers.find((k) => k.id === selId);
+                              setCustomerForm({
+                                ...customerForm,
+                                default_courier_id: selId,
+                                default_courier_name: found ? `${found.name} (${found.vehicle_number})` : (selId === 'INTERNAL' ? 'Armada Internal Artaroma' : (selId === 'EKSPEDISI' ? 'Ekspedisi Luar (JNE/Cargo/dll)' : ''))
+                              });
+                            }}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">— Belum Ditentukan (Pilih saat buat SO) —</option>
+                            <option value="INTERNAL">🚛 Armada Internal Artaroma (Pusat)</option>
+                            <option value="EKSPEDISI">📦 Ekspedisi Cargo Luar (JNE Trucking / Indah / Dakota / dll)</option>
+                            {couriers.map((k) => (
+                              <option key={k.id} value={k.id}>
+                                🚚 {k.name} — {k.vehicle_number} ({k.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Tipe Ongkir & Nominal */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1 text-xs">Skema Ongkir Default</label>
+                            <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-lg border border-gray-200">
+                              <button
+                                type="button"
+                                onClick={() => setCustomerForm({ ...customerForm, default_shipping_type: 'FRANCO', default_shipping_cost: 0 })}
+                                className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all ${
+                                  customerForm.default_shipping_type === 'FRANCO'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                FRANCO (Gratis)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomerForm({ ...customerForm, default_shipping_type: 'LOCO' })}
+                                className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all ${
+                                  customerForm.default_shipping_type === 'LOCO'
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                LOCO (Dikenakan)
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block mt-1">
+                              {customerForm.default_shipping_type === 'FRANCO'
+                                ? 'FRANCO: Ongkir ditanggung penjual (Artaroma).'
+                                : 'LOCO: Ongkir ditagihkan ke customer pada Invoice.'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1 text-xs">Nominal Default Ongkir (Rp)</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">Rp</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="5000"
+                                disabled={customerForm.default_shipping_type === 'FRANCO'}
+                                value={customerForm.default_shipping_cost}
+                                onChange={(e) => setCustomerForm({ ...customerForm, default_shipping_cost: Number(e.target.value) })}
+                                className={`w-full border rounded-lg pl-9 pr-3 py-2 text-slate-800 font-mono font-bold text-xs ${
+                                  customerForm.default_shipping_type === 'FRANCO'
+                                    ? 'bg-gray-100 border-gray-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-white border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'
+                                }`}
+                                placeholder="0"
+                              />
+                            </div>
+                            {customerForm.default_shipping_type === 'LOCO' && (
+                              <div className="flex gap-1 mt-1.5 flex-wrap">
+                                {[50000, 100000, 150000, 250000].map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => setCustomerForm({ ...customerForm, default_shipping_cost: preset })}
+                                    className="px-2 py-0.5 text-[10px] font-mono font-semibold bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded border border-gray-200 transition-colors"
+                                  >
+                                    {preset.toLocaleString('id-ID')}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Catatan / Titik Bongkar Muat */}
+                        <div className="pt-2 border-t border-gray-100">
+                          <label className="font-bold text-slate-700 block mb-1 text-xs">Instruksi Pengiriman Khusus / Titik Bongkar</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Contoh: Masuk lewat gerbang barat gudang. Harap konfirmasi ke PIC 1 jam sebelum tiba."
+                            value={customerForm.delivery_notes || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, delivery_notes: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('bank')}
+                          className="flex-1 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-slate-600 rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          ← Kembali ke Data Bank
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCustomerFormTab('price')}
+                          className="flex-1 bg-orange-600 hover:bg-orange-700 text-white rounded-xl py-2 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          Lanjut ke Harga Khusus →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TAB 4: Harga Khusus (EDIT) ── */}
                   {customerFormTab === 'price' && (
                     <div className="space-y-4">
                       <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-start gap-2">

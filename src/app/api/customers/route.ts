@@ -99,6 +99,11 @@ export async function POST(req: NextRequest) {
       office_address,
       shipping_lat,
       shipping_lng,
+      default_courier_id,
+      default_courier_name,
+      default_shipping_cost,
+      default_shipping_type,
+      delivery_notes,
       npwp,
       is_credit_eligible,
       credit_limit,
@@ -117,14 +122,15 @@ export async function POST(req: NextRequest) {
     const id = `cust-${Date.now()}`;
     const parsedLimit = is_credit_eligible ? parseFloat(credit_limit || 0) : 0;
     const parsedTerms = is_credit_eligible ? parseInt(credit_terms_days || 0) : 0;
+    const parsedShippingCost = parseFloat(default_shipping_cost || 0);
     const specPricesStr = JSON.stringify(special_prices || {});
     const allowedProdsStr = JSON.stringify(allowed_product_ids || []);
 
     try {
       await executeQuery(
         `INSERT INTO customers 
-        (id, code, company_name, pic_name, email, phone, pic_name_2, phone_2, pic_name_3, phone_3, address, office_address, shipping_lat, shipping_lng, npwp, credit_limit, credit_terms_days, special_prices, allowed_product_ids, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+        (id, code, company_name, pic_name, email, phone, pic_name_2, phone_2, pic_name_3, phone_3, address, office_address, shipping_lat, shipping_lng, default_courier_id, default_courier_name, default_shipping_cost, default_shipping_type, delivery_notes, npwp, credit_limit, credit_terms_days, special_prices, allowed_product_ids, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
         [
           id,
           code,
@@ -140,6 +146,11 @@ export async function POST(req: NextRequest) {
           office_address || '',
           shipping_lat || '',
           shipping_lng || '',
+          default_courier_id || null,
+          default_courier_name || null,
+          parsedShippingCost,
+          default_shipping_type || 'FRANCO',
+          delivery_notes || null,
           npwp || '',
           parsedLimit,
           parsedTerms,
@@ -168,6 +179,11 @@ export async function POST(req: NextRequest) {
           pic_name_3: pic_name_3 || null,
           phone_3: phone_3 || null,
           address,
+          default_courier_id: default_courier_id || null,
+          default_courier_name: default_courier_name || null,
+          default_shipping_cost: parsedShippingCost,
+          default_shipping_type: default_shipping_type || 'FRANCO',
+          delivery_notes: delivery_notes || null,
           npwp,
           is_credit_eligible: parsedLimit > 0,
           credit_limit: parsedLimit,
@@ -205,6 +221,11 @@ export async function PUT(req: NextRequest) {
       office_address,
       shipping_lat,
       shipping_lng,
+      default_courier_id,
+      default_courier_name,
+      default_shipping_cost,
+      default_shipping_type,
+      delivery_notes,
       credit_limit,
       credit_terms_days,
       special_prices,
@@ -237,6 +258,11 @@ export async function PUT(req: NextRequest) {
           office_address = COALESCE(?, office_address),
           shipping_lat = COALESCE(?, shipping_lat),
           shipping_lng = COALESCE(?, shipping_lng),
+          default_courier_id = ?,
+          default_courier_name = ?,
+          default_shipping_cost = ?,
+          default_shipping_type = ?,
+          delivery_notes = ?,
           credit_limit = COALESCE(?, credit_limit),
           credit_terms_days = COALESCE(?, credit_terms_days),
           special_prices = COALESCE(?, special_prices),
@@ -256,6 +282,11 @@ export async function PUT(req: NextRequest) {
           office_address !== undefined ? office_address : null,
           shipping_lat !== undefined ? shipping_lat : null,
           shipping_lng !== undefined ? shipping_lng : null,
+          default_courier_id !== undefined ? (default_courier_id || null) : null,
+          default_courier_name !== undefined ? (default_courier_name || null) : null,
+          default_shipping_cost !== undefined ? parseFloat(default_shipping_cost) : 0,
+          default_shipping_type !== undefined ? default_shipping_type : 'FRANCO',
+          delivery_notes !== undefined ? (delivery_notes || null) : null,
           credit_limit !== undefined ? parseFloat(credit_limit) : null,
           credit_terms_days !== undefined ? parseInt(credit_terms_days) : null,
           specPricesStr,

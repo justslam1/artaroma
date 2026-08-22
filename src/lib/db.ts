@@ -94,6 +94,11 @@ export async function ensureSchemaMigrations(): Promise<void> {
           { col: 'phone_2', sql: "ALTER TABLE customers ADD COLUMN phone_2 VARCHAR(50) DEFAULT NULL" },
           { col: 'pic_name_3', sql: "ALTER TABLE customers ADD COLUMN pic_name_3 VARCHAR(100) DEFAULT NULL" },
           { col: 'phone_3', sql: "ALTER TABLE customers ADD COLUMN phone_3 VARCHAR(50) DEFAULT NULL" },
+          { col: 'default_courier_id', sql: "ALTER TABLE customers ADD COLUMN default_courier_id VARCHAR(64) DEFAULT NULL" },
+          { col: 'default_courier_name', sql: "ALTER TABLE customers ADD COLUMN default_courier_name VARCHAR(100) DEFAULT NULL" },
+          { col: 'default_shipping_cost', sql: "ALTER TABLE customers ADD COLUMN default_shipping_cost DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'default_shipping_type', sql: "ALTER TABLE customers ADD COLUMN default_shipping_type VARCHAR(20) DEFAULT 'FRANCO'" },
+          { col: 'delivery_notes', sql: "ALTER TABLE customers ADD COLUMN delivery_notes TEXT DEFAULT NULL" },
         ];
 
         for (const m of custMigrations) {
