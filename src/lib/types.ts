@@ -310,6 +310,17 @@ export interface SalesOrder {
 
 export type InvoiceStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
 
+export interface InvoicePaymentRecord {
+  id: string;
+  payment_date: string;
+  amount: number;
+  remaining_after: number;
+  payment_proof_url?: string;
+  payment_notes?: string;
+  verified_by?: string;
+  created_at?: string;
+}
+
 export interface Invoice {
   id: string;
   invoice_number: string;
@@ -329,6 +340,7 @@ export interface Invoice {
   payment_verification_status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
   payment_notes?: string;
   last_payment_date?: string;
+  payment_history?: InvoicePaymentRecord[];
 }
 
 export interface DeliveryCheckitem {

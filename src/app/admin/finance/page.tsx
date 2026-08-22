@@ -4,8 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
 import { VerifyPaymentModal, UploadTaxInvoiceModal } from '@/components/admin/finance-modal';
-import { initialInvoices, initialSalesOrders } from '@/lib/mock-data';
-import { Invoice, SalesOrder } from '@/lib/types';
+import { Invoice, InvoicePaymentRecord, SalesOrder } from '@/lib/types';
 import { formatIDR, formatDate } from '@/lib/utils';
 import { getStoredInvoices, saveStoredInvoices, getStoredOrders, saveStoredOrders } from '@/lib/order-store';
 import {
@@ -155,7 +154,9 @@ export default function FinanceInvoicesPage() {
     invoiceId: string,
     status: 'VERIFIED' | 'REJECTED',
     newPaymentAmount?: number,
-    paymentNotes?: string
+    paymentNotes?: string,
+    paymentDate?: string,
+    paymentProofUrl?: string
   ) => {
     const updated = invoices.map((inv) => {
       if (inv.id !== invoiceId) return inv;
@@ -171,6 +172,21 @@ export default function FinanceInvoicesPage() {
       const incomingPayment = newPaymentAmount !== undefined ? Number(newPaymentAmount) : Number(inv.total_amount) - prevPaid;
       const totalAccumulatedPaid = Math.min(Number(inv.total_amount), prevPaid + incomingPayment);
       const isFullyPaid = totalAccumulatedPaid >= Number(inv.total_amount);
+      const payDate = paymentDate || new Date().toISOString().split('T')[0];
+      const remainingAfter = Math.max(0, Number(inv.total_amount) - totalAccumulatedPaid);
+
+      const newHistoryItem: InvoicePaymentRecord = {
+        id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        payment_date: payDate,
+        amount: incomingPayment,
+        remaining_after: remainingAfter,
+        payment_proof_url: paymentProofUrl || inv.payment_proof_url,
+        payment_notes: paymentNotes || inv.payment_notes,
+        verified_by: currentUser?.name || currentUser?.username || 'Staf Finance',
+        created_at: new Date().toISOString(),
+      };
+
+      const existingHistory = Array.isArray(inv.payment_history) ? inv.payment_history : [];
 
       return {
         ...inv,
@@ -178,7 +194,9 @@ export default function FinanceInvoicesPage() {
         status: (isFullyPaid ? 'PAID' : 'PARTIALLY_PAID') as any,
         payment_verification_status: 'VERIFIED' as const,
         payment_notes: paymentNotes || inv.payment_notes,
-        last_payment_date: new Date().toISOString().split('T')[0],
+        last_payment_date: payDate,
+        payment_proof_url: paymentProofUrl || inv.payment_proof_url,
+        payment_history: [...existingHistory, newHistoryItem],
       };
     });
     setInvoices(updated);
@@ -412,17 +430,29 @@ export default function FinanceInvoicesPage() {
                       </td>
 
                       <td className="px-6 py-3.5">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
-                          inv.status === 'PAID'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : (inv.status as string) === 'PARTIALLY_PAID'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : inv.status === 'OVERDUE'
-                            ? 'bg-red-50 text-red-700 border-red-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {(inv.status as string) === 'PARTIALLY_PAID' ? 'SEBAGIAN' : inv.status}
-                        </span>
+                        <div className="space-y-1">
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-bold border inline-block ${
+                            inv.status === 'PAID'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : (inv.status as string) === 'PARTIALLY_PAID'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : inv.status === 'OVERDUE'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {(inv.status as string) === 'PARTIALLY_PAID' ? 'SEBAGIAN' : inv.status}
+                          </span>
+                          {inv.last_payment_date && (
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Bayar: {inv.last_payment_date}
+                            </div>
+                          )}
+                          {Array.isArray(inv.payment_history) && inv.payment_history.length > 1 && (
+                            <div className="text-[10px] text-purple-700 font-semibold">
+                              ({inv.payment_history.length}x Cicilan)
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                     <td className="px-6 py-3.5">
