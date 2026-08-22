@@ -1096,8 +1096,17 @@ export function GoodsReceiptModal({
     orderedKg: number;
     batchNumber: string;
     receivedQtyKg: number;
+    productionDate: string;
     expiryDate: string;
     costPerKg: number;
+  };
+
+  const calculateDefaultExpiry = (prodDateStr: string): string => {
+    if (!prodDateStr) return '';
+    const d = new Date(prodDateStr);
+    if (isNaN(d.getTime())) return '';
+    d.setMonth(d.getMonth() + 24);
+    return d.toISOString().split('T')[0];
   };
 
   const buildInitialEntries = (): BatchEntry[] => {
@@ -1115,6 +1124,9 @@ export function GoodsReceiptModal({
         })
       : po.items;
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const defaultExpiry = calculateDefaultExpiry(todayStr);
+
     return sourceItems.map((item: any, idx: number) => ({
       poItemId: item.id || `entry-${idx}-${item.product_id || idx}`,
       productId: item.product_id,
@@ -1122,7 +1134,8 @@ export function GoodsReceiptModal({
       orderedKg: item.qty_shipped_kg ?? item.qty_ordered_kg ?? 0,
       batchNumber: `BTC-${new Date().getFullYear()}-${String(Math.floor(10 + Math.random() * 89) + idx).padStart(2, '0')}`,
       receivedQtyKg: item.qty_shipped_kg ?? item.qty_ordered_kg ?? 0,
-      expiryDate: '2027-06-30',
+      productionDate: todayStr,
+      expiryDate: defaultExpiry,
       costPerKg: item.cost_per_kg || 0,
     }));
   };
@@ -1140,6 +1153,10 @@ export function GoodsReceiptModal({
   const updateEntry = (idx: number, field: keyof BatchEntry, value: string | number) => {
     const updated = [...entries];
     (updated[idx] as any)[field] = value;
+    // Auto-calculate Expiry Date 24 months after Production Date if Production Date changed
+    if (field === 'productionDate' && typeof value === 'string') {
+      updated[idx].expiryDate = calculateDefaultExpiry(value);
+    }
     setEntries(updated);
   };
 
@@ -1162,7 +1179,7 @@ export function GoodsReceiptModal({
         product_id: entry.productId,
         product_name: entry.productName,
         po_item_id: entry.poItemId,
-        production_date: new Date().toISOString().split('T')[0],
+        production_date: entry.productionDate || new Date().toISOString().split('T')[0],
         expiry_date: entry.expiryDate,
         initial_qty_kg: entry.receivedQtyKg,
         current_qty_kg: entry.receivedQtyKg,
@@ -1178,7 +1195,7 @@ export function GoodsReceiptModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full text-slate-100 shadow-2xl overflow-hidden my-8">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full text-slate-100 shadow-2xl overflow-hidden my-8">
         {/* Header */}
         <div className="bg-slate-800/90 px-6 py-4 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1237,14 +1254,14 @@ export function GoodsReceiptModal({
                   />
                 </div>
 
-                {/* Qty + Expiry */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Qty, Production Date & Expiry Date (24 Bulan Default) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="font-bold text-slate-300 block">Qty Diterima (Kg)</label>
+                      <label className="font-bold text-slate-300 block text-[11px]">Qty Diterima (Kg)</label>
                       {Number(entry.receivedQtyKg) !== Number(entry.orderedKg) && (
-                        <span className="text-[10px] text-rose-400 font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> Harus {formatKg(entry.orderedKg)}
+                        <span className="text-[10px] text-rose-400 font-bold flex items-center gap-0.5">
+                          <AlertTriangle className="w-3 h-3" /> {formatKg(entry.orderedKg)}
                         </span>
                       )}
                     </div>
@@ -1255,21 +1272,39 @@ export function GoodsReceiptModal({
                       required
                       value={Math.round(entry.receivedQtyKg)}
                       onChange={(e) => updateEntry(idx, 'receivedQtyKg', Math.round(Number(e.target.value)))}
-                      className={`w-full bg-slate-900 border rounded-xl px-3 py-2 font-mono font-bold text-sm transition-colors ${
+                      className={`w-full bg-slate-900 border rounded-xl px-3 py-2 font-mono font-bold text-xs transition-colors ${
                         Number(entry.receivedQtyKg) !== Number(entry.orderedKg)
                           ? 'border-rose-500 text-rose-400 focus:border-rose-400 focus:ring-1 focus:ring-rose-500'
                           : 'border-slate-700 text-emerald-400 focus:border-emerald-400'
                       }`}
                     />
                   </div>
+
                   <div>
-                    <label className="font-bold text-slate-300 block mb-1">Tanggal Expiry Date (FEFO)</label>
+                    <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
+                      <span>Tanggal Produksi (Mfg)</span>
+                      <span className="text-[9px] text-blue-400 font-normal">Tgl Buat</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={entry.productionDate}
+                      onChange={(e) => updateEntry(idx, 'productionDate', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-blue-300 font-mono font-bold text-xs focus:border-blue-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
+                      <span>Expiry Date (FEFO)</span>
+                      <span className="text-[9px] text-amber-400 font-normal">+24 Bulan</span>
+                    </label>
                     <input
                       type="date"
                       required
                       value={entry.expiryDate}
                       onChange={(e) => updateEntry(idx, 'expiryDate', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-xs"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-xs focus:border-amber-400"
                     />
                   </div>
                 </div>
