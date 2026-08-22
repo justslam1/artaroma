@@ -2489,21 +2489,38 @@ export default function MasterDataPage() {
 
                           <td className="px-6 py-3.5 text-xs">
                             {courierName ? (
-                              <div className="space-y-0.5">
-                                <div className="font-semibold text-slate-800 flex items-center gap-1">
-                                  <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                  <span className="truncate max-w-[140px]">{courierName}</span>
-                                </div>
-                                <div className="font-mono text-[11px]">
-                                  {shippingType === 'FRANCO' ? (
-                                    <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">FRANCO (Gratis)</span>
-                                  ) : (
-                                    <span className="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                      LOCO: {formatIDR(shippingCost)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                              (() => {
+                                const matched = couriers.find((k) => k.id === (c as any).default_courier_id || k.name === courierName);
+                                const isExt = matched ? (matched as any).courier_type === 'EKSTERNAL' : false;
+                                return (
+                                  <div className="space-y-0.5">
+                                    <div className="font-semibold text-slate-800 flex items-center gap-1">
+                                      {isExt ? (
+                                        <span title="Ekspedisi Eksternal" className="inline-flex">
+                                          <Truck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                        </span>
+                                      ) : (
+                                        <span title="Kurir Internal" className="inline-flex">
+                                          <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                        </span>
+                                      )}
+                                      <span className="truncate max-w-[140px]" title={courierName}>{courierName}</span>
+                                    </div>
+                                    <div className="font-mono text-[11px] flex items-center gap-1">
+                                      {isExt && (
+                                        <span className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 font-bold">EXT</span>
+                                      )}
+                                      {shippingType === 'FRANCO' ? (
+                                        <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">FRANCO (Gratis)</span>
+                                      ) : (
+                                        <span className="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                          LOCO: {formatIDR(shippingCost)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">— Default (Manual) —</span>
                             )}
@@ -4583,7 +4600,7 @@ export default function MasterDataPage() {
                         <div>
                           <label className="font-bold text-slate-700 block mb-1 text-xs flex items-center justify-between">
                             <span>Kurir / Ekspedisi Default</span>
-                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Kurir</span>
+                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Pilihan</span>
                           </label>
                           <select
                             value={customerForm.default_courier_id}
@@ -4593,19 +4610,20 @@ export default function MasterDataPage() {
                               setCustomerForm({
                                 ...customerForm,
                                 default_courier_id: selId,
-                                default_courier_name: found ? `${found.name} (${found.vehicle_number})` : (selId === 'INTERNAL' ? 'Armada Internal Artaroma' : (selId === 'EKSPEDISI' ? 'Ekspedisi Luar (JNE/Cargo/dll)' : ''))
+                                default_courier_name: found ? `${found.name} (${found.vehicle_number || (found as any).service_type || 'Armada'})` : ''
                               });
                             }}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                           >
                             <option value="">— Belum Ditentukan (Pilih saat buat SO) —</option>
-                            <option value="INTERNAL">🚛 Armada Internal Artaroma (Pusat)</option>
-                            <option value="EKSPEDISI">📦 Ekspedisi Cargo Luar (JNE Trucking / Indah / Dakota / dll)</option>
-                            {couriers.map((k) => (
-                              <option key={k.id} value={k.id}>
-                                🚚 {k.name} — {k.vehicle_number} ({k.code})
-                              </option>
-                            ))}
+                            {couriers.map((k) => {
+                              const isExt = (k as any).courier_type === 'EKSTERNAL';
+                              return (
+                                <option key={k.id} value={k.id}>
+                                  {isExt ? '📦 [Eksternal]' : '🚚 [Internal]'} {k.name} — {k.vehicle_number || (k as any).service_type || 'Armada'} ({k.code})
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
 
@@ -6142,7 +6160,7 @@ export default function MasterDataPage() {
                         <div>
                           <label className="font-bold text-slate-700 block mb-1 text-xs flex items-center justify-between">
                             <span>Kurir / Ekspedisi Default</span>
-                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Kurir</span>
+                            <span className="text-[10px] text-blue-600 font-normal">Tersedia {couriers.length} Pilihan</span>
                           </label>
                           <select
                             value={customerForm.default_courier_id}
@@ -6152,19 +6170,20 @@ export default function MasterDataPage() {
                               setCustomerForm({
                                 ...customerForm,
                                 default_courier_id: selId,
-                                default_courier_name: found ? `${found.name} (${found.vehicle_number})` : (selId === 'INTERNAL' ? 'Armada Internal Artaroma' : (selId === 'EKSPEDISI' ? 'Ekspedisi Luar (JNE/Cargo/dll)' : ''))
+                                default_courier_name: found ? `${found.name} (${found.vehicle_number || (found as any).service_type || 'Armada'})` : ''
                               });
                             }}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                           >
                             <option value="">— Belum Ditentukan (Pilih saat buat SO) —</option>
-                            <option value="INTERNAL">🚛 Armada Internal Artaroma (Pusat)</option>
-                            <option value="EKSPEDISI">📦 Ekspedisi Cargo Luar (JNE Trucking / Indah / Dakota / dll)</option>
-                            {couriers.map((k) => (
-                              <option key={k.id} value={k.id}>
-                                🚚 {k.name} — {k.vehicle_number} ({k.code})
-                              </option>
-                            ))}
+                            {couriers.map((k) => {
+                              const isExt = (k as any).courier_type === 'EKSTERNAL';
+                              return (
+                                <option key={k.id} value={k.id}>
+                                  {isExt ? '📦 [Eksternal]' : '🚚 [Internal]'} {k.name} — {k.vehicle_number || (k as any).service_type || 'Armada'} ({k.code})
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
 

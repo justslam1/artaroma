@@ -292,10 +292,12 @@ export function exportCouriersToXLSX(couriers: Courier[], customFileName?: strin
 
   const rows = couriers.map((k, index) => ({
     'No': index + 1,
-    'Kode Kurir': k.code || '-',
-    'Nama Driver': k.name || '-',
-    'Nomor Telepon': k.phone || '-',
-    'Nomor Plat Kendaraan': k.vehicle_number || '-',
+    'Kode Kurir / Ekspedisi': k.code || '-',
+    'Nama Kurir / Vendor': k.name || '-',
+    'Tipe Kurir': k.courier_type === 'EKSTERNAL' ? 'EKSTERNAL' : 'INTERNAL',
+    'Nomor Telepon / Kontak': k.phone || '-',
+    'Plat Nomor / Layanan': k.vehicle_number || k.service_type || '-',
+    'Catatan': k.notes || '-',
     'Status': k.is_active !== false ? 'AKTIF / SIAP TUGAS' : 'NONAKTIF',
   }));
 
