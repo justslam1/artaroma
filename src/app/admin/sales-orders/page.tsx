@@ -318,14 +318,17 @@ export default function SalesOrdersPage() {
                           const isSoExceeding = soCreditLimit > 0 && soProjected > soCreditLimit;
                           const isSoOverdue = Boolean(soCustomer?.has_overdue);
                           const isSoTempo = so.payment_method === 'TEMPO' || (so as any).payment_method === 'KREDIT' || !so.payment_method;
+                          const isInitialStage = so.status === 'DIAJUKAN' || so.status === 'PENDING_APPROVAL';
 
                           const soNeedsApproval =
-                            Boolean(so.requires_super_admin_approval) ||
-                            (isSoTempo && (isSoExceeding || isSoOverdue)) ||
-                            (isSoExceeding && soCreditLimit > 0);
+                            isInitialStage && (
+                              Boolean(so.requires_super_admin_approval) ||
+                              (isSoTempo && (isSoExceeding || isSoOverdue)) ||
+                              (isSoExceeding && soCreditLimit > 0)
+                            );
 
                           const soIsPending = soNeedsApproval && (so.credit_approval_status !== 'APPROVED');
-                          const soIsApproved = soNeedsApproval && (so.credit_approval_status === 'APPROVED');
+                          const soIsApproved = isInitialStage && so.requires_super_admin_approval && (so.credit_approval_status === 'APPROVED');
 
                           return (
                             <div className="flex flex-col items-start gap-1">

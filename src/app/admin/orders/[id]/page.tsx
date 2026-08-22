@@ -1364,19 +1364,23 @@ export default function OrderDetailPage() {
 
   const isExceedingCredit = creditLimit > 0 && projectedPiutang > creditLimit;
 
-  // Determine if this order requires Super Admin approval
+  // Determine if this order requires Super Admin approval (only applicable in DIAJUKAN stage)
+  const isInitialStage = order.status === 'DIAJUKAN' || order.status === 'PENDING_APPROVAL';
   const isTempoOrder = order.payment_method === 'TEMPO' || (order as any).payment_method === 'KREDIT' || !order.payment_method;
   const requiresSuperAdminCreditApproval =
-    Boolean(order.requires_super_admin_approval) ||
-    (isTempoOrder && (isExceedingCredit || isOverdueDebt)) ||
-    (isExceedingCredit && creditLimit > 0);
+    isInitialStage && (
+      Boolean(order.requires_super_admin_approval) ||
+      (isTempoOrder && (isExceedingCredit || isOverdueDebt)) ||
+      (isExceedingCredit && creditLimit > 0)
+    );
 
   const isPendingSuperAdminApproval =
     requiresSuperAdminCreditApproval &&
     order.credit_approval_status !== 'APPROVED';
 
   const isApprovedBySuperAdmin =
-    requiresSuperAdminCreditApproval &&
+    isInitialStage &&
+    (Boolean(order.requires_super_admin_approval) || isExceedingCredit || isOverdueDebt) &&
     order.credit_approval_status === 'APPROVED';
 
   const activeCreditWarning =
