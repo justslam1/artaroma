@@ -109,27 +109,75 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
     onClose();
   };
 
-  const paymentHistory: InvoicePaymentRecord[] = Array.isArray(invoice.payment_history) ? invoice.payment_history : [];
+  const isAlreadyPaid = invoice.status === 'PAID' || remainingBill <= 0;
+
+  const paymentHistory: InvoicePaymentRecord[] =
+    Array.isArray(invoice.payment_history) && invoice.payment_history.length > 0
+      ? invoice.payment_history
+      : invoice.status === 'PAID' || Number(invoice.paid_amount || 0) > 0
+      ? [
+          {
+            id: `hist-${invoice.id}`,
+            payment_date: invoice.last_payment_date || invoice.issue_date || '-',
+            amount: Number(invoice.paid_amount || invoice.total_amount || 0),
+            remaining_after: 0,
+            payment_proof_url: invoice.payment_proof_url,
+            payment_notes: invoice.payment_notes || 'Pelunasan invoice terverifikasi',
+            verified_by: 'Staf Finance',
+            created_at: invoice.issue_date,
+          },
+        ]
+      : [];
+
+  const handleSaveProofUpdate = () => {
+    onVerify(invoice.id, 'VERIFIED', 0, paymentNotes, paymentDate, financeProofUrl);
+    onClose();
+  };
 
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
         <div className="bg-white border border-gray-200 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden my-8 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-6 py-4 flex items-center justify-between text-white shrink-0">
+          <div className={`px-6 py-4 flex items-center justify-between text-white shrink-0 ${
+            isAlreadyPaid
+              ? 'bg-gradient-to-r from-emerald-700 to-teal-800'
+              : 'bg-gradient-to-r from-blue-700 to-indigo-800'
+          }`}>
             <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-5 h-5 text-blue-200" />
+              <ShieldCheck className="w-5 h-5 text-emerald-200" />
               <div>
-                <h3 className="font-bold text-base">Verifikasi &amp; Pencatatan Pembayaran</h3>
-                <p className="text-xs text-blue-200">Input tanggal bayar, nominal transfer, &amp; upload bukti transfer finance</p>
+                <h3 className="font-bold text-base">
+                  {isAlreadyPaid ? 'Detail & Riwayat Pembayaran (Lunas)' : 'Verifikasi & Pencatatan Pembayaran'}
+                </h3>
+                <p className="text-xs text-blue-100">
+                  {isAlreadyPaid
+                    ? 'Melihat riwayat transaksi cicilan, tanggal bayar, & bukti transfer'
+                    : 'Input tanggal bayar, nominal transfer, & upload bukti transfer finance'}
+                </p>
               </div>
             </div>
-            <button onClick={onClose} className="text-blue-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
+            <button onClick={onClose} className="text-blue-100 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+            {/* Lunas Banner for Paid Invoices */}
+            {isAlreadyPaid && (
+              <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3 rounded-xl flex items-center justify-between text-xs font-semibold shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Tagihan ini telah terverifikasi <strong>LUNAS PENUH</strong>. Semua riwayat tanggal pembayaran dan bukti transfer dapat ditinjau di bawah.
+                  </span>
+                </div>
+                <span className="bg-emerald-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shrink-0 ml-2">
+                  PAID
+                </span>
+              </div>
+            )}
+
             {/* Invoice Summary Info Card */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
               <div className="flex justify-between">
@@ -146,13 +194,17 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
               </div>
               {alreadyPaid > 0 && (
                 <div className="flex justify-between text-emerald-700">
-                  <span className="font-medium">Sudah Dibayar Sebelumnya:</span>
-                  <span className="font-mono font-bold">-{formatIDR(alreadyPaid)}</span>
+                  <span className="font-medium">Total Telah Dibayar:</span>
+                  <span className="font-mono font-bold">{formatIDR(alreadyPaid)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-slate-200/80 pt-1.5 bg-blue-50/50 p-2 rounded-lg">
-                <span className="font-bold text-blue-900">Sisa Tagihan Saat Ini:</span>
-                <span className="font-mono font-extrabold text-blue-700 text-sm">{formatIDR(remainingBill)}</span>
+              <div className={`flex justify-between border-t border-slate-200/80 pt-1.5 p-2 rounded-lg ${
+                isAlreadyPaid ? 'bg-emerald-50/70 text-emerald-900' : 'bg-blue-50/50'
+              }`}>
+                <span className="font-bold">Sisa Tagihan:</span>
+                <span className={`font-mono font-extrabold text-sm ${isAlreadyPaid ? 'text-emerald-700' : 'text-blue-700'}`}>
+                  {isAlreadyPaid ? 'Rp 0 (LUNAS)' : formatIDR(remainingBill)}
+                </span>
               </div>
             </div>
 
@@ -162,23 +214,24 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                 <div className="flex items-center justify-between text-purple-900 font-bold">
                   <span className="flex items-center gap-1.5">
                     <History className="w-4 h-4 text-purple-600" />
-                    Riwayat Pembayaran Sebelumnya ({paymentHistory.length}x Bayar)
+                    Riwayat Pembayaran ({paymentHistory.length}x Pembayaran)
                   </span>
                   <span className="text-[11px] text-purple-700 font-mono">
-                    Total Masuk: {formatIDR(alreadyPaid)}
+                    Total: {formatIDR(alreadyPaid || totalBill)}
                   </span>
                 </div>
-                <div className="divide-y divide-purple-100 bg-white rounded-lg border border-purple-200/70 overflow-hidden">
+                <div className="divide-y divide-purple-100 bg-white rounded-lg border border-purple-200/70 overflow-hidden shadow-2xs">
                   {paymentHistory.map((item, idx) => (
-                    <div key={item.id || idx} className="p-2.5 flex items-center justify-between text-[11px] gap-2">
+                    <div key={item.id || idx} className="p-2.5 flex items-center justify-between text-[11px] gap-2 hover:bg-purple-50/20 transition-colors">
                       <div className="space-y-0.5">
                         <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                          <span>Bayar #{idx + 1}:</span>
-                          <span className="font-mono text-emerald-700">{formatIDR(item.amount)}</span>
+                          <span className="text-purple-900">Bayar #{idx + 1}:</span>
+                          <span className="font-mono text-emerald-700 font-extrabold">{formatIDR(item.amount)}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                          <span>Tgl: <strong className="text-slate-700">{item.payment_date || '-'}</strong></span>
-                          {item.payment_notes && <span>• Catatan: {item.payment_notes}</span>}
+                        <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
+                          <span>📅 Tgl: <strong className="text-slate-700">{item.payment_date || '-'}</strong></span>
+                          {item.payment_notes && <span>• 📝 {item.payment_notes}</span>}
+                          {item.verified_by && <span>• 👤 {item.verified_by}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -186,7 +239,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                           <button
                             type="button"
                             onClick={() => setPreviewImageModal(item.payment_proof_url || null)}
-                            className="bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer"
+                            className="bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                           >
                             <Eye className="w-3 h-3" /> Bukti
                           </button>
@@ -201,120 +254,123 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
               </div>
             )}
 
-            {/* Input Tanggal & Nominal Pembayaran Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Tanggal Pembayaran Input */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                  Tanggal Pembayaran <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  required
-                  className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none shadow-2xs"
-                />
-              </div>
+            {/* Input Form for unpaid balance (Only if remainingBill > 0) */}
+            {!isAlreadyPaid && (
+              <>
+                {/* Input Tanggal & Nominal Pembayaran Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                      Tanggal Pembayaran <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      required
+                      className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none shadow-2xs"
+                    />
+                  </div>
 
-              {/* Quick Presets */}
-              <div className="flex flex-col justify-end">
-                <span className="text-[11px] font-bold text-slate-500 mb-1.5">Preset Nominal:</span>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickPreset('FULL')}
-                    className="flex-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 py-1.5 rounded-lg cursor-pointer transition-colors text-center"
-                  >
-                    100% Lunas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickPreset('HALF')}
-                    className="flex-1 text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 py-1.5 rounded-lg cursor-pointer transition-colors text-center"
-                  >
-                    50% Sisa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickPreset('CLEAR')}
-                    className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors"
-                  >
-                    Reset
-                  </button>
+                  <div className="flex flex-col justify-end">
+                    <span className="text-[11px] font-bold text-slate-500 mb-1.5">Preset Nominal:</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickPreset('FULL')}
+                        className="flex-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 py-1.5 rounded-lg cursor-pointer transition-colors text-center"
+                      >
+                        100% Lunas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickPreset('HALF')}
+                        className="flex-1 text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 py-1.5 rounded-lg cursor-pointer transition-colors text-center"
+                      >
+                        50% Sisa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickPreset('CLEAR')}
+                        className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Manual Transfer Amount Input */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                Nominal Transfer Masuk (IDR) <span className="text-red-500">*</span>
-              </label>
+                {/* Manual Transfer Amount Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    Nominal Transfer Masuk (IDR) <span className="text-red-500">*</span>
+                  </label>
 
-              <div className="relative">
-                <span className="absolute left-3.5 top-2.5 font-bold text-slate-400 text-sm">Rp</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={remainingBill}
-                  value={inputAmount}
-                  onChange={(e) => setInputAmount(e.target.value)}
-                  placeholder="Masukkan nominal transfer..."
-                  className="w-full pl-11 pr-4 py-2 bg-white border-2 border-blue-400 focus:border-blue-600 rounded-xl font-mono text-base font-extrabold text-slate-900 focus:outline-none shadow-xs"
-                />
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-500 px-1 font-medium">
-                <span>Terbilang: <strong className="text-slate-700 font-mono">{formatIDR(parsedInput)}</strong></span>
-                {parsedInput > remainingBill && (
-                  <span className="text-red-600 font-bold">⚠️ Melebihi sisa tagihan!</span>
-                )}
-              </div>
-            </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 font-bold text-slate-400 text-sm">Rp</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={remainingBill}
+                      value={inputAmount}
+                      onChange={(e) => setInputAmount(e.target.value)}
+                      placeholder="Masukkan nominal transfer..."
+                      className="w-full pl-11 pr-4 py-2 bg-white border-2 border-blue-400 focus:border-blue-600 rounded-xl font-mono text-base font-extrabold text-slate-900 focus:outline-none shadow-xs"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-500 px-1 font-medium">
+                    <span>Terbilang: <strong className="text-slate-700 font-mono">{formatIDR(parsedInput)}</strong></span>
+                    {parsedInput > remainingBill && (
+                      <span className="text-red-600 font-bold">⚠️ Melebihi sisa tagihan!</span>
+                    )}
+                  </div>
+                </div>
 
-            {/* Dynamic Real-time Calculation Result */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Total Akumulasi Pembayaran:</span>
-                <span className="font-mono font-bold text-slate-800">{formatIDR(newAccumulatedPaid)}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Sisa Piutang Pasca Verifikasi:</span>
-                <span className={`font-mono font-extrabold ${sisaSetelahBayar === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {formatIDR(sisaSetelahBayar)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center border-t border-slate-200 pt-1.5">
-                <span className="text-slate-600">Status Tagihan Setelah Verifikasi:</span>
-                {isLunas ? (
-                  <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
-                    ✓ LUNAS PENUH (PAID)
-                  </span>
-                ) : isPartial ? (
-                  <span className="bg-purple-100 text-purple-800 border border-purple-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
-                    ⚡ PEMBAYARAN SEBAGIAN (PARTIAL)
-                  </span>
-                ) : (
-                  <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
-                    BELUM ADA PEMBAYARAN
-                  </span>
-                )}
-              </div>
-            </div>
+                {/* Dynamic Real-time Calculation Result */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Akumulasi Pembayaran:</span>
+                    <span className="font-mono font-bold text-slate-800">{formatIDR(newAccumulatedPaid)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Sisa Piutang Pasca Verifikasi:</span>
+                    <span className={`font-mono font-extrabold ${sisaSetelahBayar === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {formatIDR(sisaSetelahBayar)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-slate-200 pt-1.5">
+                    <span className="text-slate-600">Status Tagihan Setelah Verifikasi:</span>
+                    {isLunas ? (
+                      <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
+                        ✓ LUNAS PENUH (PAID)
+                      </span>
+                    ) : isPartial ? (
+                      <span className="bg-purple-100 text-purple-800 border border-purple-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
+                        ⚡ PEMBAYARAN SEBAGIAN (PARTIAL)
+                      </span>
+                    ) : (
+                      <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2 py-0.5 rounded-full text-[11px]">
+                        BELUM ADA PEMBAYARAN
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            {/* Catatan Pembayaran / Referensi Bank */}
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">Catatan Verifikasi / Referensi Bank (Opsional)</label>
-              <input
-                type="text"
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-                placeholder="Contoh: Transfer BCA Ref #88921 Tahap 1..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-400"
-              />
-            </div>
+                {/* Catatan Pembayaran */}
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">Catatan Verifikasi / Referensi Bank (Opsional)</label>
+                  <input
+                    type="text"
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    placeholder="Contoh: Transfer BCA Ref #88921 Tahap 1..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-400"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Upload & Preview Bukti Transfer Section */}
             <div className="space-y-2 border border-slate-200 bg-slate-50/50 p-3.5 rounded-xl">
@@ -336,7 +392,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                     onClick={() => fileInputRef.current?.click()}
                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <Upload className="w-3.5 h-3.5" /> Upload Bukti (Staf Finance)
+                    <Upload className="w-3.5 h-3.5" /> {financeProofUrl ? 'Ganti Bukti Transfer' : 'Upload Bukti (Staf Finance)'}
                   </button>
                 </div>
               </div>
@@ -347,10 +403,10 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                   <img
                     src={financeProofUrl}
                     alt="Bukti Transfer"
-                    className="max-h-40 rounded-lg mx-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                    className="max-h-48 rounded-lg mx-auto object-contain cursor-pointer hover:opacity-90 transition-opacity shadow-2xs"
                     onClick={() => setPreviewImageModal(financeProofUrl)}
                   />
-                  <div className="flex items-center justify-center gap-2 mt-2 pt-1.5 border-t border-slate-100">
+                  <div className="flex items-center justify-center gap-3 mt-2 pt-1.5 border-t border-slate-100">
                     <button
                       type="button"
                       onClick={() => setPreviewImageModal(financeProofUrl)}
@@ -370,36 +426,59 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                 </div>
               ) : (
                 <div className="py-6 text-center text-slate-400 text-xs italic bg-white border border-dashed border-slate-300 rounded-xl">
-                  Belum ada bukti transfer. Customer atau Staf Finance dapat mengupload foto bukti transfer di atas.
+                  Belum ada bukti transfer terlampir. Staf Finance atau Customer dapat mengunggah bukti pembayaran di atas.
                 </div>
               )}
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Actions Footer */}
           <div className="px-6 py-4 bg-slate-50 border-t border-gray-200 flex items-center justify-end gap-3 shrink-0 flex-wrap">
-            <button
-              type="button"
-              onClick={() => { onVerify(invoice.id, 'REJECTED'); onClose(); }}
-              className="px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <XCircle className="w-4 h-4" /> Tolak
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={parsedInput <= 0 || !paymentDate}
-              className={`px-5 py-2.5 rounded-xl text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                isLunas
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              <CheckCircle className="w-4 h-4" />
-              {isLunas
-                ? `Verifikasi & Set Lunas Penuh (${formatIDR(parsedInput)})`
-                : `Konfirmasi Pembayaran Sebagian (${formatIDR(parsedInput)})`}
-            </button>
+            {isAlreadyPaid ? (
+              <>
+                {financeProofUrl !== invoice.payment_proof_url && (
+                  <button
+                    type="button"
+                    onClick={handleSaveProofUpdate}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" /> Simpan Pembaruan Bukti Transfer
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-colors cursor-pointer"
+                >
+                  <CheckCircle className="w-4 h-4 text-emerald-400" /> Tutup &amp; Selesai
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { onVerify(invoice.id, 'REJECTED'); onClose(); }}
+                  className="px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" /> Tolak
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirm}
+                  disabled={parsedInput <= 0 || !paymentDate}
+                  className={`px-5 py-2.5 rounded-xl text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isLunas
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {isLunas
+                    ? `Verifikasi & Set Lunas Penuh (${formatIDR(parsedInput)})`
+                    : `Konfirmasi Pembayaran Sebagian (${formatIDR(parsedInput)})`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

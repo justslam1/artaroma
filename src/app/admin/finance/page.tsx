@@ -479,9 +479,13 @@ export default function FinanceInvoicesPage() {
                           <Clock className="w-3.5 h-3.5" /> Verifikasi Transfer
                         </button>
                       ) : inv.status === 'PAID' ? (
-                        <span className="text-xs text-emerald-600 font-semibold flex items-center justify-end gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Terverifikasi Lunas
-                        </span>
+                        <button
+                          onClick={() => setSelectedInvoiceForVerify(inv)}
+                          className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                          title="Klik untuk melihat riwayat pembayaran & bukti transfer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Terverifikasi Lunas
+                        </button>
                       ) : (inv.status as string) === 'PARTIALLY_PAID' ? (
                         <button
                           onClick={() => setSelectedInvoiceForVerify(inv)}
