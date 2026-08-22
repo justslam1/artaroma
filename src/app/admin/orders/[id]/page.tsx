@@ -9,6 +9,7 @@ import {
   initialInvoices,
   initialProducts,
   initialCouriers,
+  initialCustomers,
 } from '@/lib/mock-data';
 import { POPDFModal } from '@/components/common/po-pdf-modal';
 import { SalesOrderPDFModal } from '@/components/common/sales-order-pdf-modal';
@@ -16,7 +17,7 @@ import { InvoicePDFModal } from '@/components/common/invoice-pdf-modal';
 import { SuratJalanPDFModal } from '@/components/common/surat-jalan-pdf-modal';
 import { PrintLabelModal } from '@/components/common/print-label-modal';
 import { PrintShippingAddressModal } from '@/components/common/print-shipping-address-modal';
-import { SalesOrder, Invoice, PurchaseOrder } from '@/lib/types';
+import { SalesOrder, Invoice, PurchaseOrder, Customer } from '@/lib/types';
 import { formatIDR, formatKg } from '@/lib/utils';
 import {
   getStoredOrders,
@@ -84,8 +85,9 @@ export default function OrderDetailPage() {
   const [isShippingAddressModalOpen, setIsShippingAddressModalOpen] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
 
-  // Master products list fetched from API
+  // Master products and customers list fetched from API
   const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [companyConfig, setCompanyConfig] = useState<any>({
     company_name: 'PT Artaroma Jayatama',
     warehouse_address: 'Jl. Elang Raya, Perum Kampoeng Elang Blok A5 Semarang – 50272',
@@ -101,6 +103,15 @@ export default function OrderDetailPage() {
         }
       })
       .catch((err) => console.error('Failed to load products:', err));
+
+    fetch('/api/customers', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setCustomers(json.data);
+        }
+      })
+      .catch((err) => console.warn('Failed to load customers:', err));
 
     fetch('/api/company-settings', { cache: 'no-store' })
       .then((res) => res.json())
@@ -1319,6 +1330,63 @@ export default function OrderDetailPage() {
     },
   ];
 
+  // Dynamic Customer and Credit Approval Resolution
+  const customer =
+    customers.find((c) => c.id === order.customer_id) ||
+    initialCustomers.find(
+      (c) =>
+        c.id === order.customer_id ||
+        c.company_name === order.customer_company ||
+        c.company_name === order.customer_name
+    );
+
+  const isSuperAdmin = currentUser?.is_super_admin || currentUser?.role === 'SUPER_ADMIN';
+
+  // Live calculation of financial metrics for credit check
+  const creditLimit = customer ? Number(customer.credit_limit || 0) : Number(order.credit_limit_amount || 40000000);
+  const currentPiutang = customer ? Number(customer.current_piutang || 0) : Number(order.current_piutang_amount || 0);
+
+  // Check if customer has overdue invoices
+  const customerInvoices = invoices.filter(
+    (inv) => inv.customer_id === order.customer_id || inv.customer_name === order.customer_company
+  );
+  const isOverdueDebt = Boolean(customer?.has_overdue || customerInvoices.some((inv) => inv.status === 'OVERDUE'));
+
+  // Order totals calculation
+  let orderGoodsSubtotal = 0;
+  (order.items || []).forEach((it) => {
+    const q = it.original_qty_kg !== undefined ? it.original_qty_kg : it.qty_kg;
+    const p = it.unit_price_per_kg || 1500000;
+    orderGoodsSubtotal += q * p;
+  });
+  const orderGrandTotal = order.grand_total || (orderGoodsSubtotal + Math.round(orderGoodsSubtotal * 0.11) + (order.shipping_cost || 0));
+  const projectedPiutang = currentPiutang + orderGrandTotal;
+
+  const isExceedingCredit = creditLimit > 0 && projectedPiutang > creditLimit;
+
+  // Determine if this order requires Super Admin approval
+  const isTempoOrder = order.payment_method === 'TEMPO' || (order as any).payment_method === 'KREDIT' || !order.payment_method;
+  const requiresSuperAdminCreditApproval =
+    Boolean(order.requires_super_admin_approval) ||
+    (isTempoOrder && (isExceedingCredit || isOverdueDebt)) ||
+    (isExceedingCredit && creditLimit > 0);
+
+  const isPendingSuperAdminApproval =
+    requiresSuperAdminCreditApproval &&
+    order.credit_approval_status !== 'APPROVED';
+
+  const isApprovedBySuperAdmin =
+    requiresSuperAdminCreditApproval &&
+    order.credit_approval_status === 'APPROVED';
+
+  const activeCreditWarning =
+    order.credit_warning ||
+    (isExceedingCredit && isOverdueDebt
+      ? 'MELEBIHI_PLAFON_DAN_OVERDUE'
+      : isOverdueDebt
+      ? 'OVERDUE_INVOICE'
+      : 'MELEBIHI_PLAFON');
+
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-20">
       <AdminTopNav />
@@ -1334,11 +1402,23 @@ export default function OrderDetailPage() {
           </Link>
         </div>
 
-        {/* Centered Page Header Title */}
-        <div className="text-center">
-          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-            Detail Pesanan - {order.so_number}
-          </h1>
+        {/* Centered Page Header Title with Prominent Approval Badge */}
+        <div className="text-center space-y-1">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">
+              Detail Pesanan - {order.so_number}
+            </h1>
+            {isPendingSuperAdminApproval && (
+              <span className="bg-red-600 text-white text-xs font-black uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1.5 animate-pulse">
+                <ShieldAlert className="w-4 h-4 text-white" /> ⚠️ BUTUH APPROVAL SUPER ADMIN
+              </span>
+            )}
+            {isApprovedBySuperAdmin && (
+              <span className="bg-emerald-600 text-white text-xs font-bold uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-white" /> ✓ APPROVED SUPER ADMIN
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Status Pesanan Horizontal Stepper Bar (6 Separate Steps) */}
@@ -1642,6 +1722,16 @@ export default function OrderDetailPage() {
               <Edit3 className="w-4 h-4" /> Form Eksekusi Aksi Alur Kerja
             </h3>
             <div className="flex items-center gap-2">
+              {isPendingSuperAdminApproval && (
+                <span className="bg-red-600 text-white font-extrabold text-xs px-3.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
+                  <ShieldAlert className="w-3.5 h-3.5" /> ⚠️ BUTUH APPROVAL SUPER ADMIN
+                </span>
+              )}
+              {isApprovedBySuperAdmin && (
+                <span className="bg-emerald-600 text-white font-bold text-xs px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> ✓ APPROVED SUPER ADMIN
+                </span>
+              )}
               {['DIKONFIRMASI', 'PROSES_GUDANG'].includes(order.status) && (
                 <button
                   onClick={handleGoBackToPreviousStage}
@@ -1721,11 +1811,8 @@ export default function OrderDetailPage() {
               }
             });
 
-              const isAllZero = totalConfirmedKg === 0;
-              const isSuperAdmin = currentUser?.is_super_admin || currentUser?.role === 'SUPER_ADMIN';
-              const isPendingSuperAdminApproval = order.requires_super_admin_approval && (order.credit_approval_status === 'PENDING' || !order.credit_approval_status);
-              const isApprovedBySuperAdmin = order.requires_super_admin_approval && order.credit_approval_status === 'APPROVED';
-              const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero || isPendingSuperAdminApproval;
+            const isAllZero = totalConfirmedKg === 0;
+            const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero || isPendingSuperAdminApproval;
 
             return (
               <div className="space-y-4 bg-white p-6 rounded-xl border border-blue-100 shadow-xs">
@@ -1750,9 +1837,9 @@ export default function OrderDetailPage() {
                             ⚠️ Memerlukan Persetujuan (Approval) dari Super Admin
                           </span>
                           <span className="text-[11px] text-red-700 font-medium">
-                            {order.credit_warning === 'MELEBIHI_PLAFON_DAN_OVERDUE'
+                            {activeCreditWarning === 'MELEBIHI_PLAFON_DAN_OVERDUE'
                               ? 'Pesanan ini melebihi Plafon Kredit DAN Customer memiliki tagihan yang telah Jatuh Tempo (Overdue).'
-                              : order.credit_warning === 'OVERDUE_INVOICE'
+                              : activeCreditWarning === 'OVERDUE_INVOICE'
                               ? 'Customer memiliki tagihan yang telah Jatuh Tempo (Overdue) dan belum dilunasi.'
                               : 'Total nilai pesanan ini melebihi sisa Plafon Kredit Customer.'}
                           </span>
@@ -1768,19 +1855,19 @@ export default function OrderDetailPage() {
                       <div>
                         <span className="text-slate-500 block text-[11px]">Plafon Kredit Customer:</span>
                         <span className="font-mono font-bold text-slate-800 text-sm">
-                          {formatIDR(order.credit_limit_amount || (order as any).customer_credit_limit || 40000000)}
+                          {formatIDR(creditLimit)}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 block text-[11px]">Piutang Berjalan:</span>
                         <span className="font-mono font-bold text-amber-700 text-sm">
-                          {formatIDR(order.current_piutang_amount || 0)}
+                          {formatIDR(currentPiutang)}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 block text-[11px]">Proyeksi Total Piutang:</span>
                         <span className="font-mono font-extrabold text-red-700 text-sm">
-                          {formatIDR(order.projected_piutang_amount || (order.current_piutang_amount || 0) + (order.grand_total || order.total_goods_amount || 0))}
+                          {formatIDR(projectedPiutang)}
                         </span>
                       </div>
                     </div>

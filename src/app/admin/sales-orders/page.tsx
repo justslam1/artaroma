@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
 import { getStoredOrders, saveStoredOrders } from '@/lib/order-store';
-import { SalesOrder } from '@/lib/types';
+import { SalesOrder, Customer } from '@/lib/types';
+import { initialCustomers } from '@/lib/mock-data';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
 import { FileText, Eye, EyeOff, Lock, ExternalLink, ShoppingCart, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
@@ -12,6 +13,7 @@ import { canUserExportXLSX } from '@/lib/auth';
 
 export default function SalesOrdersPage() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isFinancialHidden, setIsFinancialHidden] = useState(false);
@@ -49,6 +51,15 @@ export default function SalesOrdersPage() {
         }
       })
       .catch((err) => console.warn('Failed to load user info in sales orders:', err));
+
+    fetch('/api/customers', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setCustomers(json.data);
+        }
+      })
+      .catch((err) => console.warn('Failed to load customers in sales orders:', err));
   }, []);
 
   // Determine financial permission: Super Admin or has 'Lihat Nilai Finansial (PO/SO)' or 'Finance & Invoice'
@@ -297,19 +308,41 @@ export default function SalesOrdersPage() {
                       )}
 
                       <td className="px-6 py-3.5">
-                        <div className="flex flex-col items-start gap-1">
-                          {getStatusBadge(so.status)}
-                          {so.requires_super_admin_approval && (so.credit_approval_status === 'PENDING' || !so.credit_approval_status) && (
-                            <span className="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                              ⚠️ Butuh Approval Super Admin
-                            </span>
-                          )}
-                          {so.requires_super_admin_approval && so.credit_approval_status === 'APPROVED' && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                              ✓ Approved Super Admin
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const soCustomer = customers.find((c) => c.id === so.customer_id) ||
+                                             initialCustomers.find((c) => c.id === so.customer_id || c.company_name === so.customer_company);
+                          const soCreditLimit = soCustomer ? Number(soCustomer.credit_limit || 0) : Number(so.credit_limit_amount || 40000000);
+                          const soCurrentPiutang = soCustomer ? Number(soCustomer.current_piutang || 0) : Number(so.current_piutang_amount || 0);
+                          const soGrandTotal = so.grand_total || (so.items || []).reduce((s: number, it: any) => s + (it.subtotal || 0), 0);
+                          const soProjected = soCurrentPiutang + soGrandTotal;
+                          const isSoExceeding = soCreditLimit > 0 && soProjected > soCreditLimit;
+                          const isSoOverdue = Boolean(soCustomer?.has_overdue);
+                          const isSoTempo = so.payment_method === 'TEMPO' || (so as any).payment_method === 'KREDIT' || !so.payment_method;
+
+                          const soNeedsApproval =
+                            Boolean(so.requires_super_admin_approval) ||
+                            (isSoTempo && (isSoExceeding || isSoOverdue)) ||
+                            (isSoExceeding && soCreditLimit > 0);
+
+                          const soIsPending = soNeedsApproval && (so.credit_approval_status !== 'APPROVED');
+                          const soIsApproved = soNeedsApproval && (so.credit_approval_status === 'APPROVED');
+
+                          return (
+                            <div className="flex flex-col items-start gap-1">
+                              {getStatusBadge(so.status)}
+                              {soIsPending && (
+                                <span className="text-[10px] font-black text-red-700 bg-red-50 border border-red-300 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs animate-pulse">
+                                  ⚠️ Butuh Approval Super Admin
+                                </span>
+                              )}
+                              {soIsApproved && (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                  ✓ Approved Super Admin
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="px-6 py-3.5 text-right">
