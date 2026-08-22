@@ -111,12 +111,11 @@ export function CustomerOrderDetailModal({
       0
     );
 
-  const isConfirmedOrLater = order.status !== 'DIAJUKAN';
-  const isPaidOrLater =
-    order.status === 'DIBAYAR' ||
-    order.status === 'PROSES_GUDANG' ||
-    order.status === 'DIKIRIM' ||
-    order.status === 'DITERIMA';
+  const isConfirmedOrLater = order.status !== 'DIAJUKAN' && order.status !== 'PENDING_APPROVAL' && order.status !== 'CANCELLED';
+  const isPaid = order.payment_status === 'PAID' || invoice?.status === 'PAID';
+  const isPartiallyPaid = invoice?.status === 'PARTIALLY_PAID';
+  const hasProof = Boolean(invoice?.payment_proof_url || order.payment_proof_url);
+  const isPaymentPendingVerification = !isPaid && (invoice?.payment_verification_status === 'PENDING' || hasProof);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -189,7 +188,7 @@ export function CustomerOrderDetailModal({
               <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="font-bold text-amber-900 text-xs">
-                  Pesanan Sedang Menunggu Verifikasi Finance & Penerbitan Invoice
+                  Pesanan Sedang Menunggu Verifikasi Finance &amp; Penerbitan Invoice
                 </h4>
                 <p className="text-[11px] text-amber-800/90 leading-relaxed">
                   Tim Finance sedang memverifikasi ketersediaan stok fisik batch gudang, konfirmasi harga final, perhitungan PPN (11%), dan ongkos kirim. <strong>Invoice resmi akan segera diterbitkan sebelum Anda melakukan pembayaran.</strong> Nomor rekening dan form upload bukti transfer akan otomatis aktif setelah Invoice terbit.
@@ -198,65 +197,78 @@ export function CustomerOrderDetailModal({
             </div>
           )}
 
-          {/* ITEM BREAKDOWN TABLE (DETIL PESANAN) */}
-          <div className="space-y-2">
-            <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-blue-600" /> Rincian Varian Bibit Parfum Dipesan:
+          {/* ORDER ITEMS TABLE (DAFTAR ITEM) */}
+          <div>
+            <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2">
+              <span>Item Bibit Parfum Dipesan</span>
+              <span className="text-xs text-slate-400 font-normal">
+                ({order.items.length} jenis item)
+              </span>
             </h3>
 
             <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-100 border-b border-gray-200 text-slate-600 text-[10px] uppercase font-bold tracking-wide">
-                    <th className="px-4 py-2.5">Varian Bibit Parfum</th>
-                    <th className="px-4 py-2.5 text-right">Jumlah (Kg)</th>
-                    <th className="px-4 py-2.5 text-right">Harga / Kg (IDR)</th>
+              <table className="w-full text-xs text-left">
+                <thead className="bg-gray-50 border-b border-gray-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-2.5">Produk / Varian</th>
+                    <th className="px-4 py-2.5 text-center">Jumlah (Kg)</th>
+                    <th className="px-4 py-2.5 text-right">Harga Satuan (/Kg)</th>
                     <th className="px-4 py-2.5 text-right">Subtotal (IDR)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {order.items.map((item, idx) => {
-                    const price = item.unit_price_per_kg || 1850000;
-                    const subtotal = item.subtotal || item.qty_kg * price;
-
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50/80">
-                        <td className="px-4 py-3 font-semibold text-slate-800">
-                          {item.product_name}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-blue-700">
-                          {formatKg(item.qty_kg)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-slate-600">
-                          {formatIDR(price)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                          {formatIDR(subtotal)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {order.items.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50/60">
+                      <td className="px-4 py-2.5 font-medium text-slate-800">
+                        {item.product_name}
+                      </td>
+                      <td className="px-4 py-2.5 text-center font-mono font-bold text-blue-700">
+                        {formatKg(item.qty_kg)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-slate-600">
+                        {item.unit_price_per_kg ? (
+                          formatIDR(item.unit_price_per_kg)
+                        ) : (
+                          <span className="text-amber-600 text-[11px] italic font-normal">
+                            Menunggu Konfirmasi
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-900">
+                        {item.subtotal ? (
+                          formatIDR(item.subtotal)
+                        ) : (
+                          <span className="text-amber-600 text-[11px] italic font-normal">
+                            -
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   {(() => {
-                    const goodsTotal = order.total_goods_amount || order.items.reduce((sum, item) => sum + (item.unit_price_per_kg || 1850000) * item.qty_kg, 0);
-                    const ppnAmount = Math.round(goodsTotal * 0.11);
-                    const shippingCost = (order.shipping_type || 'FRANCO') === 'FRANCO' ? 0 : Number(order.shipping_cost || 0);
-                    const totalInvoice = isConfirmedOrLater ? (order.grand_total || (goodsTotal + ppnAmount + shippingCost)) : goodsTotal;
+                    const rawGoodsTotal = order.items.reduce(
+                      (sum, item) => sum + (Number(item.subtotal) || 0),
+                      0
+                    );
+                    const ppnAmount = Math.round(rawGoodsTotal * 0.11);
+                    const shippingCost = Number(order.shipping_cost) || 0;
+                    const totalInvoice = Number(order.grand_total) || (rawGoodsTotal + ppnAmount + shippingCost);
 
                     return (
                       <>
                         <tr className="bg-slate-50/80 border-t border-gray-200">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
-                            Subtotal Nilai Barang:
+                            Total Nilai Barang (DPP):
                           </td>
                           <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
-                            {formatIDR(goodsTotal)}
+                            {formatIDR(rawGoodsTotal)}
                           </td>
                         </tr>
                         <tr className="bg-slate-50/80 border-t border-gray-100">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
-                            PPN (11%):
+                            PPN 11%:
                           </td>
                           <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
                             {isConfirmedOrLater ? (
@@ -370,18 +382,26 @@ export function CustomerOrderDetailModal({
                   </h3>
                 </div>
 
-                {isPaidOrLater ? (
+                {isPaid ? (
                   <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> LUNAS / BUKTI TERVERIFIKASI
                   </span>
-                ) : (
+                ) : isPaymentPendingVerification ? (
                   <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" /> MENUNGGU UPLOAD BUKTI
+                    <Clock className="w-3.5 h-3.5 text-amber-600" /> MENUNGGU PENGECEKAN FINANCE
+                  </span>
+                ) : isPartiallyPaid ? (
+                  <span className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                    ⚡ DIBAYAR SEBAGIAN
+                  </span>
+                ) : (
+                  <span className="bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-500" /> MENUNGGU UPLOAD BUKTI
                   </span>
                 )}
               </div>
 
-              {isPaidOrLater ? (
+              {isPaid ? (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
@@ -390,19 +410,21 @@ export function CustomerOrderDetailModal({
                         Pembayaran Berhasil Dikonfirmasi & Verifikasi Lunas
                       </h4>
                       <p className="text-[11px] text-emerald-700 mt-0.5">
-                        Bukti transfer telah diterima oleh tim Finance & pesanan diproses ke Gudang.
+                        Bukti transfer telah diterima dan divalidasi oleh tim Keuangan Artaroma.
                       </p>
                     </div>
                   </div>
 
-                  <a
-                    href={invoice?.payment_proof_url || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=60'}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="bg-white border border-emerald-300 text-emerald-700 font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" /> Lihat Resi Transfer
-                  </a>
+                  {(invoice?.payment_proof_url || order.payment_proof_url) && (
+                    <a
+                      href={invoice?.payment_proof_url || order.payment_proof_url || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-white border border-emerald-300 text-emerald-700 font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" /> Lihat Resi Transfer
+                    </a>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={handleUploadSubmit} className="space-y-4">

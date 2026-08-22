@@ -187,6 +187,113 @@ export default function CustomerOrdersPage() {
     }
   };
 
+  const renderPaymentProofStatus = (so: SalesOrder, inv?: Invoice) => {
+    // 1. DIBATALKAN / CANCELLED
+    if (so.status === 'CANCELLED') {
+      return <span className="text-xs text-slate-400 italic">Pesanan Dibatalkan</span>;
+    }
+
+    // 2. STATUS LUNAS (PAID)
+    const isPaid = so.payment_status === 'PAID' || inv?.status === 'PAID';
+    if (isPaid) {
+      return (
+        <div className="space-y-1">
+          <span className="text-emerald-700 bg-emerald-50 border border-emerald-300 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Lunas Terverifikasi
+          </span>
+          {(inv?.payment_proof_url || so.payment_proof_url) && (
+            <button
+              onClick={() => {
+                setSelectedOrder(so);
+                setSelectedInvoice(inv || null);
+              }}
+              className="text-[11px] text-blue-600 hover:underline font-semibold block cursor-pointer text-left"
+            >
+              Lihat Bukti Transfer
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // 3. PEMBAYARAN SEBAGIAN (PARTIALLY_PAID)
+    if (inv?.status === 'PARTIALLY_PAID') {
+      return (
+        <div className="space-y-1">
+          <span className="text-purple-700 bg-purple-50 border border-purple-200 text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 w-max">
+            Dibayar Sebagian
+          </span>
+          <button
+            onClick={() => {
+              setSelectedOrder(so);
+              setSelectedInvoice(inv || null);
+            }}
+            className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Upload className="w-3 h-3" /> Upload Pelunasan
+          </button>
+        </div>
+      );
+    }
+
+    // 4. SUDAH UPLOAD BUKTI TRANSFER & MENUNGGU VALIDASI FINANCE
+    const hasUploadedProofPending =
+      inv?.payment_verification_status === 'PENDING' ||
+      (Boolean(so.payment_proof_url || inv?.payment_proof_url) && !isPaid);
+
+    if (hasUploadedProofPending) {
+      return (
+        <div className="space-y-1">
+          <span className="text-amber-800 bg-amber-50 border border-amber-300 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max animate-pulse">
+            <Clock className="w-3.5 h-3.5 text-amber-600" /> Pengecekan Finance
+          </span>
+          <button
+            onClick={() => {
+              setSelectedOrder(so);
+              setSelectedInvoice(inv || null);
+            }}
+            className="text-[11px] text-blue-600 hover:underline font-semibold block cursor-pointer text-left"
+          >
+            Lihat / Ganti Bukti
+          </button>
+        </div>
+      );
+    }
+
+    // 5. STATUS DIAJUKAN / PENDING_APPROVAL (Menunggu konfirmasi terbit invoice dari admin)
+    if (so.status === 'DIAJUKAN' || so.status === 'PENDING_APPROVAL') {
+      return (
+        <div className="space-y-1">
+          <span className="text-xs text-slate-400 italic block">
+            Menunggu Invoice Terbit
+          </span>
+          <button
+            onClick={() => {
+              setSelectedOrder(so);
+              setSelectedInvoice(inv || null);
+            }}
+            className="text-[11px] text-blue-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+          >
+            <Upload className="w-3 h-3" /> Upload Bukti (Opsional)
+          </button>
+        </div>
+      );
+    }
+
+    // 6. SUDAH TERBIT INVOICE / DIKONFIRMASI / PROSES GUDANG / DIKIRIM / DITERIMA TAPI BELUM BAYAR
+    return (
+      <button
+        onClick={() => {
+          setSelectedOrder(so);
+          setSelectedInvoice(inv || null);
+        }}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+      >
+        <Upload className="w-3.5 h-3.5" /> Upload Bukti Transfer
+      </button>
+    );
+  };
+
   const handleExportCustomerOrders = () => {
     exportSalesOrdersToXLSX(
       customerOrders,
@@ -294,7 +401,7 @@ export default function CustomerOrdersPage() {
                               setSelectedOrder(so);
                               setSelectedInvoice(inv || null);
                             }}
-                            className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-left"
+                            className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-left cursor-pointer"
                           >
                             {so.so_number} <ExternalLink className="w-3 h-3 text-blue-500" />
                           </button>
@@ -321,12 +428,6 @@ export default function CustomerOrdersPage() {
                               <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded font-normal italic border border-amber-200 block w-max">
                                 Menunggu Harga Admin
                               </span>
-                              <button
-                                onClick={() => handleSimulateAdminConfirm(so.so_number)}
-                                className="text-[10px] text-blue-600 hover:text-blue-800 underline block font-semibold"
-                              >
-                                ⚡ [Simulasi Konfirmasi Admin]
-                              </button>
                             </div>
                           )}
                         </td>
@@ -342,37 +443,7 @@ export default function CustomerOrdersPage() {
                         </td>
 
                         <td className="px-6 py-4">
-                          {so.status === 'DIAJUKAN' ? (
-                            <div className="space-y-1">
-                              <span className="text-xs text-slate-400 italic block">
-                                Menunggu konfirmasi admin
-                              </span>
-                              <button
-                                onClick={() => handleSimulateAdminConfirm(so.so_number)}
-                                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded"
-                              >
-                                + Set Status: DIKONFIRMASI
-                              </button>
-                            </div>
-                          ) : (so.status === 'DIKONFIRMASI' || so.status === 'APPROVED') ? (
-                            <button
-                              onClick={() => {
-                                setSelectedOrder(so);
-                                setSelectedInvoice(inv || null);
-                              }}
-                              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 transition-colors shadow-sm"
-                            >
-                              <Upload className="w-3.5 h-3.5" /> Upload Bukti Bayar
-                            </button>
-                          ) : inv?.payment_verification_status === 'PENDING' || so.status === 'DIBAYAR' ? (
-                            <span className="text-purple-700 bg-purple-50 border border-purple-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
-                              <Clock className="w-3.5 h-3.5" /> Pengecekan Finance
-                            </span>
-                          ) : (
-                            <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Lunas / Diterima
-                            </span>
-                          )}
+                          {renderPaymentProofStatus(so, inv)}
                         </td>
 
                         <td className="px-6 py-4 text-right space-x-2">

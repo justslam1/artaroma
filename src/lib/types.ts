@@ -289,6 +289,8 @@ export interface SalesOrder {
   items: SOItem[];
   shipments?: SOShipment[];
   invoice_id?: string;
+  payment_status?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
+  payment_proof_url?: string;
   received_by?: string;
   received_photo?: string;
   received_signature?: string;
