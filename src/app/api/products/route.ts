@@ -65,6 +65,15 @@ export async function GET(req: NextRequest) {
 
           const productVariants = allVariants.filter((v) => v.product_id === p.id);
 
+          // Sync variant_prices from product_variants
+          const vPricesMap: Record<string, number> = { ...(prices && typeof prices === 'object' ? prices : {}) };
+          productVariants.forEach((v) => {
+            const szKey = String(Math.round(Number(v.pack_size_kg)));
+            if (v.selling_price_per_kg && (!vPricesMap[szKey] || vPricesMap[szKey] === 0)) {
+              vPricesMap[szKey] = Number(v.selling_price_per_kg);
+            }
+          });
+
           const getBatchPackSize = (b: any): number => {
             if (b.pack_size_kg && [25, 5, 1].includes(Number(b.pack_size_kg))) return Number(b.pack_size_kg);
             const skuVal = (b.variant_sku || '').toUpperCase();
@@ -91,7 +100,7 @@ export async function GET(req: NextRequest) {
             ...p,
             applications: Array.isArray(apps) && apps.length > 0 ? apps : [p.application || 'Fine Fragrance'],
             pack_sizes: Array.isArray(sizes) ? sizes : [25, 5, 1],
-            variant_prices: (prices && typeof prices === 'object') ? prices : {},
+            variant_prices: vPricesMap,
             variant_names: (names && typeof names === 'object') ? names : {},
             variant_skus: (skus && typeof skus === 'object') ? skus : {},
             variants: productVariants,

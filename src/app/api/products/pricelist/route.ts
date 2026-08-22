@@ -152,6 +152,23 @@ export async function PUT(req: NextRequest) {
           );
         }
       }
+
+      // Sync products table (variant_prices JSON & base selling_price_per_kg)
+      const [allVRows]: any = await conn.query(
+        `SELECT pack_size_kg, selling_price_per_kg FROM product_variants WHERE product_id = ? AND is_active = TRUE`,
+        [product_id]
+      );
+      const vPricesMap: Record<string, number> = {};
+      if (allVRows && Array.isArray(allVRows)) {
+        allVRows.forEach((vr: any) => {
+          vPricesMap[String(Math.round(Number(vr.pack_size_kg)))] = Number(vr.selling_price_per_kg || 0);
+        });
+      }
+      const basePrice = vPricesMap['25'] || vPricesMap['5'] || vPricesMap['1'] || 0;
+      await conn.query(
+        `UPDATE products SET variant_prices = ?, selling_price_per_kg = ? WHERE id = ?`,
+        [JSON.stringify(vPricesMap), basePrice, product_id]
+      );
     });
 
     return NextResponse.json({
