@@ -93,12 +93,23 @@ export default function StockInventoryPage() {
   const [isOpnameOpen, setIsOpnameOpen] = useState(false);
   const [isRepackOpen, setIsRepackOpen] = useState(false);
 
-  // Form State for Repacking Varian Stok
+  // Mode Repack: 'SINGLE' (Pecah 1 Batch) | 'MULTI' (Gabung Banyak Batch Berbeda)
+  const [repackMode, setRepackMode] = useState<'SINGLE' | 'MULTI'>('SINGLE');
+
+  // Form State for Single Repacking Varian Stok
   const [repackForm, setRepackForm] = useState({
     source_batch_id: '',
     target_pack_size: 1,
     repack_qty_kg: 1.0,
     loss_kg: 0.0,
+  });
+
+  // Form State for Multi-Batch Repacking (Kombinasi / Blending)
+  const [multiRepackForm, setMultiRepackForm] = useState({
+    product_id: '',
+    target_pack_size: 5,
+    new_batch_number: '',
+    selectedSources: {} as Record<string, number>, // batchId -> qty_kg
   });
   const [isRepackingSubmitting, setIsRepackingSubmitting] = useState(false);
 
@@ -248,53 +259,115 @@ export default function StockInventoryPage() {
     setIsOpnameOpen(false);
   };
 
-  // --- REPACK SUBMIT ---
+  // --- REPACK SUBMIT (SINGLE & MULTI-BATCH) ---
   const handleRepackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repackForm.source_batch_id) {
-      alert('Silakan pilih batch sumber terlebih dahulu.');
-      return;
-    }
 
-    const sourceBatch = batches.find((b) => b.id === repackForm.source_batch_id);
-    if (!sourceBatch) {
-      alert('Batch sumber tidak valid.');
-      return;
-    }
-
-    const qty = Number(repackForm.repack_qty_kg);
-    const curQty = Number(sourceBatch.current_qty_kg || 0);
-
-    if (qty > curQty) {
-      alert(`Stok batch sumber tidak mencukupi. Tersedia: ${curQty} Kg, Diminta: ${qty} Kg`);
-      return;
-    }
-
-    setIsRepackingSubmitting(true);
-    try {
-      const res = await fetch('/api/stock-batches/repack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_batch_id: repackForm.source_batch_id,
-          target_pack_size: Number(repackForm.target_pack_size),
-          repack_qty_kg: qty,
-          loss_kg: 0,
-        }),
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        setIsRepackOpen(false);
-        await fetchStockData();
-        alert(json.message || 'Repack berhasil dijalankan!');
-      } else {
-        alert(`Gagal memproses repack: ${json.message}`);
+    if (repackMode === 'MULTI') {
+      if (!multiRepackForm.product_id) {
+        alert('Silakan pilih produk induk terlebih dahulu.');
+        return;
       }
-    } catch (err: any) {
-      alert(`Error koneksi: ${err.message}`);
-    } finally {
-      setIsRepackingSubmitting(false);
+
+      const activeSources = Object.entries(multiRepackForm.selectedSources)
+        .filter(([_, qty]) => Number(qty) > 0)
+        .map(([batch_id, qty_kg]) => ({ batch_id, qty_kg: Number(qty_kg) }));
+
+      if (activeSources.length === 0) {
+        alert('Harap masukkan jumlah Kg yang akan diambil dari minimal satu batch.');
+        return;
+      }
+
+      const totalInputKg = activeSources.reduce((acc, s) => acc + s.qty_kg, 0);
+      const targetPackSize = Number(multiRepackForm.target_pack_size);
+
+      // Validate stock availability for each batch
+      for (const src of activeSources) {
+        const b = batches.find((x) => x.id === src.batch_id);
+        const cur = Number(b?.current_qty_kg || 0);
+        if (src.qty_kg > cur) {
+          alert(`Stok batch ${b?.batch_number || src.batch_id} tidak mencukupi. Tersedia: ${cur} Kg, Diminta: ${src.qty_kg} Kg`);
+          return;
+        }
+      }
+
+      setIsRepackingSubmitting(true);
+      try {
+        const res = await fetch('/api/stock-batches/repack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'MULTI',
+            product_id: multiRepackForm.product_id,
+            target_pack_size: targetPackSize,
+            new_batch_number: multiRepackForm.new_batch_number,
+            sources: activeSources,
+            loss_kg: 0,
+          }),
+        });
+
+        const json = await res.json();
+        if (json.success) {
+          setIsRepackOpen(false);
+          await fetchStockData();
+          alert(json.message || 'Repack gabungan multi-batch berhasil dijalankan!');
+        } else {
+          alert(`Gagal memproses repack: ${json.message}`);
+        }
+      } catch (err: any) {
+        alert(`Error koneksi: ${err.message}`);
+      } finally {
+        setIsRepackingSubmitting(false);
+      }
+
+    } else {
+      // SINGLE BATCH REPACK
+      if (!repackForm.source_batch_id) {
+        alert('Silakan pilih batch sumber terlebih dahulu.');
+        return;
+      }
+
+      const sourceBatch = batches.find((b) => b.id === repackForm.source_batch_id);
+      if (!sourceBatch) {
+        alert('Batch sumber tidak valid.');
+        return;
+      }
+
+      const qty = Number(repackForm.repack_qty_kg);
+      const curQty = Number(sourceBatch.current_qty_kg || 0);
+
+      if (qty > curQty) {
+        alert(`Stok batch sumber tidak mencukupi. Tersedia: ${curQty} Kg, Diminta: ${qty} Kg`);
+        return;
+      }
+
+      setIsRepackingSubmitting(true);
+      try {
+        const res = await fetch('/api/stock-batches/repack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'SINGLE',
+            source_batch_id: repackForm.source_batch_id,
+            target_pack_size: Number(repackForm.target_pack_size),
+            repack_qty_kg: qty,
+            loss_kg: 0,
+          }),
+        });
+
+        const json = await res.json();
+        if (json.success) {
+          setIsRepackOpen(false);
+          await fetchStockData();
+          alert(json.message || 'Repack berhasil dijalankan!');
+        } else {
+          alert(`Gagal memproses repack: ${json.message}`);
+        }
+      } catch (err: any) {
+        alert(`Error koneksi: ${err.message}`);
+      } finally {
+        setIsRepackingSubmitting(false);
+      }
     }
   };
 
@@ -1186,167 +1259,445 @@ export default function StockInventoryPage() {
         </div>
       )}
 
-      {/* MODAL 4: REPACK VARIAN STOK */}
+      {/* MODAL 4: REPACK VARIAN STOK (SINGLE & MULTI-BATCH BLENDING) */}
       {isRepackOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden my-8">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8 animate-in fade-in">
+            {/* Modal Header */}
             <div className="bg-purple-700 px-6 py-4 flex items-center justify-between text-white">
-              <div className="flex items-center gap-2">
-                <RotateCcw className="w-5 h-5" />
+              <div className="flex items-center gap-2.5">
+                <RotateCcw className="w-5 h-5 text-purple-200" />
                 <div>
                   <h3 className="font-bold text-base">Proses Repack Varian Stok</h3>
-                  <p className="text-xs text-purple-200">Pecah kemasan besar menjadi ukuran kemasan lebih kecil</p>
+                  <p className="text-xs text-purple-200">Pecah kemasan besar atau gabungkan sisa batch (Multi-Batch Blending)</p>
                 </div>
               </div>
-              <button onClick={() => setIsRepackOpen(false)} className="text-purple-200 hover:text-white">
+              <button onClick={() => setIsRepackOpen(false)} className="text-purple-200 hover:text-white p-1 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleRepackSubmit} className="p-6 space-y-4 text-xs">
-              {/* 1. Pilih Batch Sumber */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Batch Sumber (Varian Besar)</label>
-                <select
-                  value={repackForm.source_batch_id}
-                  onChange={(e) => {
-                    const selected = batches.find((b) => b.id === e.target.value);
-                    setRepackForm({
-                      ...repackForm,
-                      source_batch_id: e.target.value,
-                      // reset repack quantity based on new source pack size
-                      repack_qty_kg: selected ? Math.min(1.0, Number(selected.current_qty_kg || 0)) : 1.0,
-                    });
-                  }}
-                  className="w-full bg-white border border-gray-300 rounded-lg p-2 font-bold text-slate-800 text-xs font-mono"
-                >
-                  <option value="">-- Pilih Batch Lot Sumber --</option>
-                  {batches
-                    .filter((b) => Number(b.current_qty_kg || 0) > 0)
-                    .map((b) => {
-                      const prodName = products.find((p) => p.id === b.product_id)?.name || 'Produk';
-                      return (
-                        <option key={b.id} value={b.id}>
-                          {prodName} | {b.batch_number} ({formatKg(b.current_qty_kg)} Tersedia)
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
+            {/* Mode Tab Switcher */}
+            <div className="flex border-b border-purple-100 bg-purple-50/50 p-1.5 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRepackMode('SINGLE')}
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                  repackMode === 'SINGLE'
+                    ? 'bg-purple-700 text-white shadow-sm'
+                    : 'bg-transparent text-purple-800 hover:bg-purple-100/60'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" /> 1. Repack Tunggal (Pecah 1 Drum)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRepackMode('MULTI');
+                  if (!multiRepackForm.product_id && products.length > 0) {
+                    const firstProd = products.find(p => batches.some(b => b.product_id === p.id && Number(b.current_qty_kg || 0) > 0));
+                    if (firstProd) {
+                      const autoBatch = `RPK-${firstProd.sku || 'MIX'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+                      setMultiRepackForm({
+                        product_id: firstProd.id,
+                        target_pack_size: 5,
+                        new_batch_number: autoBatch,
+                        selectedSources: {},
+                      });
+                    }
+                  }
+                }}
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                  repackMode === 'MULTI'
+                    ? 'bg-purple-700 text-white shadow-sm'
+                    : 'bg-transparent text-purple-800 hover:bg-purple-100/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" /> 2. Repack Gabungan (Kombinasi Multi-Batch)
+              </button>
+            </div>
 
-              {/* Tampilkan Informasi Batch Sumber Terpilih */}
-              {(() => {
-                const b = batches.find((x) => x.id === repackForm.source_batch_id);
-                if (!b) return null;
-                const prodName = products.find((p) => p.id === b.product_id)?.name || 'Produk';
-                return (
-                  <div className="bg-slate-50 border border-gray-200 rounded-xl p-3 space-y-1">
-                    <div className="font-bold text-slate-700">Rincian Batch Sumber:</div>
-                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-medium">
-                      <div>Nama Produk: <span className="font-bold text-slate-800">{prodName}</span></div>
-                      <div>No. Batch: <span className="font-bold text-blue-700 font-mono">{b.batch_number}</span></div>
-                      <div>Kemasan Awal: <span className="font-bold text-slate-800 font-mono">{b.pack_size_kg || 25} Kg</span></div>
-                      <div>Stok Saat Ini: <span className="font-bold text-emerald-700 font-mono">{formatKg(b.current_qty_kg)} ({Math.max(0, Math.round(Number(b.current_qty_kg || 0) / (b.pack_size_kg || 25)))} unit)</span></div>
-                      <div>Kadaluarsa: <span className="font-bold text-slate-800 font-mono">{formatDate(b.expiry_date)}</span></div>
-                      <div>Modal/Kg: <span className="font-bold text-slate-800 font-mono">{formatIDR(b.unit_cost_per_kg)}</span></div>
+            <form onSubmit={handleRepackSubmit} className="p-6 space-y-4 text-xs">
+              {repackMode === 'MULTI' ? (
+                /* ───────────────────────────────────────────────────────────── */
+                /* MODE MULTI-BATCH (BLENDING / GABUNG BATCH BERBEDA)            */
+                /* ───────────────────────────────────────────────────────────── */
+                <div className="space-y-4">
+                  {/* 1. Pilih Produk Induk */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Pilih Produk Induk</label>
+                    <select
+                      value={multiRepackForm.product_id}
+                      onChange={(e) => {
+                        const pId = e.target.value;
+                        const prod = products.find((p) => p.id === pId);
+                        const autoBatch = prod ? `RPK-${prod.sku || 'MIX'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}` : '';
+                        setMultiRepackForm({
+                          ...multiRepackForm,
+                          product_id: pId,
+                          new_batch_number: autoBatch,
+                          selectedSources: {},
+                        });
+                      }}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2.5 font-bold text-slate-800 text-xs"
+                      required
+                    >
+                      <option value="">-- Pilih Produk yang akan Digabung --</option>
+                      {products
+                        .filter((p) => batches.some((b) => b.product_id === p.id && Number(b.current_qty_kg || 0) > 0))
+                        .map((p) => {
+                          const activeBatchesCount = batches.filter((b) => b.product_id === p.id && Number(b.current_qty_kg || 0) > 0).length;
+                          return (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({activeBatchesCount} Batch Aktif Tersedia)
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
+
+                  {/* 2. Daftar Batch Tersedia untuk Produk Ini */}
+                  {multiRepackForm.product_id && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">Pilih & Tentukan Jumlah Ambil dari Setiap Batch Sumber:</label>
+                        <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-full">
+                          Prinsip FEFO Otomatis
+                        </span>
+                      </div>
+
+                      <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                        {batches
+                          .filter((b) => b.product_id === multiRepackForm.product_id && Number(b.current_qty_kg || 0) > 0)
+                          .map((b) => {
+                            const curQty = Number(b.current_qty_kg || 0);
+                            const takenQty = multiRepackForm.selectedSources[b.id] !== undefined ? multiRepackForm.selectedSources[b.id] : 0;
+                            const isSelected = takenQty > 0;
+
+                            return (
+                              <div
+                                key={b.id}
+                                className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors ${
+                                  isSelected ? 'bg-purple-50/60' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="space-y-0.5 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-blue-700 font-mono text-xs">{b.batch_number}</span>
+                                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                      Kemasan Awal: {b.pack_size_kg || 25} Kg
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2">
+                                    <span>Tersedia: <strong className="text-emerald-700 font-mono">{formatKg(curQty)}</strong></span>
+                                    <span className="text-slate-300">|</span>
+                                    <span>Kadaluarsa: <strong className="text-amber-700 font-mono">{formatDate(b.expiry_date)}</strong></span>
+                                    <span className="text-slate-300">|</span>
+                                    <span>HPP: <strong className="text-slate-700 font-mono">{formatIDR(b.unit_cost_per_kg)}/Kg</strong></span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      min="0"
+                                      max={curQty}
+                                      value={takenQty || ''}
+                                      placeholder="0"
+                                      onChange={(e) => {
+                                        const val = Math.max(0, Math.min(curQty, Number(e.target.value) || 0));
+                                        setMultiRepackForm({
+                                          ...multiRepackForm,
+                                          selectedSources: {
+                                            ...multiRepackForm.selectedSources,
+                                            [b.id]: val,
+                                          },
+                                        });
+                                      }}
+                                      className="w-24 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-right font-mono font-bold text-xs text-purple-800 pr-6"
+                                    />
+                                    <span className="absolute right-2 top-2 text-[10px] text-slate-400 font-bold pointer-events-none">Kg</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextVal = takenQty === curQty ? 0 : curQty;
+                                      setMultiRepackForm({
+                                        ...multiRepackForm,
+                                        selectedSources: {
+                                          ...multiRepackForm.selectedSources,
+                                          [b.id]: nextVal,
+                                        },
+                                      });
+                                    }}
+                                    className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border transition-colors ${
+                                      takenQty === curQty
+                                        ? 'bg-purple-100 border-purple-300 text-purple-800'
+                                        : 'bg-white border-gray-200 text-slate-600 hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    {takenQty === curQty ? 'Batal' : 'Ambil Semua'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Pilih Kemasan Varian Tujuan */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Kemasan Varian Tujuan</label>
+                    <div className="flex flex-wrap gap-4">
+                      {[
+                        { val: 1, label: '1 Kg (Botol Aluminium)' },
+                        { val: 5, label: '5 Kg (Jerigen Sedang)' },
+                        { val: 25, label: '25 Kg (Drum Standar)' },
+                      ].map((opt) => (
+                        <label key={opt.val} className="flex items-center gap-1.5 font-bold cursor-pointer text-slate-700">
+                          <input
+                            type="radio"
+                            name="multi_target_pack_size"
+                            checked={multiRepackForm.target_pack_size === opt.val}
+                            onChange={() => setMultiRepackForm({ ...multiRepackForm, target_pack_size: opt.val })}
+                            className="text-purple-600 focus:ring-purple-500"
+                          />
+                          <span>{opt.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* 2. Pilih Kemasan Varian Tujuan */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1.5">Kemasan Varian Tujuan</label>
-                <div className="flex gap-4">
-                  {[
-                    { val: 1, label: '1 Kg (Botol Aluminium)' },
-                    { val: 5, label: '5 Kg (Jerigen Sedang)' },
-                  ].map((opt) => {
-                    const sourceBatch = batches.find((b) => b.id === repackForm.source_batch_id);
-                    const sourcePackSize = sourceBatch?.pack_size_kg || 25;
-                    // Disable options that are larger or equal to source pack size
-                    const disabled = opt.val >= sourcePackSize;
+                  {/* 4. Nomor Batch Hasil Repack */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Nomor Batch Hasil Repack (Otomatis / Kustom)</label>
+                    <input
+                      type="text"
+                      required
+                      value={multiRepackForm.new_batch_number}
+                      onChange={(e) => setMultiRepackForm({ ...multiRepackForm, new_batch_number: e.target.value })}
+                      placeholder="Contoh: RPK-CIT-2026-01"
+                      className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold text-xs text-blue-700"
+                    />
+                  </div>
+
+                  {/* 5. Live Estimasi Multi-Batch Blending */}
+                  {(() => {
+                    const activeEntries = Object.entries(multiRepackForm.selectedSources)
+                      .filter(([_, qty]) => Number(qty) > 0);
+                    
+                    const totalInputKg = activeEntries.reduce((acc, [_, qty]) => acc + Number(qty), 0);
+                    const targetSize = Number(multiRepackForm.target_pack_size);
+                    const targetUnits = totalInputKg > 0 ? Math.ceil(totalInputKg / targetSize) : 0;
+
+                    let totalCost = 0;
+                    let earliestExpiry: string | null = null;
+
+                    activeEntries.forEach(([bId, qty]) => {
+                      const b = batches.find((x) => x.id === bId);
+                      if (b) {
+                        totalCost += (Number(qty) * Number(b.unit_cost_per_kg || 0));
+                        const exp = b.expiry_date ? String(b.expiry_date).split('T')[0] : null;
+                        if (exp && (!earliestExpiry || exp < earliestExpiry)) {
+                          earliestExpiry = exp;
+                        }
+                      }
+                    });
+
+                    const weightedAvgHpp = totalInputKg > 0 ? Math.round(totalCost / totalInputKg) : 0;
 
                     return (
-                      <label key={opt.val} className={`flex items-center gap-1.5 font-bold cursor-pointer ${disabled ? 'opacity-40 cursor-not-allowed' : 'text-slate-700'}`}>
-                        <input
-                          type="radio"
-                          name="target_pack_size"
-                          disabled={disabled}
-                          checked={repackForm.target_pack_size === opt.val}
-                          onChange={() => setRepackForm({ ...repackForm, target_pack_size: opt.val })}
-                          className="text-purple-600 focus:ring-purple-500"
-                        />
-                        <span>{opt.label}</span>
-                      </label>
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2.5">
+                        <div className="font-bold text-purple-800 text-[11px] uppercase tracking-wider flex items-center justify-between">
+                          <span>Kalkulasi Otomatis Hasil Repack Gabungan:</span>
+                          <span className="text-purple-600 font-mono lowercase">{activeEntries.length} batch dikombinasikan</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700 text-xs font-medium border-t border-purple-100 pt-2">
+                          <div>
+                            <span className="text-slate-500">Total Bahan Diambil:</span>
+                            <div className="font-bold text-slate-800 font-mono text-sm">{formatKg(totalInputKg)}</div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Estimasi Hasil Varian ({targetSize} Kg):</span>
+                            <div className="font-bold text-purple-700 font-mono text-sm">
+                              +{formatKg(totalInputKg)} ({targetUnits} Unit)
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 flex items-center gap-1">
+                              <span>Tanggal Kadaluarsa Hasil:</span>
+                              <span className="text-[9px] text-amber-700 font-normal">(FEFO Tertua)</span>
+                            </span>
+                            <div className="font-bold text-amber-800 font-mono">
+                              {earliestExpiry ? formatDate(earliestExpiry) : '-'}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">HPP Rata-Rata Tertimbang:</span>
+                            <div className="font-bold text-emerald-700 font-mono">
+                              {formatIDR(weightedAvgHpp)} / Kg
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
-                  })}
+                  })()}
                 </div>
-              </div>
+              ) : (
+                /* ───────────────────────────────────────────────────────────── */
+                /* MODE SINGLE BATCH (PECAH 1 BATCH BESAR KE KECIL)              */
+                /* ───────────────────────────────────────────────────────────── */
+                <div className="space-y-4">
+                  {/* 1. Pilih Batch Sumber */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Batch Sumber (Varian Besar)</label>
+                    <select
+                      value={repackForm.source_batch_id}
+                      onChange={(e) => {
+                        const selected = batches.find((b) => b.id === e.target.value);
+                        setRepackForm({
+                          ...repackForm,
+                          source_batch_id: e.target.value,
+                          repack_qty_kg: selected ? Math.min(1.0, Number(selected.current_qty_kg || 0)) : 1.0,
+                        });
+                      }}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2.5 font-bold text-slate-800 text-xs font-mono"
+                      required
+                    >
+                      <option value="">-- Pilih Batch Lot Sumber --</option>
+                      {batches
+                        .filter((b) => Number(b.current_qty_kg || 0) > 0)
+                        .map((b) => {
+                          const prodName = products.find((p) => p.id === b.product_id)?.name || 'Produk';
+                          return (
+                            <option key={b.id} value={b.id}>
+                              {prodName} | {b.batch_number} ({formatKg(b.current_qty_kg)} Tersedia)
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
 
-              {/* 3. Tentukan Jumlah Repack */}
-              <div className="w-full">
-                <label className="font-bold text-slate-700 block mb-1">Jumlah Di-repack (Kg)</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={repackForm.repack_qty_kg}
-                  onChange={(e) => setRepackForm({ ...repackForm, repack_qty_kg: Number(e.target.value) })}
-                  className="w-full bg-white border border-gray-300 rounded-lg p-2 font-mono text-xs font-bold text-purple-700"
-                />
-                <p className="text-[10px] text-slate-400 mt-0.5">Dapat dilakukan dalam kelipatan 1 Kg</p>
-              </div>
-
-              {/* 4. Live Estimasi Konversi */}
-              {(() => {
-                const b = batches.find((x) => x.id === repackForm.source_batch_id);
-                if (!b) return null;
-                const sourceQty = Number(b.current_qty_kg || 0);
-                const repackQty = Number(repackForm.repack_qty_kg);
-                const targetSize = Number(repackForm.target_pack_size);
-                
-                const targetQty = repackQty;
-                const targetUnits = Math.ceil(targetQty / targetSize);
-                const remainingQty = Math.max(0, sourceQty - repackQty);
-
-                return (
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
-                    <div className="font-bold text-purple-800 text-[11px] uppercase tracking-wider">Estimasi Hasil Repack:</div>
-                    <div className="space-y-1 text-slate-700 text-xs font-medium">
-                      <div className="flex justify-between">
-                        <span>Sisa Batch Sumber ({b.pack_size_kg} Kg):</span>
-                        <span className="font-bold text-slate-800 font-mono">{formatKg(remainingQty)}</span>
+                  {/* Tampilkan Informasi Batch Sumber Terpilih */}
+                  {(() => {
+                    const b = batches.find((x) => x.id === repackForm.source_batch_id);
+                    if (!b) return null;
+                    const prodName = products.find((p) => p.id === b.product_id)?.name || 'Produk';
+                    return (
+                      <div className="bg-slate-50 border border-gray-200 rounded-xl p-3.5 space-y-1">
+                        <div className="font-bold text-slate-700">Rincian Batch Sumber:</div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-medium">
+                          <div>Nama Produk: <span className="font-bold text-slate-800">{prodName}</span></div>
+                          <div>No. Batch: <span className="font-bold text-blue-700 font-mono">{b.batch_number}</span></div>
+                          <div>Kemasan Awal: <span className="font-bold text-slate-800 font-mono">{b.pack_size_kg || 25} Kg</span></div>
+                          <div>Stok Saat Ini: <span className="font-bold text-emerald-700 font-mono">{formatKg(b.current_qty_kg)} ({Math.max(0, Math.round(Number(b.current_qty_kg || 0) / (b.pack_size_kg || 25)))} unit)</span></div>
+                          <div>Kadaluarsa: <span className="font-bold text-slate-800 font-mono">{formatDate(b.expiry_date)}</span></div>
+                          <div>Modal/Kg: <span className="font-bold text-slate-800 font-mono">{formatIDR(b.unit_cost_per_kg)}</span></div>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Hasil Varian Baru ({targetSize} Kg):</span>
-                        <span className="font-bold text-purple-700 font-mono">+{formatKg(targetQty)} ({targetUnits} Unit)</span>
-                      </div>
+                    );
+                  })()}
+
+                  {/* 2. Pilih Kemasan Varian Tujuan */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Kemasan Varian Tujuan</label>
+                    <div className="flex gap-4">
+                      {[
+                        { val: 1, label: '1 Kg (Botol Aluminium)' },
+                        { val: 5, label: '5 Kg (Jerigen Sedang)' },
+                      ].map((opt) => {
+                        const sourceBatch = batches.find((b) => b.id === repackForm.source_batch_id);
+                        const sourcePackSize = sourceBatch?.pack_size_kg || 25;
+                        const disabled = opt.val >= sourcePackSize;
+
+                        return (
+                          <label key={opt.val} className={`flex items-center gap-1.5 font-bold cursor-pointer ${disabled ? 'opacity-40 cursor-not-allowed' : 'text-slate-700'}`}>
+                            <input
+                              type="radio"
+                              name="single_target_pack_size"
+                              disabled={disabled}
+                              checked={repackForm.target_pack_size === opt.val}
+                              onChange={() => setRepackForm({ ...repackForm, target_pack_size: opt.val })}
+                              className="text-purple-600 focus:ring-purple-500"
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })()}
 
+                  {/* 3. Tentukan Jumlah Repack */}
+                  <div className="w-full">
+                    <label className="font-bold text-slate-700 block mb-1">Jumlah Di-repack (Kg)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      required
+                      value={repackForm.repack_qty_kg}
+                      onChange={(e) => setRepackForm({ ...repackForm, repack_qty_kg: Number(e.target.value) })}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2.5 font-mono text-xs font-bold text-purple-700"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Dapat dilakukan dalam kelipatan 1 Kg</p>
+                  </div>
+
+                  {/* 4. Live Estimasi Konversi */}
+                  {(() => {
+                    const b = batches.find((x) => x.id === repackForm.source_batch_id);
+                    if (!b) return null;
+                    const sourceQty = Number(b.current_qty_kg || 0);
+                    const repackQty = Number(repackForm.repack_qty_kg);
+                    const targetSize = Number(repackForm.target_pack_size);
+                    
+                    const targetQty = repackQty;
+                    const targetUnits = Math.ceil(targetQty / targetSize);
+                    const remainingQty = Math.max(0, sourceQty - repackQty);
+
+                    return (
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+                        <div className="font-bold text-purple-800 text-[11px] uppercase tracking-wider">Estimasi Hasil Repack:</div>
+                        <div className="space-y-1 text-slate-700 text-xs font-medium">
+                          <div className="flex justify-between">
+                            <span>Sisa Batch Sumber ({b.pack_size_kg} Kg):</span>
+                            <span className="font-bold text-slate-800 font-mono">{formatKg(remainingQty)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Hasil Varian Baru ({targetSize} Kg):</span>
+                            <span className="font-bold text-purple-700 font-mono">+{formatKg(targetQty)} ({targetUnits} Unit)</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Action Buttons */}
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsRepackOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium"
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isRepackingSubmitting}
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold shadow-md flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {isRepackingSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" /> Memproses...
                     </>
                   ) : (
-                    'Jalankan Repack Varian'
+                    <>
+                      <Check className="w-4 h-4" /> {repackMode === 'MULTI' ? 'Jalankan Repack Gabungan' : 'Jalankan Repack Varian'}
+                    </>
                   )}
                 </button>
               </div>
