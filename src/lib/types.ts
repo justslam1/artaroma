@@ -190,7 +190,8 @@ export interface POShipment {
   id: string;
   trip_number: number;
   shipment_date: string;
-  surat_jalan_name: string;
+  surat_jalan_number?: string;
+  surat_jalan_name?: string;
   surat_jalan_data?: string; // base64 or URL of the uploaded document
   status: 'DIKIRIM' | 'DITERIMA';
   items: POShipmentItem[];

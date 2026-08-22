@@ -32,6 +32,7 @@ import {
   XCircle,
   AlertTriangle,
   FileSpreadsheet,
+  Calendar,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -66,8 +67,10 @@ export default function PODetailPage() {
   // Goods Receipt Modal State
   const [isGRModalOpen, setIsGRModalOpen] = useState(false);
 
-  // Confirmed shipping quantities state
+  // Confirmed shipping quantities & Surat Jalan state
   const [shippedQtys, setShippedQtys] = useState<Record<string, number>>({});
+  const [suratJalanNumber, setSuratJalanNumber] = useState<string>('');
+  const [suratJalanDate, setSuratJalanDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [suratJalanName, setSuratJalanName] = useState<string>('');
   const [suratJalanData, setSuratJalanData] = useState<string>('');
   const [activeShipmentForGR, setActiveShipmentForGR] = useState<any | null>(null);
@@ -241,16 +244,20 @@ export default function PODetailPage() {
 
   const handleAddShipment = (
     itemsShipped: { po_item_id?: string; product_id: string; product_name?: string; qty_shipped_kg: number }[],
-    sjName: string,
+    sjNumber: string,
+    sjDate?: string,
+    sjName?: string,
     sjData?: string
   ) => {
     const nextTripNumber = (po.shipments?.length || 0) + 1;
+    const finalSJNumber = (sjNumber || '').trim() || `SJ-${po.po_number}-${nextTripNumber}`;
     const newShipment = {
       id: `sj-${Date.now()}`,
       trip_number: nextTripNumber,
-      shipment_date: new Date().toISOString().split('T')[0],
-      surat_jalan_name: sjName,
-      surat_jalan_data: sjData || suratJalanData,
+      shipment_date: sjDate || suratJalanDate || new Date().toISOString().split('T')[0],
+      surat_jalan_number: finalSJNumber,
+      surat_jalan_name: sjName || finalSJNumber,
+      surat_jalan_data: sjData || suratJalanData || undefined,
       status: 'DIKIRIM' as const,
       items: itemsShipped,
     };
@@ -285,6 +292,8 @@ export default function PODetailPage() {
 
     // Reset local upload states
     setShippedQtys({});
+    setSuratJalanNumber('');
+    setSuratJalanDate(new Date().toISOString().split('T')[0]);
     setSuratJalanName('');
     setSuratJalanData('');
   };
@@ -923,16 +932,57 @@ export default function PODetailPage() {
                 </div>
               </div>
 
-              {/* Surat Jalan File Upload */}
-              <div className="space-y-2 pt-2">
-                <div className="font-bold text-slate-750 uppercase tracking-wider text-[10px] text-slate-700">
-                  Upload Dokumen Surat Jalan dari Distributor <span className="text-red-500">*</span>
+              {/* Tanggal & Nomor Surat Jalan (Wajib) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-blue-600" /> Tanggal Surat Jalan <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={suratJalanDate}
+                    onChange={(e) => setSuratJalanDate(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-blue-600" /> Nomor Surat Jalan Distributor <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: SJ-GIV-2026-0889"
+                    value={suratJalanNumber}
+                    onChange={(e) => setSuratJalanNumber(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 placeholder:font-normal placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              {/* Surat Jalan File Upload (Opsional) */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold uppercase tracking-wider text-[10px] text-slate-700 flex items-center gap-1">
+                    Upload Foto / Dokumen Surat Jalan
+                    <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>
+                  </div>
+                  {suratJalanName && (
+                    <button
+                      type="button"
+                      onClick={() => { setSuratJalanName(''); setSuratJalanData(''); }}
+                      className="text-[10px] text-red-500 hover:underline font-bold"
+                    >
+                      Hapus Lampiran
+                    </button>
+                  )}
                 </div>
                 <div className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 text-center bg-slate-50/30 transition-all relative cursor-pointer">
                   <input
                     type="file"
                     accept="image/*,.pdf"
-                    required
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
                         const file = e.target.files[0];
@@ -947,13 +997,13 @@ export default function PODetailPage() {
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                   />
                   {suratJalanName ? (
-                    <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono">
+                    <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono text-xs">
                       <FileText className="w-4 h-4 text-blue-500" />
                       <span>{suratJalanName}</span>
                     </div>
                   ) : (
                     <div className="space-y-1 text-slate-500">
-                      <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file Surat Jalan di sini</div>
+                      <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file foto/PDF Surat Jalan di sini (Opsional)</div>
                       <div className="text-[10px] text-slate-400">Mendukung format gambar (JPG/PNG) atau PDF</div>
                     </div>
                   )}
@@ -963,8 +1013,12 @@ export default function PODetailPage() {
               <div className="pt-2 border-t border-gray-155 flex justify-end">
                 <button
                   onClick={() => {
-                    if (!suratJalanName) {
-                      alert('Harap unggah Surat Jalan dari distributor terlebih dahulu.');
+                    if (!suratJalanDate) {
+                      alert('Harap masukkan Tanggal Surat Jalan terlebih dahulu.');
+                      return;
+                    }
+                    if (!suratJalanNumber.trim()) {
+                      alert('Harap masukkan Nomor Surat Jalan dari distributor terlebih dahulu.');
                       return;
                     }
                     
@@ -979,7 +1033,7 @@ export default function PODetailPage() {
                       };
                     }).filter(si => si.qty_shipped_kg > 0);
 
-                    handleAddShipment(itemsShipped, suratJalanName);
+                    handleAddShipment(itemsShipped, suratJalanNumber, suratJalanDate, suratJalanName, suratJalanData);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-md inline-flex items-center gap-1.5 transition-colors animate-in fade-in"
                 >
@@ -1019,15 +1073,15 @@ export default function PODetailPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-b border-slate-100 py-2.5 my-1">
-                        <div className="flex items-center gap-1.5 text-slate-600 font-semibold flex-wrap">
+                        <div className="flex items-center gap-2 text-slate-600 font-semibold flex-wrap">
                           <FileText className="w-3.5 h-3.5 text-blue-500" />
-                          <span>Surat Jalan: <strong className="text-slate-800 font-mono">{s.surat_jalan_name}</strong></span>
+                          <span>No. Surat Jalan: <strong className="text-slate-800 font-mono">{s.surat_jalan_number || s.surat_jalan_name || '-'}</strong></span>
                           <button
                             onClick={() => handleDownloadSuratJalan(s)}
                             className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ml-1 cursor-pointer transition-colors"
-                            title="Unduh Surat Jalan ini"
+                            title="Unduh / Cetak Dokumen Surat Jalan"
                           >
-                            <Download className="w-3 h-3" /> Unduh
+                            <Download className="w-3 h-3" /> {s.surat_jalan_data ? 'Unduh Lampiran' : 'Cetak Dokumen'}
                           </button>
                         </div>
                         
@@ -1142,16 +1196,57 @@ export default function PODetailPage() {
                       </div>
                     </div>
 
-                    {/* Surat Jalan Upload */}
-                    <div className="space-y-2">
-                      <div className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                        Upload Surat Jalan Trip #{nextTripNum} <span className="text-red-500">*</span>
+                    {/* Tanggal & Nomor Surat Jalan (Wajib) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-blue-600" /> Tanggal Surat Jalan <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={suratJalanDate}
+                          onChange={(e) => setSuratJalanDate(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-blue-600" /> Nomor Surat Jalan Trip #{nextTripNum} <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder={`Contoh: SJ-GIV-2026-TRIP${nextTripNum}`}
+                          value={suratJalanNumber}
+                          onChange={(e) => setSuratJalanNumber(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 placeholder:font-normal placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Surat Jalan Upload (Opsional) */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                          Upload Surat Jalan Trip #{nextTripNum}
+                          <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>
+                        </div>
+                        {suratJalanName && (
+                          <button
+                            type="button"
+                            onClick={() => { setSuratJalanName(''); setSuratJalanData(''); }}
+                            className="text-[10px] text-red-500 hover:underline font-bold"
+                          >
+                            Hapus Lampiran
+                          </button>
+                        )}
                       </div>
                       <div className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 text-center bg-slate-50/30 transition-all relative cursor-pointer">
                         <input
                           type="file"
                           accept="image/*,.pdf"
-                          required
                           onChange={(e) => {
                             if (e.target.files && e.target.files[0]) {
                               const file = e.target.files[0];
@@ -1166,13 +1261,13 @@ export default function PODetailPage() {
                           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                         />
                         {suratJalanName ? (
-                          <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono">
+                          <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono text-xs">
                             <FileText className="w-4 h-4 text-blue-500" />
                             <span>{suratJalanName}</span>
                           </div>
                         ) : (
                           <div className="space-y-1 text-slate-500">
-                            <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file Surat Jalan Trip #{nextTripNum} di sini</div>
+                            <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file foto/PDF Surat Jalan Trip #{nextTripNum} di sini (Opsional)</div>
                             <div className="text-[10px] text-slate-400">Mendukung format gambar atau PDF</div>
                           </div>
                         )}
@@ -1182,8 +1277,12 @@ export default function PODetailPage() {
                     <div className="pt-2 border-t border-gray-100 flex justify-end">
                       <button
                         onClick={() => {
-                          if (!suratJalanName) {
-                            alert(`Harap unggah Surat Jalan untuk Trip #${nextTripNum} terlebih dahulu.`);
+                          if (!suratJalanDate) {
+                            alert('Harap masukkan Tanggal Surat Jalan terlebih dahulu.');
+                            return;
+                          }
+                          if (!suratJalanNumber.trim()) {
+                            alert(`Harap masukkan Nomor Surat Jalan untuk Trip #${nextTripNum} terlebih dahulu.`);
                             return;
                           }
                           
@@ -1197,7 +1296,7 @@ export default function PODetailPage() {
                             };
                           }).filter(si => si.qty_shipped_kg > 0);
 
-                          handleAddShipment(itemsShipped, suratJalanName);
+                          handleAddShipment(itemsShipped, suratJalanNumber, suratJalanDate, suratJalanName, suratJalanData);
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-md inline-flex items-center gap-1.5 transition-colors"
                       >
@@ -1449,18 +1548,18 @@ export default function PODetailPage() {
                 {shipmentsWithSJ.map((s) => (
                   <div key={s.id} className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
                     <div className="space-y-0.5">
-                      <div className="font-bold text-slate-800 text-xs">Trip #{s.trip_number}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{s.shipment_date}</div>
+                      <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <span>Trip #{s.trip_number}</span>
+                        <span className="font-mono text-blue-700 font-bold">({s.surat_jalan_number || s.surat_jalan_name || '-'})</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">Tgl Kirim: {formatDate(s.shipment_date)}</div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-slate-600 truncate max-w-[150px] text-[10px]" title={s.surat_jalan_name}>
-                        {s.surat_jalan_name}
-                      </span>
                       <button
                         onClick={() => handleDownloadSuratJalan(s)}
                         className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors text-[10px] cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5" /> Unduh
+                        <Download className="w-3.5 h-3.5" /> {s.surat_jalan_data ? 'Unduh Lampiran' : 'Cetak Dokumen'}
                       </button>
                     </div>
                   </div>
