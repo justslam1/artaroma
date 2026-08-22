@@ -75,8 +75,6 @@ export default function BulkPriceModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
 
-  if (!isOpen) return null;
-
   // Filtered products based on scope
   const targetProducts = useMemo(() => {
     if (scope === 'ALL') return products;
@@ -227,6 +225,8 @@ export default function BulkPriceModal({
   );
 
   const selectedCount = previewItems.filter((i) => i.selected).length;
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">

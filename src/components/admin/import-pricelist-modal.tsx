@@ -42,8 +42,6 @@ export default function ImportPricelistModal({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isOpen) return null;
-
   // Handle Download Template
   const handleDownloadTemplate = () => {
     exportPricelistTemplateXLSX(products);
@@ -158,6 +156,8 @@ export default function ImportPricelistModal({
       r.skuVarian.toLowerCase().includes(searchFilter.toLowerCase()) ||
       r.skuInduk.toLowerCase().includes(searchFilter.toLowerCase())
   );
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
