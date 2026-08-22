@@ -115,8 +115,8 @@ export function CheckoutModal({
     };
   };
 
-  // Calculate grand total price
-  const grandTotal = cart.reduce((sum, item) => {
+  // Calculate estimated total price
+  const estimatedTotal = cart.reduce((sum, item) => {
     const info = getVariantPriceInfo(item);
     return sum + info.subtotal;
   }, 0);
@@ -124,10 +124,6 @@ export function CheckoutModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
-    if (paymentMethod === 'LUNAS_TRANSFER' && !previewUrl) {
-      alert('Harap unggah bukti transfer pembayaran terlebih dahulu!');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -135,7 +131,7 @@ export function CheckoutModal({
         customer_id: customer.id,
         payment_method: paymentMethod,
         items: cart,
-        payment_proof_url: previewUrl || undefined,
+        payment_proof_url: undefined,
       });
       onClose();
     } finally {
@@ -143,7 +139,7 @@ export function CheckoutModal({
     }
   };
 
-  const isSubmitDisabled = isSubmitting || cart.length === 0 || (paymentMethod === 'LUNAS_TRANSFER' && !previewUrl);
+  const isSubmitDisabled = isSubmitting || cart.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -153,7 +149,8 @@ export function CheckoutModal({
           <div className="flex items-center gap-3 text-white">
             <Package className="w-5 h-5" />
             <div>
-              <h2 className="text-base font-bold">Form Pengajuan Pesanan</h2>
+              <h2 className="text-base font-bold">Form Pengajuan Pesanan (Sales Order)</h2>
+              <p className="text-xs text-blue-200">Tahap 1: Pengajuan draft pesanan ke tim Finance & Gudang</p>
             </div>
           </div>
           <button onClick={onClose} className="text-blue-200 hover:text-white p-1 rounded-lg">
@@ -260,15 +257,18 @@ export function CheckoutModal({
               )}
             </div>
 
-            {/* Grand Total Price Summary Bar */}
+            {/* Estimated Total Price Summary Bar */}
             {cart.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex justify-between items-center text-slate-800 font-bold text-xs mt-3">
-                <span>TOTAL HARGA YANG HARUS DIBAYAR:</span>
-                <span className="font-mono text-sm text-blue-700">{formatIDR(grandTotal)}</span>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1">
+                <div className="flex justify-between items-center text-slate-800 font-bold text-xs">
+                  <span>ESTIMASI TOTAL NILAI BARANG:</span>
+                  <span className="font-mono text-base text-blue-700">{formatIDR(estimatedTotal)}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 font-medium">
+                  *Belum termasuk PPN (11%) dan Ongkos Kirim. Rincian total tagihan final akan tertera pada Invoice resmi dari tim Finance.
+                </div>
               </div>
             )}
-
-
 
             {/* Payment Method Choice */}
             <div className="mt-4">
@@ -292,7 +292,7 @@ export function CheckoutModal({
                       <CheckCircle2 className="w-4 h-4 text-blue-600" />
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">Bayar langsung & unggah bukti transfer.</p>
+                  <p className="text-xs text-gray-500">Bayar via transfer bank setelah Invoice resmi terbit.</p>
                 </div>
 
                 <div
@@ -311,71 +311,28 @@ export function CheckoutModal({
                       <CheckCircle2 className="w-4 h-4 text-blue-600" />
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">Bayar sesuai jatuh tempo kredit B2B.</p>
+                  <p className="text-xs text-gray-500">Bayar sesuai jatuh tempo kredit B2B yang disetujui.</p>
                 </div>
               </div>
             </div>
 
-            {/* Payment Proof Upload Field & official bank account details for Transfer Bank (Tunai) */}
-            {paymentMethod === 'LUNAS_TRANSFER' && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 mt-4">
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 border-b border-gray-200 pb-2">
-                  <CreditCard className="w-4 h-4 text-blue-600" />
-                  Rekening Pembayaran Resmi PT Artaroma
-                </div>
-                
-                {/* Bank Account Numbers Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {bankAccounts.map((acc, idx) => (
-                    <div key={idx} className="bg-white border border-blue-200 rounded-xl p-3 shadow-sm space-y-1 relative">
-                      <div className="flex justify-between items-center">
-                        <span className={`text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded ${
-                          acc.bank.toUpperCase().includes('BCA') ? 'bg-blue-700' : acc.bank.toUpperCase().includes('MANDIRI') ? 'bg-amber-600' : 'bg-slate-700'
-                        }`}>
-                          {acc.bank.toUpperCase()}
-                        </span>
-                        {acc.jenis && <span className="text-[9px] text-gray-400">{acc.jenis}</span>}
-                      </div>
-                      <div className="font-mono font-extrabold text-slate-900 text-sm tracking-wider flex items-center justify-between mt-1">
-                        <span>{acc.no}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-medium">
-                        a.n. <strong>{acc.atas_nama}</strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 border-t border-gray-200 pt-3">
-                  <Upload className="w-4.5 h-4.5 text-blue-600" />
-                  Upload Bukti Transfer Pembayaran <span className="text-red-500">* Wajib</span>
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Harap transfer sebesar <strong className="text-blue-700 font-mono">{formatIDR(grandTotal)}</strong> ke salah satu rekening resmi di atas, kemudian unggah foto resi bukti transfer untuk menyelesaikan pengajuan pesanan.
-                </div>
-
-                <div className="border-2 border-dashed border-gray-300 hover:border-blue-500 rounded-xl p-5 text-center relative cursor-pointer bg-white transition-all">
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    required={paymentMethod === 'LUNAS_TRANSFER'}
-                  />
-                  {previewUrl ? (
-                    <div className="space-y-2">
-                      <img src={previewUrl} alt="Preview Bukti Transfer" className="max-h-24 mx-auto rounded border shadow-sm" />
-                      <span className="text-[10px] text-blue-700 font-mono font-bold block">✓ {selectedFileName}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 py-2">
-                      <div className="font-bold text-blue-600 text-xs">Klik atau seret file resi bukti transfer ke sini</div>
-                      <div className="text-[10px] text-slate-400">Mendukung format JPG, PNG, PDF (Maks. 5 MB)</div>
-                    </div>
-                  )}
-                </div>
+            {/* B2B Workflow Guidance Notice Card */}
+            <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-4 space-y-2.5 text-xs text-amber-900">
+              <div className="font-bold flex items-center gap-2 text-amber-800 text-sm">
+                <Send className="w-4 h-4 text-amber-600" /> Alur Pemesanan & Pembayaran B2B
               </div>
-            )}
+              <div className="space-y-1.5 text-amber-800/90 leading-relaxed text-[11px]">
+                <p>
+                  1. <strong>Pengajuan Pesanan:</strong> Anda mengajukan daftar pesanan ini ke tim Admin & Finance.
+                </p>
+                <p>
+                  2. <strong>Verifikasi & Penerbitan Invoice:</strong> Tim Finance akan memeriksa ketersediaan stok fisik gudang, konfirmasi harga final, menghitung PPN (11%), serta menentukan ongkos kirim sesuai kurir Anda, lalu menerbitkan <strong>Invoice Resmi</strong>.
+                </p>
+                <p>
+                  3. <strong>Pembayaran:</strong> Setelah Invoice resmi terbit di menu <em>Riwayat Pesanan</em>, Anda dapat mengunduh Invoice dan melakukan pembayaran / mengunggah bukti transfer.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Sticky Actions Footer */}
@@ -393,11 +350,11 @@ export function CheckoutModal({
               className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow transition-all ${
                 isSubmitDisabled
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
               }`}
             >
               <Send className="w-4 h-4" />
-              {isSubmitting ? 'Mengajukan...' : 'Ajukan Pesanan ke Admin'}
+              {isSubmitting ? 'Mengajukan...' : 'Ajukan Pesanan ke Finance'}
             </button>
           </div>
         </form>

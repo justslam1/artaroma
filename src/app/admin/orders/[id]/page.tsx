@@ -1632,24 +1632,18 @@ export default function OrderDetailPage() {
             });
 
              const isAllZero = totalConfirmedKg === 0;
-
-             const isTunai = order.payment_method === 'LUNAS_TRANSFER' || (order.payment_method as any) === 'TUNAI';
-             const hasProof = !!invoice?.payment_proof_url || !!(order as any).payment_proof_url || !!(order as any).proof_url;
-             const isApproved =
-               invoice?.status === 'PAID' ||
-               invoice?.payment_verification_status === 'VERIFIED' ||
-               (order as any).payment_status === 'PAID' ||
-               (order as any).payment_verification_status === 'VERIFIED' ||
-               (order as any).status === 'PAID' ||
-               (order as any).status === 'DIBAYAR';
-             const isTunaiBlocked = isTunai && !isApproved;
-
-             const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero || isTunaiBlocked;
+             const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero;
 
             return (
-              <div className="space-y-3 bg-white p-4 rounded-lg border border-blue-100">
-                <div className="text-xs text-slate-700 font-bold border-b pb-2 mb-3">
-                  Langkah 1: Tinjau Sisa Stok &amp; Konfirmasi Pesanan untuk Menerbitkan Tagihan
+              <div className="space-y-4 bg-white p-6 rounded-xl border border-blue-100 shadow-xs">
+                <div className="text-xs text-slate-800 font-bold border-b pb-2 mb-1 flex items-center justify-between">
+                  <span className="text-sm font-extrabold text-blue-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    Langkah 1: Verifikasi Sisa Stok, Harga, PPN (11%) & Ongkos Kirim untuk Terbitkan Invoice
+                  </span>
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    Tahap: DIAJUKAN
+                  </span>
                 </div>
 
                 <div className="space-y-3">
@@ -1804,48 +1798,6 @@ export default function OrderDetailPage() {
                     </div>
                   </div>
                 )}
-                 {/* Tunai Payment Method Specific Warnings */}
-                {isTunai && !isApproved && !hasProof && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 text-xs text-red-800 flex items-start gap-2.5 font-medium shadow-xs">
-                    <AlertTriangle className="w-5 h-5 text-red-650 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-extrabold text-red-800 block text-sm">
-                        Pembayaran Tunai: Belum Ada Bukti Transfer
-                      </span>
-                      <p className="text-red-750 leading-relaxed mt-0.5">
-                        Customer belum mengunggah foto bukti transfer pembayaran. Konfirmasi pesanan dikunci sampai bukti transfer tersedia dan disetujui (ACC).
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {isTunai && !isApproved && hasProof && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800 flex items-start gap-2.5 font-medium shadow-xs">
-                    <Clock className="w-5 h-5 text-amber-650 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-extrabold text-amber-855 block text-sm">
-                        Pembayaran Tunai: Menunggu Verifikasi (ACC) Admin Keuangan
-                      </span>
-                      <p className="text-amber-700 leading-relaxed mt-0.5">
-                        Customer telah mengunggah bukti transfer. Silakan lakukan verifikasi dan setujui (ACC) pembayaran terlebih dahulu di modul <Link href="/admin/finance" className="underline font-bold text-amber-800 hover:text-amber-900">Keuangan (Finance)</Link> untuk membuka kunci konfirmasi pesanan ini.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {isTunai && isApproved && (
-                  <div className="bg-emerald-50 border border-emerald-250 rounded-xl p-3.5 text-xs text-emerald-800 flex items-start gap-2.5 font-medium shadow-xs">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-extrabold text-emerald-800 block text-sm">
-                        Pembayaran Tunai Terverifikasi (ACC)
-                      </span>
-                      <p className="text-emerald-700 leading-relaxed mt-0.5">
-                        Pembayaran pesanan tunai telah diverifikasi dan disetujui lunas (PAID) oleh tim Keuangan. Anda dapat melanjutkan ke proses konfirmasi pesanan.
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {/* Multi-Trip Alert Notice */}
                 {hasMultiTripSplit && !isBlocked && (
@@ -1957,12 +1909,52 @@ export default function OrderDetailPage() {
                   )}
                 </div>
 
+                {/* Live Invoice Breakdown Calculation Card */}
+                {(() => {
+                  let calculatedGoods = 0;
+                  order.items.forEach((item) => {
+                    const initialOrderedQty = item.original_qty_kg !== undefined ? item.original_qty_kg : item.qty_kg;
+                    const confirmedQty = itemConfirmedKgs[item.id] !== undefined ? itemConfirmedKgs[item.id] : initialOrderedQty;
+                    const price = item.unit_price_per_kg || 1500000;
+                    calculatedGoods += confirmedQty * price;
+                  });
+                  const ppn = Math.round(calculatedGoods * 0.11);
+                  const ship = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
+                  const grandTotal = calculatedGoods + ppn + ship;
+
+                  return (
+                    <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200 rounded-xl p-4 space-y-2">
+                      <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-blue-600" /> Rincian Tagihan Invoice yang Akan Diterbitkan:
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-blue-100">
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Subtotal Nilai Barang:</span>
+                          <span className="font-mono font-bold text-slate-800 text-sm">{formatIDR(calculatedGoods)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">PPN (11%):</span>
+                          <span className="font-mono font-bold text-slate-800 text-sm">{formatIDR(ppn)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Ongkos Kirim ({shippingType}):</span>
+                          <span className="font-mono font-bold text-slate-800 text-sm">{ship > 0 ? formatIDR(ship) : 'Rp 0 (GRATIS)'}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-900 font-bold block text-[11px]">Total Tagihan Invoice:</span>
+                          <span className="font-mono font-extrabold text-blue-700 text-base">{formatIDR(grandTotal)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="pt-2 flex items-center gap-3">
                   <button
                     type="button"
                     disabled={isBlocked}
                     onClick={handleConfirmPrices}
-                    className={`font-bold text-xs px-4 py-2.5 rounded-lg shadow-sm inline-flex items-center gap-1.5 transition-colors ${
+                    className={`font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm inline-flex items-center gap-2 transition-all cursor-pointer ${
                       isBlocked
                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none'
                         : 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -1974,17 +1966,15 @@ export default function OrderDetailPage() {
                           ? 'Melebihi Pesanan Customer (Konfirmasi Dikunci)'
                           : hasInsufficientStock
                           ? 'Stok Tidak Mencukupi (Konfirmasi Dikunci)'
-                          : isTunaiBlocked
-                          ? 'Menunggu ACC Pembayaran Tunai (Konfirmasi Dikunci)'
                           : 'Kuantitas 0 Kg Semua (Minimal 1 Item)')
                       : (hasMultiTripSplit
-                          ? `Konfirmasi & Buat Multi-Trip (Kirim Trip 1: ${totalConfirmedKg} Kg)`
-                          : 'Konfirmasi Pesanan (Status: DIKONFIRMASI)')}
+                          ? `Konfirmasi Stok & Terbitkan Invoice Multi-Trip (Trip 1: ${totalConfirmedKg} Kg)`
+                          : 'Konfirmasi Stok & Terbitkan Invoice Resmi')}
                   </button>
                   <button
                     type="button"
                     onClick={handleCancelOrder}
-                    className="bg-red-50 hover:bg-red-100 text-red-750 border border-red-200 font-bold text-xs px-4 py-2.5 rounded-lg shadow-sm inline-flex items-center gap-1.5 transition-colors"
+                    className="bg-red-50 hover:bg-red-100 text-red-750 border border-red-200 font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     ✕ Batalkan Pesanan
                   </button>

@@ -183,6 +183,21 @@ export function CustomerOrderDetailModal({
             </div>
           </div>
 
+          {/* Waiting for Finance / Invoice Notice */}
+          {!isConfirmedOrLater && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-bold text-amber-900 text-xs">
+                  Pesanan Sedang Menunggu Verifikasi Finance & Penerbitan Invoice
+                </h4>
+                <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                  Tim Finance sedang memverifikasi ketersediaan stok fisik batch gudang, konfirmasi harga final, perhitungan PPN (11%), dan ongkos kirim. <strong>Invoice resmi akan segera diterbitkan sebelum Anda melakukan pembayaran.</strong> Nomor rekening dan form upload bukti transfer akan otomatis aktif setelah Invoice terbit.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ITEM BREAKDOWN TABLE (DETIL PESANAN) */}
           <div className="space-y-2">
             <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
@@ -213,38 +228,71 @@ export function CustomerOrderDetailModal({
                           {formatKg(item.qty_kg)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-slate-600">
-                          {isConfirmedOrLater ? (
-                            formatIDR(price)
-                          ) : (
-                            <span className="text-amber-600 italic text-[11px]">Menunggu Admin</span>
-                          )}
+                          {formatIDR(price)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                          {isConfirmedOrLater ? (
-                            formatIDR(subtotal)
-                          ) : (
-                            <span className="text-amber-600 italic text-[11px]">Menunggu Admin</span>
-                          )}
+                          {formatIDR(subtotal)}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-blue-50/80 border-t border-blue-200 font-bold">
-                    <td colSpan={3} className="px-4 py-3 text-slate-700 text-right text-xs">
-                      TOTAL TAGIHAN PESANAN:
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm text-blue-700">
-                      {isConfirmedOrLater ? (
-                        formatIDR(calculatedTotal)
-                      ) : (
-                        <span className="text-amber-600 font-sans text-xs italic">
-                          Menunggu Konfirmasi Admin
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                  {(() => {
+                    const goodsTotal = order.total_goods_amount || order.items.reduce((sum, item) => sum + (item.unit_price_per_kg || 1850000) * item.qty_kg, 0);
+                    const ppnAmount = Math.round(goodsTotal * 0.11);
+                    const shippingCost = (order.shipping_type || 'FRANCO') === 'FRANCO' ? 0 : Number(order.shipping_cost || 0);
+                    const totalInvoice = isConfirmedOrLater ? (order.grand_total || (goodsTotal + ppnAmount + shippingCost)) : goodsTotal;
+
+                    return (
+                      <>
+                        <tr className="bg-slate-50/80 border-t border-gray-200">
+                          <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
+                            Subtotal Nilai Barang:
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
+                            {formatIDR(goodsTotal)}
+                          </td>
+                        </tr>
+                        <tr className="bg-slate-50/80 border-t border-gray-100">
+                          <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
+                            PPN (11%):
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
+                            {isConfirmedOrLater ? (
+                              formatIDR(ppnAmount)
+                            ) : (
+                              <span className="text-amber-600 font-sans text-[11px] italic font-normal">
+                                Dihitung saat Invoice Terbit
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        <tr className="bg-slate-50/80 border-t border-gray-100">
+                          <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
+                            Ongkos Kirim ({order.shipping_type || 'Kurir'}):
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
+                            {isConfirmedOrLater ? (
+                              shippingCost > 0 ? formatIDR(shippingCost) : 'Gratis / Ditanggung Pengirim (FRANCO)'
+                            ) : (
+                              <span className="text-amber-600 font-sans text-[11px] italic font-normal">
+                                Dikonfirmasi saat Invoice Terbit
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        <tr className="bg-blue-50/90 border-t-2 border-blue-300 font-bold">
+                          <td colSpan={3} className="px-4 py-3 text-slate-800 text-right text-xs">
+                            {isConfirmedOrLater ? 'TOTAL INVOICE RESMI:' : 'ESTIMASI NILAI BARANG:'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-sm text-blue-700">
+                            {formatIDR(totalInvoice)}
+                          </td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tfoot>
               </table>
             </div>
