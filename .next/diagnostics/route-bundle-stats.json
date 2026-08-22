@@ -153,12 +153,12 @@
   },
   {
     "route": "/customer/catalog",
-    "firstLoadUncompressedJsBytes": 827237,
+    "firstLoadUncompressedJsBytes": 827124,
     "firstLoadChunkPaths": [
       ".next\\static\\chunks\\3o-3s29imyjs5.js",
       ".next\\static\\chunks\\3fo998uykftg9.js",
       ".next\\static\\chunks\\0-leeu10hla47.js",
-      ".next\\static\\chunks\\0g-hptkpqq5sj.js",
+      ".next\\static\\chunks\\0kuofjx41qzhy.js",
       ".next\\static\\chunks\\276yyx-azxfvi.js",
       ".next\\static\\chunks\\2mmpezlrfmbu5.js",
       ".next\\static\\chunks\\02bn7vs3_xezi.js",

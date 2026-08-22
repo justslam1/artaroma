@@ -355,40 +355,44 @@ export default function CustomerCatalogPage() {
                       const variantInCart = cartItems.find(
                         (item) => item.product.id === product.id && item.packSizeKg === kg
                       );
-                      const variantStockKg = product.variant_stocks
-                        ? (product.variant_stocks[String(kg)] ?? 0)
-                        : (product.total_stock_kg ?? 9999);
-                      const maxAvailableUnits = Math.max(0, Math.floor(variantStockKg / kg));
                       const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
-                      const isOutOfStock = maxAvailableUnits <= 0;
-                      const isAddDisabled = isOutOfStock || (currentQtyInCart >= maxAvailableUnits);
+                      const selectedWeightKg = currentQtyInCart * kg;
 
                       return (
-                        <div key={kg} className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl border border-slate-100 hover:border-slate-200 transition-all bg-slate-50/40">
-                          {/* Scent size & stock status */}
-                          <div className="space-y-0.5">
+                        <div
+                          key={kg}
+                          className={`flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all ${
+                            currentQtyInCart > 0
+                              ? 'border-blue-300 bg-blue-50/50 shadow-xs'
+                              : 'border-slate-100 hover:border-slate-200 bg-slate-50/40'
+                          }`}
+                        >
+                          {/* Scent size & USD equivalent */}
+                          <div className="space-y-0.5 min-w-[95px]">
                             <div className="flex items-center gap-1.5">
-                              <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-1.5 py-0.5 rounded">
-                                {kg} Kg
+                              <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-2 py-0.5 rounded">
+                                {kg} Kg / Kemasan
                               </span>
-                              {isOutOfStock ? (
-                                <span className="text-[9px] text-red-600 font-extrabold">HABIS</span>
-                              ) : (
-                                <span className="text-[9px] text-slate-400 font-bold uppercase">
-                                  Stok: {maxAvailableUnits}
-                                </span>
-                              )}
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono">
                               (${Number(variantUsd).toFixed(2)} USD/Kg)
                             </div>
                           </div>
 
-                          {/* Price Display */}
+                          {/* Price Display & Weight indicator */}
                           <div className="text-right flex-1 pr-1.5">
                             <span className="text-sm font-black text-slate-800 font-mono block">
                               {formatIDR(variantIdr)}<span className="text-[10px] text-slate-500 font-normal">/Kg</span>
                             </span>
+                            {currentQtyInCart > 0 ? (
+                              <span className="text-[10px] font-bold text-blue-700 font-mono block">
+                                Terpilih: {selectedWeightKg} Kg ({currentQtyInCart} unit)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 block font-mono">
+                                Total: {formatIDR(variantIdr * kg)}/{kg}kg
+                              </span>
+                            )}
                           </div>
 
                           {/* Add to Cart Actions */}
@@ -408,14 +412,9 @@ export default function CustomerCatalogPage() {
                               </>
                             ) : null}
                             <button
-                              onClick={() => !isAddDisabled && handleAddToCart(product, kg)}
-                              disabled={isAddDisabled}
-                              className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-sm transition-colors cursor-pointer ${
-                                isAddDisabled
-                                  ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed'
-                                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
-                              }`}
-                              title={isAddDisabled ? (isOutOfStock ? "Stok Habis" : "Batas Maksimal Stok Tercapai") : "Tambah ke Keranjang"}
+                              onClick={() => handleAddToCart(product, kg)}
+                              className="w-6 h-6 rounded-lg flex items-center justify-center font-black text-sm transition-colors cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                              title="Tambah ke Pesanan"
                             >
                               +
                             </button>
