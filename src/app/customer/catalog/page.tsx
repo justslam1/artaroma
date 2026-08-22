@@ -519,6 +519,12 @@ export default function CustomerCatalogPage() {
               payment_method: submittedData.payment_method || 'LUNAS_TRANSFER',
               order_date: nowStr,
               items: orderItems,
+              requires_super_admin_approval: json.requires_super_admin_approval || json.data?.requires_super_admin_approval || false,
+              credit_approval_status: (json.requires_super_admin_approval || json.data?.requires_super_admin_approval) ? 'PENDING' : 'APPROVED',
+              credit_warning: json.credit_warning || json.data?.credit_warning,
+              credit_limit_amount: json.data?.credit_limit_amount,
+              current_piutang_amount: json.data?.current_piutang_amount,
+              projected_piutang_amount: json.data?.projected_piutang_amount,
             };
 
             // Save to local order store for instant customer orders page sync
@@ -551,7 +557,15 @@ export default function CustomerCatalogPage() {
             fetchProducts();
             window.dispatchEvent(new Event('artaroma_orders_updated'));
             window.dispatchEvent(new Event('artaroma_new_so_created'));
-            alert(`✅ Pesanan B2B (${savedSoNumber}) Berhasil Diajukan!\nMenunggu verifikasi pembayaran & konfirmasi stok dari Admin.`);
+
+            if (json.requires_super_admin_approval) {
+              alert(
+                `⚠️ Pesanan B2B (${savedSoNumber}) Berhasil Diajukan!\n\n` +
+                `Catatan: Pesanan Anda memerlukan Persetujuan Khusus (Approval) dari Super Admin karena melebihi plafon kredit atau terdapat tagihan yang telah jatuh tempo sebelum proses penerbitan invoice dilanjutkan.`
+              );
+            } else {
+              alert(`✅ Pesanan B2B (${savedSoNumber}) Berhasil Diajukan!\nMenunggu verifikasi dan penerbitan Invoice resmi dari Finance.`);
+            }
 
           } catch (err: any) {
             console.error('Checkout API error:', err);

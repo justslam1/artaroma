@@ -48,6 +48,8 @@ import {
   FileSpreadsheet,
   Upload,
   CreditCard,
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -814,6 +816,34 @@ export default function OrderDetailPage() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // Super Admin Approval Actions for Credit Limit Overrun or Overdue Invoices
+  const handleApproveCreditOverride = () => {
+    if (!confirm(`Apakah Anda yakin ingin menyetujui (ACC Override) pesanan '${order.so_number}' ini meskipun melebihi plafon / ada tagihan jatuh tempo?`)) return;
+
+    const currentOrders = getStoredOrders();
+    const updatedOrders = currentOrders.map((o) =>
+      o.id === order.id || o.so_number === order.so_number
+        ? {
+            ...o,
+            credit_approval_status: 'APPROVED' as const,
+            credit_approval_by: currentUser?.name || currentUser?.email || 'Super Admin',
+            credit_approval_date: new Date().toISOString(),
+          }
+        : o
+    );
+    saveStoredOrders(updatedOrders, false);
+    setSalesOrders(updatedOrders);
+    window.dispatchEvent(new Event('artaroma_orders_updated'));
+    alert(`✅ Persetujuan Super Admin Berhasil Disimpan!\nPesanan '${order.so_number}' kini dapat diproses oleh tim Finance & Gudang.`);
+  };
+
+  const handleRejectCreditOrder = () => {
+    const reason = prompt('Masukkan alasan penolakan pesanan ini:', 'Melebihi limit kredit/jatuh tempo dan tidak disetujui Super Admin.');
+    if (reason === null) return;
+
+    handleCancelOrder();
   };
 
   // Action 1: Admin Confirm Prices & Issue Invoice -> DIKONFIRMASI (With Multi-Trip or SO Adjustment Support)
@@ -1691,8 +1721,11 @@ export default function OrderDetailPage() {
               }
             });
 
-             const isAllZero = totalConfirmedKg === 0;
-             const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero;
+              const isAllZero = totalConfirmedKg === 0;
+              const isSuperAdmin = currentUser?.is_super_admin || currentUser?.role === 'SUPER_ADMIN';
+              const isPendingSuperAdminApproval = order.requires_super_admin_approval && (order.credit_approval_status === 'PENDING' || !order.credit_approval_status);
+              const isApprovedBySuperAdmin = order.requires_super_admin_approval && order.credit_approval_status === 'APPROVED';
+              const isBlocked = hasInsufficientStock || hasExceededOrder || isAllZero || isPendingSuperAdminApproval;
 
             return (
               <div className="space-y-4 bg-white p-6 rounded-xl border border-blue-100 shadow-xs">
@@ -1705,6 +1738,109 @@ export default function OrderDetailPage() {
                     Tahap: DIAJUKAN
                   </span>
                 </div>
+
+                {/* Super Admin Approval Required Banner */}
+                {isPendingSuperAdminApproval && (
+                  <div className="bg-red-50/90 border-2 border-red-400 rounded-xl p-4 space-y-3 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-red-200 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
+                        <div>
+                          <span className="font-extrabold text-red-900 text-sm block">
+                            ⚠️ Memerlukan Persetujuan (Approval) dari Super Admin
+                          </span>
+                          <span className="text-[11px] text-red-700 font-medium">
+                            {order.credit_warning === 'MELEBIHI_PLAFON_DAN_OVERDUE'
+                              ? 'Pesanan ini melebihi Plafon Kredit DAN Customer memiliki tagihan yang telah Jatuh Tempo (Overdue).'
+                              : order.credit_warning === 'OVERDUE_INVOICE'
+                              ? 'Customer memiliki tagihan yang telah Jatuh Tempo (Overdue) dan belum dilunasi.'
+                              : 'Total nilai pesanan ini melebihi sisa Plafon Kredit Customer.'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="bg-red-100 text-red-800 border border-red-300 font-extrabold text-[10px] px-2.5 py-1 rounded-full w-max">
+                        STATUS: MENUNGGU APPROVAL SUPER ADMIN
+                      </span>
+                    </div>
+
+                    {/* Financial Metric Breakdown */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs bg-white p-3 rounded-lg border border-red-200">
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Plafon Kredit Customer:</span>
+                        <span className="font-mono font-bold text-slate-800 text-sm">
+                          {formatIDR(order.credit_limit_amount || (order as any).customer_credit_limit || 40000000)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Piutang Berjalan:</span>
+                        <span className="font-mono font-bold text-amber-700 text-sm">
+                          {formatIDR(order.current_piutang_amount || 0)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">Proyeksi Total Piutang:</span>
+                        <span className="font-mono font-extrabold text-red-700 text-sm">
+                          {formatIDR(order.projected_piutang_amount || (order.current_piutang_amount || 0) + (order.grand_total || order.total_goods_amount || 0))}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Super Admin Action Buttons or Non-Admin Lock Notice */}
+                    {isSuperAdmin ? (
+                      <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-red-100/60 p-3 rounded-lg border border-red-200">
+                        <div className="text-xs text-red-950 font-semibold flex items-center gap-1.5">
+                          <UserCheck className="w-4 h-4 text-red-700 shrink-0" />
+                          <span>Anda login sebagai <strong>Super Admin</strong>. Anda berhak menyetujui (ACC Override) pesanan ini untuk melanjutkan proses.</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleApproveCreditOverride}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Setujui (ACC) Pesanan Ini
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRejectCreditOrder}
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Tolak Pesanan
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-100/80 border border-amber-300 rounded-lg p-3 text-xs text-amber-950 flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>
+                          <strong>Akses Dibatasi:</strong> Proses penerbitan invoice dikunci. Harap hubungi <strong>Super Admin</strong> untuk memberikan persetujuan (Approval) atas pesanan ini.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Approved by Super Admin Banner */}
+                {isApprovedBySuperAdmin && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 text-xs text-emerald-900 flex items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-extrabold text-emerald-800 text-sm block">
+                          Persetujuan Super Admin: DISETUJUI (APPROVED)
+                        </span>
+                        <span className="text-[11px] text-emerald-700">
+                          Pesanan telah disetujui (override kredit) oleh <strong>{order.credit_approval_by || 'Super Admin'}</strong>{order.credit_approval_date ? ` pada ${new Date(order.credit_approval_date).toLocaleString('id-ID')}` : ''}.
+                        </span>
+                      </div>
+                    </div>
+                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-[10px] px-2.5 py-1 rounded-full shrink-0">
+                      OVERRIDE ACC
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   {order.items.map((item) => {
@@ -2083,7 +2219,9 @@ export default function OrderDetailPage() {
                   >
                     <Check className="w-4 h-4" />
                     {isBlocked
-                      ? (hasExceededOrder
+                      ? (isPendingSuperAdminApproval
+                          ? 'Menunggu Approval Super Admin (Konfirmasi Dikunci)'
+                          : hasExceededOrder
                           ? 'Melebihi Pesanan Customer (Konfirmasi Dikunci)'
                           : hasInsufficientStock
                           ? 'Stok Tidak Mencukupi (Konfirmasi Dikunci)'

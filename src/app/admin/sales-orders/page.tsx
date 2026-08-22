@@ -297,7 +297,19 @@ export default function SalesOrdersPage() {
                       )}
 
                       <td className="px-6 py-3.5">
-                        {getStatusBadge(so.status)}
+                        <div className="flex flex-col items-start gap-1">
+                          {getStatusBadge(so.status)}
+                          {so.requires_super_admin_approval && (so.credit_approval_status === 'PENDING' || !so.credit_approval_status) && (
+                            <span className="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                              ⚠️ Butuh Approval Super Admin
+                            </span>
+                          )}
+                          {so.requires_super_admin_approval && so.credit_approval_status === 'APPROVED' && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                              ✓ Approved Super Admin
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-6 py-3.5 text-right">

@@ -296,6 +296,16 @@ export interface SalesOrder {
   cancellation_reason?: string;
   cancelled_at?: string;
   cancelled_by?: string;
+  // Super Admin Credit Approval fields (Plafon Kredit / Overdue Invoice)
+  requires_super_admin_approval?: boolean;
+  credit_approval_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  credit_approval_by?: string;
+  credit_approval_date?: string;
+  credit_warning?: 'MELEBIHI_PLAFON' | 'OVERDUE_INVOICE' | 'MELEBIHI_PLAFON_DAN_OVERDUE';
+  credit_limit_amount?: number;
+  current_piutang_amount?: number;
+  projected_piutang_amount?: number;
+  credit_approval_notes?: string;
 }
 
 export type InvoiceStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';

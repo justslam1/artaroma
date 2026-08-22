@@ -124,31 +124,25 @@ export async function POST(req: NextRequest) {
     const ppn = Math.round(totalGoodsAmount * 0.11);
     const grandTotal = totalGoodsAmount + ppn + finalShippingCost;
 
-    // 2. CREDIT LIMIT & OVERDUE CHECK LOGIC (Critical B2B Requirement)
+    // 2. CREDIT LIMIT & OVERDUE CHECK LOGIC (B2B Requirement: Requires Super Admin Approval if Exceeded or Overdue)
+    let requiresSuperAdminApproval = false;
+    let creditWarning: 'MELEBIHI_PLAFON' | 'OVERDUE_INVOICE' | 'MELEBIHI_PLAFON_DAN_OVERDUE' | undefined = undefined;
+    const creditLimit = parseFloat(customer.credit_limit || 0);
+    const projectedTotalPiutang = currentPiutang + grandTotal;
+
     if (payment_method === 'TEMPO') {
-      const creditLimit = parseFloat(customer.credit_limit || 0);
-      const projectedTotalPiutang = currentPiutang + grandTotal;
+      const isCreditLimitExceeded = projectedTotalPiutang > creditLimit;
+      const hasOverdueInvoices = hasOverdue;
 
-      if (hasOverdue) {
-        return NextResponse.json(
-          {
-            success: false,
-            code: 'CREDIT_LOCKED_OVERDUE',
-            message: `Pilihan pembayaran TEMPO DITOLAK: Customer '${customer.company_name}' memiliki tagihan berstatus OVERDUE (Jatuh Tempo). Harap lunasi tunggakan terlebih dahulu atau gunakan metode LUNAS_TRANSFER.`,
-          },
-          { status: 403 }
-        );
-      }
-
-      if (projectedTotalPiutang > creditLimit) {
-        return NextResponse.json(
-          {
-            success: false,
-            code: 'CREDIT_LIMIT_EXCEEDED',
-            message: `Pilihan pembayaran TEMPO DITOLAK: Proyeksi piutang (Rp ${projectedTotalPiutang.toLocaleString()}) melebihi Plafon Kredit customer (Rp ${creditLimit.toLocaleString()}). Sisa limit kredit tersedia: Rp ${Math.max(0, creditLimit - currentPiutang).toLocaleString()}.`,
-          },
-          { status: 403 }
-        );
+      if (isCreditLimitExceeded || hasOverdueInvoices) {
+        requiresSuperAdminApproval = true;
+        if (isCreditLimitExceeded && hasOverdueInvoices) {
+          creditWarning = 'MELEBIHI_PLAFON_DAN_OVERDUE';
+        } else if (hasOverdueInvoices) {
+          creditWarning = 'OVERDUE_INVOICE';
+        } else {
+          creditWarning = 'MELEBIHI_PLAFON';
+        }
       }
     }
 
@@ -201,7 +195,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: 'Sales Order submitted successfully. Pending FEFO warehouse approval.',
+        requires_super_admin_approval: requiresSuperAdminApproval,
+        credit_warning: creditWarning,
+        message: requiresSuperAdminApproval
+          ? 'Sales Order berhasil diajukan dan memerlukan persetujuan khusus dari Super Admin karena melebihi plafon kredit atau ada tagihan jatuh tempo.'
+          : 'Sales Order submitted successfully. Pending Admin/Finance review.',
         data: {
           id: soId,
           so_number: soNumber,
@@ -213,6 +211,12 @@ export async function POST(req: NextRequest) {
           grand_total: grandTotal,
           order_date: orderDate,
           items: processedItems,
+          requires_super_admin_approval: requiresSuperAdminApproval,
+          credit_approval_status: requiresSuperAdminApproval ? 'PENDING' : 'APPROVED',
+          credit_warning: creditWarning,
+          credit_limit_amount: creditLimit,
+          current_piutang_amount: currentPiutang,
+          projected_piutang_amount: projectedTotalPiutang,
         },
       },
       { status: 201 }
