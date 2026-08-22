@@ -13,10 +13,8 @@
 # testing
 /coverage
 
-# next.js — exclude dev/cache only, keep production build
-/.next/dev/
-/.next/cache/
-/.next/trace
+# next.js
+/.next/
 /out/
 
 # production
