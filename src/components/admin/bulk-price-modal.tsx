@@ -118,7 +118,13 @@ export default function BulkPriceModal({
 
         const vSku = p.variant_skus?.[sz] || `${p.sku}-${sz}K`;
         const vName = p.variant_names?.[sz] || `${p.name} ${sz}K`;
-        const oldPrice = p.variant_prices?.[sz] ?? (p.selling_price_per_kg || 0);
+        const matchingVariant = (p.variants || []).find(
+          (v) => Math.round(Number(v.pack_size_kg)) === Math.round(sz) || v.variant_sku === vSku
+        );
+        const oldPrice = Number(p.variant_prices?.[sz]) 
+          || Number(matchingVariant?.selling_price_per_kg) 
+          || Number(p.selling_price_per_kg) 
+          || 0;
 
         let rawNewPrice = oldPrice;
         if (unit === 'PERCENT') {
