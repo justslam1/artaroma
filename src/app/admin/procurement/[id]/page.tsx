@@ -761,6 +761,14 @@ export default function PODetailPage() {
                     : 'TUNAI (Cash)'}
                 </span>
               </div>
+              <div className="grid grid-cols-3">
+                <span className="text-slate-400 font-medium">Mata Uang & Kurs:</span>
+                <span className="col-span-2 font-bold text-amber-700">
+                  {po.currency && po.currency !== 'IDR'
+                    ? `${po.currency} (Kurs 1 ${po.currency} = ${formatIDR(po.exchange_rate || 1)})`
+                    : 'IDR (Rupiah Indonesia)'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -1219,9 +1227,22 @@ export default function PODetailPage() {
             <h2 className="text-base font-bold text-slate-800">
               Item Pesanan Purchase Order ({po.items.length})
             </h2>
-            <span className="text-xs font-mono font-bold text-blue-700">
-              Total PO: {formatIDR(po.total_amount)}
-            </span>
+            <div className="text-right">
+              {po.currency && po.currency !== 'IDR' ? (
+                <div>
+                  <div className="text-sm font-mono font-extrabold text-amber-700">
+                    {po.currency} {((po.foreign_total_amount || (po.total_amount / (po.exchange_rate || 1)))).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs font-mono font-bold text-blue-700">
+                    ≈ {formatIDR(po.total_amount)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(po.exchange_rate || 1)})</span>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-xs font-mono font-bold text-blue-700">
+                  Total PO: {formatIDR(po.total_amount)}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -1230,8 +1251,11 @@ export default function PODetailPage() {
                 <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                   <th className="px-6 py-3">Material / Bibit Parfum</th>
                   <th className="px-6 py-3">Pesanan (Kg)</th>
-                  <th className="px-6 py-3">Harga HPP / Kg (IDR)</th>
-                  <th className="px-6 py-3">Subtotal (IDR)</th>
+                  {po.currency && po.currency !== 'IDR' && (
+                    <th className="px-6 py-3 text-right">Harga ({po.currency})</th>
+                  )}
+                  <th className="px-6 py-3 text-right">HPP / Kg (IDR)</th>
+                  <th className="px-6 py-3 text-right">Subtotal</th>
                   <th className="px-6 py-3">Batch Number (FEFO)</th>
                   <th className="px-6 py-3">Status Item</th>
                 </tr>
@@ -1263,12 +1287,29 @@ export default function PODetailPage() {
                       )}
                     </td>
 
-                    <td className="px-6 py-4 font-mono text-slate-700">
+                    {po.currency && po.currency !== 'IDR' && (
+                      <td className="px-6 py-4 font-mono text-amber-700 font-bold text-right">
+                        {po.currency} {(item.foreign_cost_per_kg || (item.cost_per_kg / (po.exchange_rate || 1))).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                    )}
+
+                    <td className="px-6 py-4 font-mono text-slate-700 text-right">
                       {formatIDR(item.cost_per_kg)}
                     </td>
 
-                    <td className="px-6 py-4 font-mono font-bold text-slate-800">
-                      {formatIDR(item.subtotal)}
+                    <td className="px-6 py-4 font-mono font-bold text-slate-800 text-right">
+                      {po.currency && po.currency !== 'IDR' ? (
+                        <div>
+                          <div className="text-amber-700">
+                            {po.currency} {((item.foreign_cost_per_kg || (item.cost_per_kg / (po.exchange_rate || 1))) * item.qty_ordered_kg).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-normal">
+                            ≈ {formatIDR(item.subtotal)}
+                          </div>
+                        </div>
+                      ) : (
+                        formatIDR(item.subtotal)
+                      )}
                     </td>
 
                     <td className="px-6 py-4 text-xs">

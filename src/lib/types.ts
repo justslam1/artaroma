@@ -174,6 +174,8 @@ export interface POItem {
   product_name: string;   // variant name, e.g. 'Vanilla Bourbon Super Pure 25K'
   qty_ordered_kg: number;
   qty_shipped_kg?: number;
+  foreign_cost_per_kg?: number;
+  foreign_subtotal?: number;
   cost_per_kg: number;
   subtotal: number;
 }
@@ -205,6 +207,9 @@ export interface PurchaseOrder {
   status: POStatus;
   payment_method?: 'TUNAI' | 'KREDIT';
   payment_terms_days?: number;
+  currency?: string;
+  exchange_rate?: number;
+  foreign_total_amount?: number;
   order_date: string;
   total_amount: number;
   items: POItem[];

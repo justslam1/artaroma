@@ -13,6 +13,16 @@ interface CreatePOModalProps {
   onCreatePO: (po: Omit<PurchaseOrder, 'id'>, autoOpenPDF?: boolean) => void;
 }
 
+// Currency options with default benchmark rates
+export const CURRENCY_OPTIONS = [
+  { code: 'IDR', label: 'IDR (Rupiah)', symbol: 'Rp', defaultRate: 1, flag: '🇮🇩' },
+  { code: 'USD', label: 'USD (US Dollar)', symbol: '$', defaultRate: 16250, flag: '🇺🇸' },
+  { code: 'EUR', label: 'EUR (Euro)', symbol: '€', defaultRate: 17500, flag: '🇪🇺' },
+  { code: 'SGD', label: 'SGD (Singapore Dollar)', symbol: 'S$', defaultRate: 12200, flag: '🇸🇬' },
+  { code: 'CNY', label: 'CNY (Chinese Yuan)', symbol: '¥', defaultRate: 2250, flag: '🇨🇳' },
+  { code: 'GBP', label: 'GBP (British Pound)', symbol: '£', defaultRate: 21000, flag: '🇬🇧' },
+];
+
 export function CreatePOModal({
   isOpen,
   onClose,
@@ -29,6 +39,8 @@ export function CreatePOModal({
   const [selectedDistributorId, setSelectedDistributorId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'TUNAI' | 'KREDIT'>('TUNAI');
   const [paymentTermsDays, setPaymentTermsDays] = useState<number>(30);
+  const [currency, setCurrency] = useState<string>('IDR');
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   const [step, setStep] = useState<'INPUT' | 'CONFIRM'>('INPUT');
 
   // Item row type: uses variant-level selection
@@ -40,7 +52,8 @@ export function CreatePOModal({
     variantName: string;  // e.g. 'Vanilla Bourbon 25K'
     packSizeKg: number;   // auto-filled from variant (25, 5, 1)
     jumlah: number;       // how many units to order (user input)
-    costPerKg: number;    // HPP per Kg
+    foreignCostPerKg?: number; // Price in foreign currency (e.g. 30.00 USD)
+    costPerKg: number;    // HPP per Kg in IDR
   };
 
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -76,6 +89,8 @@ export function CreatePOModal({
       setSelectedDistributorId('');
       setPaymentMethod('TUNAI');
       setPaymentTermsDays(30);
+      setCurrency('IDR');
+      setExchangeRate(1);
       setStep('INPUT');
     }
   }, [isOpen]);
@@ -131,6 +146,11 @@ export function CreatePOModal({
     const variants = getFilteredVariants(distId);
     const firstV = variants.find(v => !alreadySelectedIds.includes(v.id)) || variants[0];
     if (firstV) {
+      const baseIdrCost = firstV.selling_price_per_kg || 0;
+      const fCost = currency !== 'IDR' && exchangeRate > 0 
+        ? Number((baseIdrCost / exchangeRate).toFixed(2)) 
+        : undefined;
+
       return {
         productId: firstV.productId,
         variantId: firstV.id,
@@ -139,10 +159,48 @@ export function CreatePOModal({
         variantName: firstV.variant_name,
         packSizeKg: firstV.pack_size_kg,
         jumlah: 1,
-        costPerKg: firstV.selling_price_per_kg || 0,
+        foreignCostPerKg: fCost,
+        costPerKg: baseIdrCost,
       };
     }
     return { productId: '', variantId: '', variantSku: '', productName: '', variantName: '', packSizeKg: 25, jumlah: 1, costPerKg: 0 };
+  };
+
+  // Currency change handler
+  const handleCurrencyChange = (newCurr: string) => {
+    setCurrency(newCurr);
+    const currConfig = CURRENCY_OPTIONS.find(c => c.code === newCurr);
+    const newRate = currConfig ? currConfig.defaultRate : 1;
+    setExchangeRate(newRate);
+
+    setItems(prevItems => prevItems.map(item => {
+      if (newCurr === 'IDR') {
+        return {
+          ...item,
+          foreignCostPerKg: undefined,
+          costPerKg: item.foreignCostPerKg ? Math.round(item.foreignCostPerKg * (exchangeRate || 1)) : item.costPerKg,
+        };
+      } else {
+        const fCost = item.foreignCostPerKg || (newRate > 0 ? Number((item.costPerKg / newRate).toFixed(2)) : 0);
+        return {
+          ...item,
+          foreignCostPerKg: fCost,
+          costPerKg: Math.round(fCost * newRate),
+        };
+      }
+    }));
+  };
+
+  // Exchange rate change handler
+  const handleExchangeRateChange = (newRate: number) => {
+    const rateVal = Math.max(1, newRate);
+    setExchangeRate(rateVal);
+    if (currency !== 'IDR') {
+      setItems(prevItems => prevItems.map(item => ({
+        ...item,
+        costPerKg: Math.round((item.foreignCostPerKg || 0) * rateVal),
+      })));
+    }
   };
 
   // Initialize items when modal opens and distributor + products are ready
@@ -195,6 +253,9 @@ export function CreatePOModal({
   const handleVariantChange = (index: number, variantId: string) => {
     const variant = activeVariants.find(v => v.id === variantId);
     if (!variant) return;
+    const baseIdr = variant.selling_price_per_kg || updatedCostPerKg(index);
+    const fCost = currency !== 'IDR' && exchangeRate > 0 ? Number((baseIdr / exchangeRate).toFixed(2)) : undefined;
+
     const updated = [...items];
     updated[index] = {
       ...updated[index],
@@ -204,9 +265,14 @@ export function CreatePOModal({
       productName: variant.productName,
       variantName: variant.variant_name,
       packSizeKg: variant.pack_size_kg,
-      costPerKg: variant.selling_price_per_kg || updated[index].costPerKg,
+      foreignCostPerKg: fCost,
+      costPerKg: baseIdr,
     };
     setItems(updated);
+  };
+
+  const updatedCostPerKg = (idx: number) => {
+    return items[idx] ? items[idx].costPerKg : 0;
   };
 
   const handleJumlahChange = (index: number, val: string) => {
@@ -215,13 +281,30 @@ export function CreatePOModal({
     setItems(updated);
   };
 
-  const handleCostChange = (index: number, val: string) => {
+  const handleForeignCostChange = (index: number, val: string) => {
+    const fVal = Number(val) || 0;
     const updated = [...items];
-    updated[index].costPerKg = Number(val) || 0;
+    updated[index].foreignCostPerKg = fVal;
+    updated[index].costPerKg = Math.round(fVal * exchangeRate);
     setItems(updated);
   };
 
-  // Total Kg per item = jumlah × packSizeKg
+  const handleCostChange = (index: number, val: string) => {
+    const idrVal = Number(val) || 0;
+    const updated = [...items];
+    updated[index].costPerKg = idrVal;
+    if (currency !== 'IDR' && exchangeRate > 0) {
+      updated[index].foreignCostPerKg = Number((idrVal / exchangeRate).toFixed(2));
+    }
+    setItems(updated);
+  };
+
+  // Total foreign and IDR amounts
+  const totalForeignAmount = items.reduce(
+    (sum, item) => sum + item.jumlah * item.packSizeKg * (item.foreignCostPerKg || 0),
+    0
+  );
+
   const totalAmount = items.reduce(
     (sum, item) => sum + item.jumlah * item.packSizeKg * item.costPerKg,
     0
@@ -260,6 +343,8 @@ export function CreatePOModal({
       variant_sku: item.variantSku || '',
       product_name: item.variantName || item.productName || 'Bibit Parfum',
       qty_ordered_kg: item.jumlah * item.packSizeKg,
+      foreign_cost_per_kg: currency !== 'IDR' ? item.foreignCostPerKg : undefined,
+      foreign_subtotal: currency !== 'IDR' ? (item.jumlah * item.packSizeKg * (item.foreignCostPerKg || 0)) : undefined,
       cost_per_kg: item.costPerKg,
       subtotal: item.jumlah * item.packSizeKg * item.costPerKg,
     }));
@@ -271,6 +356,9 @@ export function CreatePOModal({
       status: 'BUAT_EMAIL',
       payment_method: paymentMethod,
       payment_terms_days: paymentMethod === 'KREDIT' ? paymentTermsDays : undefined,
+      currency: currency,
+      exchange_rate: exchangeRate,
+      foreign_total_amount: currency !== 'IDR' ? totalForeignAmount : undefined,
       order_date: new Date().toISOString().split('T')[0],
       total_amount: totalAmount,
       items: poItems,
@@ -282,6 +370,7 @@ export function CreatePOModal({
 
   const selectedDistributor = distributors.find((d) => d.id === selectedDistributorId);
   const totalKgOrdered = items.reduce((s, i) => s + i.jumlah * i.packSizeKg, 0);
+  const activeCurrencyConfig = CURRENCY_OPTIONS.find(c => c.code === currency) || CURRENCY_OPTIONS[0];
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -340,60 +429,116 @@ export function CreatePOModal({
         {step === 'INPUT' ? (
           /* STEP 1: FORM INPUT */
           <form onSubmit={handleProceedToConfirm} className="p-6 space-y-5">
-            {/* Distributor Selection & Payment Method */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className={`${paymentMethod === 'KREDIT' ? 'md:col-span-1' : 'md:col-span-2'}`}>
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
-                  Pilih Distributor
-                </label>
-                <select
-                  value={selectedDistributorId}
-                  onChange={(e) => setSelectedDistributorId(e.target.value)}
-                  disabled={isFetchingDist}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold disabled:opacity-60"
-                >
-                  {isFetchingDist ? (
-                    <option value="">Memuat data suplier...</option>
-                  ) : distributors.length === 0 ? (
-                    <option value="">— Belum ada suplier (tambah di Master Data) —</option>
-                  ) : (
-                    distributors.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.contact_name})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
-                  Metode Pembayaran
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as 'TUNAI' | 'KREDIT')}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold"
-                >
-                  <option value="TUNAI">TUNAI (Cash)</option>
-                  <option value="KREDIT">KREDIT (Credit / Tempo)</option>
-                </select>
-              </div>
-
-              {paymentMethod === 'KREDIT' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
-                    TOP (Hari)
+            {/* Distributor Selection, Payment Method & Currency / Kurs Khusus */}
+            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/80 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={`${paymentMethod === 'KREDIT' ? 'sm:col-span-2 md:col-span-1' : 'sm:col-span-2 md:col-span-2'}`}>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                    Pilih Distributor
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={paymentTermsDays}
-                    onChange={(e) => setPaymentTermsDays(Number(e.target.value) || 0)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold font-mono"
-                    placeholder="30"
-                  />
+                  <select
+                    value={selectedDistributorId}
+                    onChange={(e) => setSelectedDistributorId(e.target.value)}
+                    disabled={isFetchingDist}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold disabled:opacity-60"
+                  >
+                    {isFetchingDist ? (
+                      <option value="">Memuat data suplier...</option>
+                    ) : distributors.length === 0 ? (
+                      <option value="">— Belum ada suplier —</option>
+                    ) : (
+                      distributors.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.contact_name})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                    Pembayaran
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'TUNAI' | 'KREDIT')}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold"
+                  >
+                    <option value="TUNAI">TUNAI (Cash)</option>
+                    <option value="KREDIT">KREDIT (Tempo)</option>
+                  </select>
+                </div>
+
+                {paymentMethod === 'KREDIT' && (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                      TOP (Hari)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={paymentTermsDays}
+                      onChange={(e) => setPaymentTermsDays(Number(e.target.value) || 0)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold font-mono"
+                      placeholder="30"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Currency & Exchange Rate Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-700/60">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1 flex items-center justify-between">
+                    <span>Mata Uang PO</span>
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold">{currency}</span>
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => handleCurrencyChange(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-semibold"
+                  >
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.flag} {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1 flex items-center justify-between">
+                    <span>Kurs Khusus (Konversi IDR)</span>
+                    {currency !== 'IDR' && (
+                      <span className="text-[10px] text-amber-400 font-mono font-bold">1 {currency} = {formatIDR(exchangeRate)}</span>
+                    )}
+                  </label>
+                  {currency === 'IDR' ? (
+                    <div className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-500 font-mono">
+                      1.00 (Mata Uang Rupiah Standar)
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs pointer-events-none">Rp</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="10"
+                        value={exchangeRate}
+                        onChange={(e) => handleExchangeRateChange(Number(e.target.value) || 1)}
+                        className="w-full bg-slate-900 border border-amber-500/70 rounded-xl pl-9 pr-3 py-2 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-500"
+                        placeholder="16250"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {currency !== 'IDR' && (
+                <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg p-2.5 text-[11px] text-amber-300 flex items-center justify-between">
+                  <span>💡 Harga beli per Kg diinput dalam <strong>{currency}</strong> dan otomatis dikonversi ke HPP IDR (Kurs: 1 {currency} = {formatIDR(exchangeRate)}).</span>
                 </div>
               )}
             </div>
@@ -492,7 +637,7 @@ export function CreatePOModal({
                     {/* Row 2: Jumlah, Qty auto, HPP, Hapus */}
                     <div className="flex items-end gap-2">
                       {/* Jumlah (Unit) - user input */}
-                      <div className="w-28">
+                      <div className="w-24">
                         <label className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Unit)</label>
                         <input
                           type="number"
@@ -508,9 +653,9 @@ export function CreatePOModal({
                       <div className="pb-1.5 text-slate-500 text-sm font-bold select-none">×</div>
 
                       {/* Pack Size (auto-filled, read-only) */}
-                      <div className="w-24">
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Kg / Unit</label>
-                        <div className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold">
+                      <div className="w-20">
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Kemasan</label>
+                        <div className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-400 font-mono font-bold text-center">
                           {item.packSizeKg} Kg
                         </div>
                       </div>
@@ -519,24 +664,46 @@ export function CreatePOModal({
                       <div className="pb-1.5 text-slate-500 text-sm font-bold select-none">=</div>
 
                       {/* Total Kg (calculated) */}
-                      <div className="w-24">
+                      <div className="w-20">
                         <label className="text-[10px] text-slate-400 block mb-0.5">Total (Kg)</label>
-                        <div className="w-full bg-slate-950/60 border border-emerald-800/40 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono font-bold">
+                        <div className="w-full bg-slate-950/60 border border-emerald-800/40 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-mono font-bold text-center">
                           {(item.jumlah * item.packSizeKg).toLocaleString('id-ID')} Kg
                         </div>
                       </div>
 
-                      {/* HPP / Kg */}
-                      <div className="flex-1">
-                        <label className="text-[10px] text-slate-400 block mb-0.5">HPP / Kg (IDR)</label>
-                        <input
-                          type="number"
-                          step="10000"
-                          value={item.costPerKg}
-                          onChange={(e) => handleCostChange(idx, e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                        />
-                      </div>
+                      {/* Foreign Cost / Kg (If non-IDR) */}
+                      {currency !== 'IDR' ? (
+                        <div className="flex-1">
+                          <label className="text-[10px] text-amber-300 font-bold block mb-0.5">
+                            Harga / Kg ({activeCurrencyConfig.symbol} {currency})
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.foreignCostPerKg || 0}
+                              onChange={(e) => handleForeignCostChange(idx, e.target.value)}
+                              className="w-full bg-slate-900 border border-amber-500/60 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono font-bold"
+                            />
+                          </div>
+                          <div className="text-[9px] text-slate-400 mt-0.5 font-mono">
+                            ≈ {formatIDR(item.costPerKg)} / Kg
+                          </div>
+                        </div>
+                      ) : (
+                        /* HPP / Kg (IDR) */
+                        <div className="flex-1">
+                          <label className="text-[10px] text-slate-400 block mb-0.5">HPP / Kg (IDR)</label>
+                          <input
+                            type="number"
+                            step="10000"
+                            value={item.costPerKg}
+                            onChange={(e) => handleCostChange(idx, e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                      )}
 
                       {/* Delete row */}
                       {items.length > 1 && (
@@ -551,8 +718,13 @@ export function CreatePOModal({
                     </div>
 
                     {/* Subtotal per row */}
-                    <div className="text-right text-[10px] text-slate-400">
-                      Subtotal:{' '}
+                    <div className="text-right text-[10px] text-slate-400 flex items-center justify-end gap-2">
+                      {currency !== 'IDR' && (
+                        <span className="text-amber-300 font-bold font-mono">
+                          {activeCurrencyConfig.symbol} {(item.jumlah * item.packSizeKg * (item.foreignCostPerKg || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                      <span>Subtotal IDR:</span>
                       <span className="text-white font-bold font-mono">
                         {formatIDR(item.jumlah * item.packSizeKg * item.costPerKg)}
                       </span>
@@ -571,9 +743,22 @@ export function CreatePOModal({
                   Total Kg: {totalKgOrdered.toLocaleString('id-ID')} Kg
                 </div>
               </div>
-              <span className="text-lg font-extrabold font-mono text-emerald-400">
-                {formatIDR(totalAmount)}
-              </span>
+              <div className="text-right">
+                {currency !== 'IDR' ? (
+                  <>
+                    <div className="text-lg font-extrabold font-mono text-amber-300">
+                      {activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                    </div>
+                    <div className="text-xs font-bold font-mono text-emerald-400">
+                      ≈ {formatIDR(totalAmount)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-lg font-extrabold font-mono text-emerald-400">
+                    {formatIDR(totalAmount)}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Buttons */}
@@ -598,7 +783,7 @@ export function CreatePOModal({
           /* STEP 2: CONFIRMATION REVIEW */
           <div className="p-6 space-y-5 animate-in fade-in duration-200">
             {/* Distributor & PO Meta Info Card */}
-            <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Distributor Tujuan</span>
                 <div className="font-bold text-white text-sm">{selectedDistributor?.name || 'Distributor'}</div>
@@ -610,6 +795,15 @@ export function CreatePOModal({
                   {paymentMethod === 'KREDIT' ? `KREDIT (TOP ${paymentTermsDays} Hari)` : 'TUNAI (Cash)'}
                 </div>
                 <div className="text-slate-400 text-[11px]">Syarat Pelunasan PO</div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mata Uang & Kurs</span>
+                <div className="font-bold text-amber-300 font-mono">
+                  {currency !== 'IDR' ? `${currency} (@ ${formatIDR(exchangeRate)})` : 'IDR (Rupiah)'}
+                </div>
+                <div className="text-slate-400 text-[11px]">
+                  {currency !== 'IDR' ? 'Kurs Khusus PO' : 'Mata Uang Lokal'}
+                </div>
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tanggal Diterbitkan</span>
@@ -633,7 +827,10 @@ export function CreatePOModal({
                       <th className="py-2.5 px-3 text-center">Kemasan</th>
                       <th className="py-2.5 px-3 text-center">Jumlah</th>
                       <th className="py-2.5 px-3 text-right">Total Berat</th>
-                      <th className="py-2.5 px-3 text-right">HPP / Kg</th>
+                      {currency !== 'IDR' && (
+                        <th className="py-2.5 px-3 text-right">Harga ({currency})</th>
+                      )}
+                      <th className="py-2.5 px-3 text-right">HPP / Kg (IDR)</th>
                       <th className="py-2.5 px-3 text-right">Subtotal</th>
                     </tr>
                   </thead>
@@ -654,11 +851,23 @@ export function CreatePOModal({
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
                           {(item.jumlah * item.packSizeKg).toLocaleString('id-ID')} Kg
                         </td>
+                        {currency !== 'IDR' && (
+                          <td className="py-2.5 px-3 text-right font-mono text-amber-300 font-bold">
+                            {activeCurrencyConfig.symbol} {(item.foreignCostPerKg || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                        )}
                         <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                           {formatIDR(item.costPerKg)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">
-                          {formatIDR(item.jumlah * item.packSizeKg * item.costPerKg)}
+                          {currency !== 'IDR' ? (
+                            <div>
+                              <div>{activeCurrencyConfig.symbol} {(item.jumlah * item.packSizeKg * (item.foreignCostPerKg || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                              <div className="text-[10px] text-slate-400 font-normal">≈ {formatIDR(item.jumlah * item.packSizeKg * item.costPerKg)}</div>
+                            </div>
+                          ) : (
+                            formatIDR(item.jumlah * item.packSizeKg * item.costPerKg)
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -675,9 +884,22 @@ export function CreatePOModal({
                   <strong className="text-white">{items.length} Varian</strong> | Total Berat: <strong className="text-white">{totalKgOrdered.toLocaleString('id-ID')} Kg</strong>
                 </div>
               </div>
-              <span className="text-xl font-extrabold font-mono text-emerald-400">
-                {formatIDR(totalAmount)}
-              </span>
+              <div className="text-right">
+                {currency !== 'IDR' ? (
+                  <>
+                    <div className="text-xl font-extrabold font-mono text-amber-300">
+                      {activeCurrencyConfig.symbol} {totalForeignAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                    </div>
+                    <div className="text-xs font-bold font-mono text-emerald-400">
+                      ≈ {formatIDR(totalAmount)} <span className="text-[10px] text-slate-400 font-normal">(@ Kurs {formatIDR(exchangeRate)})</span>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-xl font-extrabold font-mono text-emerald-400">
+                    {formatIDR(totalAmount)}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Notice Alert Banner */}
@@ -696,14 +918,14 @@ export function CreatePOModal({
               <button
                 type="button"
                 onClick={() => setStep('INPUT')}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" /> Kembali / Edit Item
               </button>
               <button
                 type="button"
                 onClick={handleFinalSubmit}
-                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg transition-all"
+                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer"
               >
                 <CheckCircle className="w-4 h-4" /> Konfirmasi & Kirim PO (Auto PDF)
               </button>

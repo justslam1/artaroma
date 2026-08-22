@@ -95,6 +95,11 @@ export function POPDFModal({ isOpen, onClose, po, companyConfig }: POPDFModalPro
               <div className="font-mono font-bold text-sm text-slate-900">{po.po_number}</div>
               <div className="text-slate-500">Tanggal Order: <strong>{formatDate(po.order_date)}</strong></div>
               <div className="text-slate-500">Status PO: <strong className="text-emerald-600 font-bold uppercase">{po.status}</strong></div>
+              {po.currency && po.currency !== 'IDR' && (
+                <div className="text-amber-800 font-bold text-[11px] bg-amber-50 border border-amber-200 px-2 py-0.5 rounded inline-block mt-1">
+                  Valas: {po.currency} (Kurs: 1 {po.currency} = {formatIDR(po.exchange_rate || 1)})
+                </div>
+              )}
             </div>
           </div>
 
@@ -135,6 +140,9 @@ export function POPDFModal({ isOpen, onClose, po, companyConfig }: POPDFModalPro
                   <th className="p-2.5 border border-slate-700">KODE SKU</th>
                   <th className="p-2.5 border border-slate-700">DESKRIPSI VARIAN BIBIT PARFUM</th>
                   <th className="p-2.5 border border-slate-700 text-right">KUANTITAS (KG)</th>
+                  {po.currency && po.currency !== 'IDR' && (
+                    <th className="p-2.5 border border-slate-700 text-right">HARGA / KG ({po.currency})</th>
+                  )}
                   <th className="p-2.5 border border-slate-700 text-right">HARGA / KG (IDR)</th>
                   <th className="p-2.5 border border-slate-700 text-right">SUBTOTAL (IDR)</th>
                 </tr>
@@ -154,23 +162,42 @@ export function POPDFModal({ isOpen, onClose, po, companyConfig }: POPDFModalPro
                       <td className="p-2.5 border border-slate-200 text-right font-bold text-slate-800">
                         {formatKg(qty)}
                       </td>
+                      {po.currency && po.currency !== 'IDR' && (
+                        <td className="p-2.5 border border-slate-200 text-right text-amber-700 font-bold">
+                          {po.currency} {(item.foreign_cost_per_kg || (cost / (po.exchange_rate || 1))).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                      )}
                       <td className="p-2.5 border border-slate-200 text-right text-slate-700">{formatIDR(cost)}</td>
-                      <td className="p-2.5 border border-slate-200 text-right font-bold text-slate-900">{formatIDR(subtotal)}</td>
+                      <td className="p-2.5 border border-slate-200 text-right font-bold text-slate-900">
+                        {po.currency && po.currency !== 'IDR' && (
+                          <div className="text-[10px] text-amber-800">
+                            {po.currency} {((item.foreign_cost_per_kg || (cost / (po.exchange_rate || 1))) * qty).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </div>
+                        )}
+                        <div>{formatIDR(subtotal)}</div>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">Subtotal Barang:</td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(calculatedTotal)}</td>
+                  <td colSpan={po.currency && po.currency !== 'IDR' ? 5 : 4} className="p-2.5 border border-slate-200 text-right uppercase">Subtotal Barang:</td>
+                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                    {po.currency && po.currency !== 'IDR' && (
+                      <div className="text-amber-800 text-[11px]">
+                        {po.currency} {((po.foreign_total_amount || (calculatedTotal / (po.exchange_rate || 1)))).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                    )}
+                    <div>{formatIDR(calculatedTotal)}</div>
+                  </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
+                  <td colSpan={po.currency && po.currency !== 'IDR' ? 5 : 4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
                   <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
                 </tr>
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-350">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase text-blue-900">Total Tagihan (Grand Total):</td>
+                  <td colSpan={po.currency && po.currency !== 'IDR' ? 5 : 4} className="p-2.5 border border-slate-200 text-right uppercase text-blue-900">Total Tagihan (Grand Total):</td>
                   <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono text-sm text-blue-900">{formatIDR(grandTotal)}</td>
                 </tr>
               </tfoot>

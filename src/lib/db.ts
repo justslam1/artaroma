@@ -140,6 +140,50 @@ export async function ensureSchemaMigrations(): Promise<void> {
         console.warn('[Schema Migration Couriers Warning]:', e.message);
       }
 
+      // 2d. Check & Add missing currency columns in purchase_orders & po_items
+      try {
+        const [poCols]: any = await conn.query('SHOW COLUMNS FROM purchase_orders');
+        const poColNames = new Set(poCols.map((c: any) => c.Field.toLowerCase()));
+
+        const poMigrations = [
+          { col: 'currency', sql: "ALTER TABLE purchase_orders ADD COLUMN currency VARCHAR(10) DEFAULT 'IDR'" },
+          { col: 'exchange_rate', sql: "ALTER TABLE purchase_orders ADD COLUMN exchange_rate DECIMAL(15,2) DEFAULT 1.00" },
+          { col: 'foreign_total_amount', sql: "ALTER TABLE purchase_orders ADD COLUMN foreign_total_amount DECIMAL(15,2) DEFAULT 0.00" },
+        ];
+
+        for (const m of poMigrations) {
+          if (!poColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column purchase_orders.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] purchase_orders.${m.col}:`, e.message);
+            }
+          }
+        }
+
+        const [poiCols]: any = await conn.query('SHOW COLUMNS FROM po_items');
+        const poiColNames = new Set(poiCols.map((c: any) => c.Field.toLowerCase()));
+
+        const poiMigrations = [
+          { col: 'foreign_cost_per_kg', sql: "ALTER TABLE po_items ADD COLUMN foreign_cost_per_kg DECIMAL(15,2) DEFAULT NULL" },
+          { col: 'foreign_subtotal', sql: "ALTER TABLE po_items ADD COLUMN foreign_subtotal DECIMAL(15,2) DEFAULT NULL" },
+        ];
+
+        for (const m of poiMigrations) {
+          if (!poiColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column po_items.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] po_items.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration PO Currency Warning]:', e.message);
+      }
+
       // 3. Ensure operational_logs table exists
       try {
         await conn.query(`

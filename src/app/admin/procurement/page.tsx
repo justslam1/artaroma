@@ -373,6 +373,12 @@ export default function ProcurementPage() {
                           <span className={`text-slate-800 ${isRead ? 'font-medium' : 'font-extrabold'}`}>
                             {formatIDR(po.total_amount)}
                           </span>
+                          {po.currency && po.currency !== 'IDR' && (
+                            <div className="text-[10px] text-amber-700 font-bold mt-0.5">
+                              {po.currency} {((po.foreign_total_amount || (po.total_amount / (po.exchange_rate || 1)))).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span className="text-slate-400 font-normal"> (@ {formatIDR(po.exchange_rate || 1)})</span>
+                            </div>
+                          )}
                         </td>
                       )}
 

@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
             status: po.status,
             payment_method: po.payment_method || 'TUNAI',
             payment_terms_days: po.payment_terms_days || 0,
+            currency: po.currency || 'IDR',
+            exchange_rate: parseFloat(po.exchange_rate) || 1.0,
+            foreign_total_amount: po.foreign_total_amount !== null ? parseFloat(po.foreign_total_amount) : undefined,
             order_date: po.order_date,
             total_amount: parseFloat(po.total_amount) || 0,
             items: items.map((item: any) => ({
@@ -36,6 +39,8 @@ export async function GET(req: NextRequest) {
               product_name: item.product_name || 'Bibit Parfum',
               qty_ordered_kg: parseFloat(item.qty_ordered_kg) || 0,
               qty_shipped_kg: item.qty_shipped_kg !== null ? parseFloat(item.qty_shipped_kg) : undefined,
+              foreign_cost_per_kg: item.foreign_cost_per_kg !== null ? parseFloat(item.foreign_cost_per_kg) : undefined,
+              foreign_subtotal: item.foreign_subtotal !== null ? parseFloat(item.foreign_subtotal) : undefined,
               cost_per_kg: parseFloat(item.cost_per_kg) || 0,
               subtotal: parseFloat(item.subtotal) || 0,
             })),
@@ -76,7 +81,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { distributor_id, distributor_name, payment_method, payment_terms_days, items } = body;
+    const {
+      distributor_id,
+      distributor_name,
+      payment_method,
+      payment_terms_days,
+      currency,
+      exchange_rate,
+      foreign_total_amount,
+      items
+    } = body;
 
     if (!distributor_id || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -88,13 +102,20 @@ export async function POST(req: NextRequest) {
     const poId = `po-${Date.now()}`;
     const poNumber = await generateNextPONumber();
     const orderDate = new Date().toISOString().split('T')[0];
+    const poCurrency = currency || 'IDR';
+    const poRate = parseFloat(exchange_rate) || 1.0;
 
     let totalAmount = 0;
+    let foreignTotal = 0;
     const processedItems = items.map((item: any, index: number) => {
       const qty = parseFloat(item.qty_ordered_kg) || 0;
+      const foreignCost = item.foreign_cost_per_kg !== undefined ? parseFloat(item.foreign_cost_per_kg) : undefined;
       const cost = parseFloat(item.cost_per_kg) || 0;
-      const subtotal = qty * cost;
+      const subtotal = parseFloat(item.subtotal) || (qty * cost);
+      const foreignSub = foreignCost !== undefined ? (qty * foreignCost) : undefined;
+      
       totalAmount += subtotal;
+      if (foreignSub !== undefined) foreignTotal += foreignSub;
 
       return {
         id: `po-item-${Date.now()}-${index}`,
@@ -103,6 +124,8 @@ export async function POST(req: NextRequest) {
         variant_sku: item.variant_sku || '',
         product_name: item.product_name || '',
         qty_ordered_kg: qty,
+        foreign_cost_per_kg: foreignCost,
+        foreign_subtotal: foreignSub,
         cost_per_kg: cost,
         subtotal,
       };
@@ -110,16 +133,38 @@ export async function POST(req: NextRequest) {
 
     try {
       await executeQuery(
-        `INSERT INTO purchase_orders (id, po_number, distributor_id, status, payment_method, payment_terms_days, order_date, total_amount)
-        VALUES (?, ?, ?, 'BUAT_EMAIL', ?, ?, ?, ?)`,
-        [poId, poNumber, distributor_id, payment_method || 'TUNAI', payment_terms_days || 0, orderDate, totalAmount]
+        `INSERT INTO purchase_orders (id, po_number, distributor_id, status, payment_method, payment_terms_days, currency, exchange_rate, foreign_total_amount, order_date, total_amount)
+        VALUES (?, ?, ?, 'BUAT_EMAIL', ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          poId,
+          poNumber,
+          distributor_id,
+          payment_method || 'TUNAI',
+          payment_terms_days || 0,
+          poCurrency,
+          poRate,
+          poCurrency !== 'IDR' ? (foreign_total_amount || foreignTotal) : 0,
+          orderDate,
+          totalAmount
+        ]
       );
 
       for (const item of processedItems) {
         await executeQuery(
-          `INSERT INTO po_items (id, po_id, product_id, product_name, variant_sku, qty_ordered_kg, cost_per_kg, subtotal)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [item.id, poId, item.product_id, item.product_name || '', item.variant_sku || '', item.qty_ordered_kg, item.cost_per_kg, item.subtotal]
+          `INSERT INTO po_items (id, po_id, product_id, product_name, variant_sku, qty_ordered_kg, foreign_cost_per_kg, foreign_subtotal, cost_per_kg, subtotal)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            item.id,
+            poId,
+            item.product_id,
+            item.product_name || '',
+            item.variant_sku || '',
+            item.qty_ordered_kg,
+            item.foreign_cost_per_kg || null,
+            item.foreign_subtotal || null,
+            item.cost_per_kg,
+            item.subtotal
+          ]
         );
       }
     } catch (e: any) {
@@ -138,6 +183,9 @@ export async function POST(req: NextRequest) {
           status: 'BUAT_EMAIL',
           payment_method: payment_method || 'TUNAI',
           payment_terms_days: payment_terms_days || 0,
+          currency: poCurrency,
+          exchange_rate: poRate,
+          foreign_total_amount: poCurrency !== 'IDR' ? foreignTotal : undefined,
           order_date: orderDate,
           total_amount: totalAmount,
           items: processedItems,

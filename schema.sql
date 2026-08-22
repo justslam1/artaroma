@@ -135,6 +135,42 @@ CREATE TABLE IF NOT EXISTS stock_batches (
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 8b. TABEL PURCHASE ORDERS (PO Pengadaan Bibit Parfum & Valas)
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id VARCHAR(64) PRIMARY KEY,
+    po_number VARCHAR(64) UNIQUE NOT NULL,
+    distributor_id VARCHAR(64) NOT NULL,
+    status ENUM('BUAT_EMAIL', 'DIKIRIM', 'DITERIMA', 'CANCELLED', 'DIBATALKAN') DEFAULT 'BUAT_EMAIL',
+    payment_method VARCHAR(20) DEFAULT 'TUNAI',
+    payment_terms_days INT DEFAULT 0,
+    currency VARCHAR(10) DEFAULT 'IDR',
+    exchange_rate DECIMAL(15,2) DEFAULT 1.00,
+    foreign_total_amount DECIMAL(15,2) DEFAULT 0.00,
+    order_date DATE NOT NULL,
+    total_amount DECIMAL(15,2) DEFAULT 0.00,
+    shipments LONGTEXT,
+    cancellation_note TEXT,
+    cancelled_at DATETIME,
+    cancelled_by VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 8c. TABEL PO ITEMS (Detail Item PO)
+CREATE TABLE IF NOT EXISTS po_items (
+    id VARCHAR(64) PRIMARY KEY,
+    po_id VARCHAR(64) NOT NULL,
+    product_id VARCHAR(64) NOT NULL,
+    product_name VARCHAR(255),
+    variant_sku VARCHAR(64),
+    qty_ordered_kg DECIMAL(12,4) NOT NULL,
+    qty_shipped_kg DECIMAL(12,4),
+    foreign_cost_per_kg DECIMAL(15,2),
+    foreign_subtotal DECIMAL(15,2),
+    cost_per_kg DECIMAL(15,2) NOT NULL,
+    subtotal DECIMAL(15,2) NOT NULL,
+    FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 9. TABEL SALES ORDERS (SO B2B)
 CREATE TABLE IF NOT EXISTS sales_orders (
     id VARCHAR(64) PRIMARY KEY,
