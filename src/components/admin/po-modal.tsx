@@ -597,8 +597,12 @@ export function CreatePOModal({
                             const isCurrentlySelected = v.id === item.variantId;
                             const isSelectedElsewhere = selectedVariantIds.includes(v.id) && !isCurrentlySelected;
                             if (isSelectedElsewhere) return null;
-                            const stockLabel = v.stockKg != null
-                              ? ` | Stok: ${v.stockKg.toLocaleString('id-ID')} Kg`
+                            const prod = products.find(p => p.id === v.productId);
+                            const sizeKey = String(Math.round(Number(v.pack_size_kg)));
+                            const vStock = prod?.variant_stocks?.[sizeKey] !== undefined ? prod.variant_stocks[sizeKey] : v.stockKg;
+                            const vUnits = v.pack_size_kg > 0 ? Math.floor((vStock || 0) / v.pack_size_kg) : 0;
+                            const stockLabel = vStock != null
+                              ? ` | Stok: ${vStock.toLocaleString('id-ID')} Kg (${vUnits} unit)`
                               : '';
                             return (
                               <option key={v.id} value={v.id}>
@@ -608,27 +612,95 @@ export function CreatePOModal({
                           })
                         )}
                       </select>
-                      {/* Stock badge below dropdown for selected variant */}
+                      {/* Stock badge below dropdown for parent product & all variants */}
                       {(() => {
                         const selV = activeVariants.find(v => v.id === item.variantId);
-                        if (!selV || selV.stockKg == null) return null;
-                        const stockKg = selV.stockKg;
-                        const stockUnits = selV.pack_size_kg > 0 ? Math.floor(stockKg / selV.pack_size_kg) : 0;
-                        const isLow = stockKg < selV.pack_size_kg * 2;
+                        if (!selV) return null;
+                        const prod = products.find(p => p.id === selV.productId);
+                        
+                        // Total stock of the parent product
+                        const totalStockKg = prod?.total_stock_kg ?? (
+                          prod?.variant_stocks 
+                            ? Object.values(prod.variant_stocks).reduce((s, v) => s + (Number(v) || 0), 0)
+                            : (selV.stockKg || 0)
+                        );
+                        const isLow = totalStockKg < 10;
+
+                        // List all pack sizes for this parent product (e.g. 25, 5, 1)
+                        const packSizes = (prod?.pack_sizes && prod.pack_sizes.length > 0)
+                          ? prod.pack_sizes
+                          : (prod?.variants && prod.variants.length > 0)
+                          ? Array.from(new Set(prod.variants.map(v => v.pack_size_kg)))
+                          : [25, 5, 1];
+
+                        const sortedSizes = [...packSizes].sort((a, b) => Number(b) - Number(a));
+
+                        const variantBreakdowns = sortedSizes.map(size => {
+                          const sizeNum = Number(size);
+                          const sizeKey = String(Math.round(sizeNum));
+                          const vStockKg = prod?.variant_stocks?.[sizeKey] !== undefined 
+                            ? Number(prod.variant_stocks[sizeKey]) 
+                            : 0;
+                          const vUnits = sizeNum > 0 ? Math.floor(vStockKg / sizeNum) : 0;
+                          const isSelected = Math.round(sizeNum) === Math.round(Number(selV.pack_size_kg));
+                          return {
+                            size: sizeNum,
+                            stockKg: vStockKg,
+                            units: vUnits,
+                            isSelected,
+                          };
+                        });
+
+                        const hasSpecificStocks = variantBreakdowns.some(vb => vb.stockKg > 0);
+
                         return (
-                          <div className={`mt-1 flex items-center gap-1.5 text-[10px] font-semibold ${
+                          <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold ${
                             isLow ? 'text-red-400' : 'text-emerald-400'
                           }`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${
-                              isLow ? 'bg-red-400' : 'bg-emerald-400'
-                            }`} />
-                            Sisa stok: {stockKg.toLocaleString('id-ID')} Kg
-                            {stockUnits > 0 && (
-                              <span className="text-slate-500">
-                                ({stockUnits} unit @{selV.pack_size_kg}Kg)
-                              </span>
-                            )}
-                            {isLow && <span className="text-red-400 font-bold">⚠ Stok rendah</span>}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <div className={`w-1.5 h-1.5 rounded-full ${
+                                isLow ? 'bg-red-400' : 'bg-emerald-400'
+                              }`} />
+                              <span>Sisa Stok Induk ({prod?.name || selV.productName}): <strong>{totalStockKg.toLocaleString('id-ID')} Kg</strong></span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-slate-300 font-mono flex-wrap">
+                              <span>— Rincian Varian:</span>
+                              {hasSpecificStocks ? (
+                                variantBreakdowns.map((vb) => (
+                                  <span
+                                    key={vb.size}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] ${
+                                      vb.isSelected
+                                        ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40'
+                                        : 'bg-slate-800 text-slate-400'
+                                    }`}
+                                  >
+                                    {vb.size}K: <strong>{vb.units} unit</strong> ({vb.stockKg.toLocaleString('id-ID')} Kg)
+                                  </span>
+                                ))
+                              ) : (
+                                sortedSizes.map((sz) => {
+                                  const szNum = Number(sz);
+                                  const maxUnits = szNum > 0 ? Math.floor(totalStockKg / szNum) : 0;
+                                  const isSelected = Math.round(szNum) === Math.round(Number(selV.pack_size_kg));
+                                  return (
+                                    <span
+                                      key={sz}
+                                      className={`px-1.5 py-0.5 rounded text-[9px] ${
+                                        isSelected
+                                          ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40'
+                                          : 'bg-slate-800 text-slate-400'
+                                      }`}
+                                    >
+                                      {sz}K: <strong>{maxUnits} unit</strong>
+                                    </span>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {isLow && <span className="text-red-400 font-bold ml-1">⚠ Stok rendah</span>}
                           </div>
                         );
                       })()}
