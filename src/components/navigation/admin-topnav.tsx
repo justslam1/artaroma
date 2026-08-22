@@ -28,6 +28,8 @@ import {
   ArrowRight,
   X,
   ExternalLink,
+  Landmark,
+  Wallet,
 } from 'lucide-react';
 import { formatIDR } from '@/lib/utils';
 
@@ -65,6 +67,7 @@ export function AdminTopNav() {
 
   const isCustomerInvoicesActive = pathname === '/admin/finance';
   const isVendorPayablesActive = pathname.startsWith('/admin/finance/payables');
+  const isCashManagementActive = pathname.startsWith('/admin/finance/cash');
 
   // Load read order IDs from localStorage
   useEffect(() => {
@@ -599,6 +602,22 @@ export function AdminTopNav() {
                         </div>
                       </div>
                     </Link>
+
+                    <Link
+                      href="/admin/finance/cash"
+                      onClick={() => setIsFinanceOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-2.5 text-xs font-semibold hover:bg-blue-50 transition-colors ${
+                        isCashManagementActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                      }`}
+                    >
+                      <Landmark className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-bold text-slate-800">3. Manajemen Kas & Treasury</div>
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          Kas Besar, Kas Kantor, Kas Kecil & Sales
+                        </div>
+                      </div>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -631,6 +650,16 @@ export function AdminTopNav() {
               }`}
             >
               <Building2 className="w-3.5 h-3.5" /> Tagihan Suplier (Hutang PO)
+            </Link>
+            <Link
+              href="/admin/finance/cash"
+              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                isCashManagementActive
+                  ? 'bg-white text-blue-900 font-bold shadow-sm'
+                  : 'text-blue-100 hover:bg-blue-700'
+              }`}
+            >
+              <Landmark className="w-3.5 h-3.5" /> Manajemen Kas & Treasury
             </Link>
           </div>
         </div>

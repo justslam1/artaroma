@@ -373,4 +373,62 @@ export interface DeliveryTask {
   delivered_at?: string;
 }
 
+// Cash & Treasury Management Types
+export type CashAccountType =
+  | 'KAS_BESAR_BANK'
+  | 'KAS_BESAR_TUNAI'
+  | 'KAS_KANTOR'
+  | 'KAS_KECIL'
+  | 'KAS_SALES';
+
+export type CashTxType = 'IN' | 'OUT' | 'TRANSFER';
+
+export type CashCategory =
+  | 'PENJUALAN_SO'
+  | 'PEMBELIAN_PO'
+  | 'TOPUP_KAS'
+  | 'OPERASIONAL_KANTOR'
+  | 'PETTY_CASH'
+  | 'SALES_OPS'
+  | 'SETOR_BALIK'
+  | 'GAJI_KARYAWAN'
+  | 'PAJAK'
+  | 'MODAL_PEMILIK'
+  | 'LAINNYA';
+
+export interface CashAccount {
+  id: string;
+  name: string;
+  type: CashAccountType;
+  account_number?: string;
+  bank_name?: string;
+  holder_name?: string;
+  initial_balance: number;
+  current_balance: number;
+  pic_name?: string;
+  description?: string;
+  badge_color?: string;
+  is_active: boolean;
+}
+
+export interface CashTransaction {
+  id: string;
+  tx_number: string; // e.g. BKM-202608-0001, BKK-202608-0001, TRF-202608-0001
+  date: string;
+  account_id: string;
+  account_name: string;
+  tx_type: CashTxType;
+  category: CashCategory;
+  amount: number;
+  balance_after: number;
+  recipient_or_payer: string;
+  reference_number?: string; // No. SO / No. Invoice / No. PO / No. Pengajuan
+  notes?: string;
+  proof_url?: string;
+  created_by?: string;
+  transfer_pair_id?: string; // Links transfer in & transfer out
+  status: 'VERIFIED' | 'DRAFT';
+  created_at?: string;
+}
+
 export type UserRole = 'ADMIN' | 'FINANCE' | 'SALES' | 'CUSTOMER' | 'COURIER' | 'WAREHOUSE';

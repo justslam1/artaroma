@@ -1,0 +1,424 @@
+import { CashAccount, CashTransaction, Invoice, PurchaseOrder } from './types';
+
+export const INITIAL_CASH_ACCOUNTS: CashAccount[] = [
+  {
+    id: 'acc-bca',
+    name: 'BCA Operasional (019-3881)',
+    type: 'KAS_BESAR_BANK',
+    account_number: '882-019-3881',
+    bank_name: 'Bank Central Asia (BCA)',
+    holder_name: 'PT Artaroma Jayatama',
+    initial_balance: 150000000,
+    current_balance: 185500000,
+    pic_name: 'Finance Treasury',
+    description: 'Rekening penerimaan utama tagihan invoice customer & pembayaran suplier',
+    badge_color: 'bg-blue-600',
+    is_active: true,
+  },
+  {
+    id: 'acc-mandiri',
+    name: 'Mandiri Giro (1928-1)',
+    type: 'KAS_BESAR_BANK',
+    account_number: '156-00-1928374-1',
+    bank_name: 'Bank Mandiri',
+    holder_name: 'PT Artaroma Jayatama',
+    initial_balance: 80000000,
+    current_balance: 95000000,
+    pic_name: 'Finance Treasury',
+    description: 'Rekening giro penampungan transaksi B2B & pajak',
+    badge_color: 'bg-amber-600',
+    is_active: true,
+  },
+  {
+    id: 'acc-pusat',
+    name: 'Kas Tunai Pusat',
+    type: 'KAS_BESAR_TUNAI',
+    initial_balance: 20000000,
+    current_balance: 15000000,
+    pic_name: 'Head of Finance',
+    description: 'Brankas kas tunai utama kantor pusat Artaroma',
+    badge_color: 'bg-emerald-700',
+    is_active: true,
+  },
+  {
+    id: 'acc-kantor',
+    name: 'Kas Operasional Kantor',
+    type: 'KAS_KANTOR',
+    initial_balance: 10000000,
+    current_balance: 8750000,
+    pic_name: 'General Affair (GA)',
+    description: 'Biaya rutin bulanan listrik PLN, WiFi kantor, maintenance AC, & perbaikan sarana',
+    badge_color: 'bg-purple-600',
+    is_active: true,
+  },
+  {
+    id: 'acc-petty',
+    name: 'Kas Kecil (Petty Cash)',
+    type: 'KAS_KECIL',
+    initial_balance: 5000000,
+    current_balance: 3250000,
+    pic_name: 'Staf Finance Kasir',
+    description: 'Pengeluaran mikro harian (< Rp 500rb): konsumsi, galon air, kurir darurat, & parkir',
+    badge_color: 'bg-teal-600',
+    is_active: true,
+  },
+  {
+    id: 'acc-sales',
+    name: 'Kas Operasional Sales',
+    type: 'KAS_SALES',
+    initial_balance: 5000000,
+    current_balance: 4500000,
+    pic_name: 'Tim Sales B2B',
+    description: 'Dana jalan visit customer, BBM, akomodasi luar kota, & sampling aroma',
+    badge_color: 'bg-indigo-600',
+    is_active: true,
+  },
+];
+
+export const INITIAL_CASH_TRANSACTIONS: CashTransaction[] = [
+  {
+    id: 'tx-001',
+    tx_number: 'BKM-202608-0001',
+    date: '2026-08-20',
+    account_id: 'acc-bca',
+    account_name: 'BCA Operasional (019-3881)',
+    tx_type: 'IN',
+    category: 'PENJUALAN_SO',
+    amount: 36250000,
+    balance_after: 186250000,
+    recipient_or_payer: 'PT Aroma Sukses Mandiri',
+    reference_number: 'INV-2026-006 / SO-202608-0006',
+    notes: 'Pelunasan invoice penjualan bibit parfum Acasia 25kg',
+    proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=60',
+    created_by: 'Staf Finance',
+    status: 'VERIFIED',
+    created_at: '2026-08-20T09:15:00.000Z',
+  },
+  {
+    id: 'tx-002',
+    tx_number: 'BKK-202608-0001',
+    date: '2026-08-20',
+    account_id: 'acc-bca',
+    account_name: 'BCA Operasional (019-3881)',
+    tx_type: 'OUT',
+    category: 'PEMBELIAN_PO',
+    amount: 25000000,
+    balance_after: 161250000,
+    recipient_or_payer: 'CV Fragrance Global Suplier',
+    reference_number: 'PO-2026-0801',
+    notes: 'Pembayaran termin 1 pengadaan bibit parfum Vanilla Bourbon',
+    proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=60',
+    created_by: 'Staf Finance',
+    status: 'VERIFIED',
+    created_at: '2026-08-20T11:30:00.000Z',
+  },
+  {
+    id: 'tx-003a',
+    tx_number: 'TRF-202608-0001',
+    date: '2026-08-21',
+    account_id: 'acc-bca',
+    account_name: 'BCA Operasional (019-3881)',
+    tx_type: 'TRANSFER',
+    category: 'TOPUP_KAS',
+    amount: 5000000,
+    balance_after: 156250000,
+    recipient_or_payer: 'Kas Operasional Kantor',
+    reference_number: 'VOUCHER-TOPUP-01',
+    notes: 'Transfer top-up dana operasional kantor periode akhir Agustus',
+    created_by: 'Finance Treasury',
+    transfer_pair_id: 'tx-003b',
+    status: 'VERIFIED',
+    created_at: '2026-08-21T08:00:00.000Z',
+  },
+  {
+    id: 'tx-003b',
+    tx_number: 'TRF-202608-0001-IN',
+    date: '2026-08-21',
+    account_id: 'acc-kantor',
+    account_name: 'Kas Operasional Kantor',
+    tx_type: 'IN',
+    category: 'TOPUP_KAS',
+    amount: 5000000,
+    balance_after: 10000000,
+    recipient_or_payer: 'BCA Operasional (019-3881)',
+    reference_number: 'VOUCHER-TOPUP-01',
+    notes: 'Penerimaan top-up dari Kas Besar BCA',
+    created_by: 'Finance Treasury',
+    transfer_pair_id: 'tx-003a',
+    status: 'VERIFIED',
+    created_at: '2026-08-21T08:00:00.000Z',
+  },
+  {
+    id: 'tx-004',
+    tx_number: 'BKK-202608-0002',
+    date: '2026-08-21',
+    account_id: 'acc-kantor',
+    account_name: 'Kas Operasional Kantor',
+    tx_type: 'OUT',
+    category: 'OPERASIONAL_KANTOR',
+    amount: 1250000,
+    balance_after: 8750000,
+    recipient_or_payer: 'PLN & Indihome Telkom',
+    reference_number: 'NOTA-OPS-0821',
+    notes: 'Pembayaran tagihan listrik kantor pusat & langganan internet bulanan',
+    proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=60',
+    created_by: 'General Affair (GA)',
+    status: 'VERIFIED',
+    created_at: '2026-08-21T10:15:00.000Z',
+  },
+  {
+    id: 'tx-005',
+    tx_number: 'BKK-202608-0003',
+    date: '2026-08-21',
+    account_id: 'acc-petty',
+    account_name: 'Kas Kecil (Petty Cash)',
+    tx_type: 'OUT',
+    category: 'PETTY_CASH',
+    amount: 350000,
+    balance_after: 3250000,
+    recipient_or_payer: 'Toko ATK & Depot Air Minum',
+    reference_number: 'NOTA-PK-008',
+    notes: 'Beli 5 galon air mineral + kertas thermal resi pengiriman',
+    created_by: 'Staf Finance Kasir',
+    status: 'VERIFIED',
+    created_at: '2026-08-21T14:20:00.000Z',
+  },
+  {
+    id: 'tx-006',
+    tx_number: 'BKK-202608-0004',
+    date: '2026-08-22',
+    account_id: 'acc-sales',
+    account_name: 'Kas Operasional Sales',
+    tx_type: 'OUT',
+    category: 'SALES_OPS',
+    amount: 500000,
+    balance_after: 4500000,
+    recipient_or_payer: 'SPBU Pertamina & Tol',
+    reference_number: 'KLAIM-SALES-01',
+    notes: 'Uang bensin & e-toll kunjungan demo aroma ke Customer Solo',
+    created_by: 'Tim Sales B2B',
+    status: 'VERIFIED',
+    created_at: '2026-08-22T08:45:00.000Z',
+  },
+];
+
+const STORAGE_KEY_ACCOUNTS = 'artaroma_cash_accounts_v1';
+const STORAGE_KEY_TXS = 'artaroma_cash_transactions_v1';
+
+export function getStoredCashAccounts(): CashAccount[] {
+  if (typeof window === 'undefined') return INITIAL_CASH_ACCOUNTS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACCOUNTS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(INITIAL_CASH_ACCOUNTS));
+      return INITIAL_CASH_ACCOUNTS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error loading cash accounts:', e);
+    return INITIAL_CASH_ACCOUNTS;
+  }
+}
+
+export function saveStoredCashAccounts(accounts: CashAccount[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(accounts));
+    window.dispatchEvent(new Event('artaroma_cash_updated'));
+  } catch (e) {
+    console.error('Error saving cash accounts:', e);
+  }
+}
+
+export function getStoredCashTransactions(): CashTransaction[] {
+  if (typeof window === 'undefined') return INITIAL_CASH_TRANSACTIONS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TXS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY_TXS, JSON.stringify(INITIAL_CASH_TRANSACTIONS));
+      return INITIAL_CASH_TRANSACTIONS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error loading cash transactions:', e);
+    return INITIAL_CASH_TRANSACTIONS;
+  }
+}
+
+export function saveStoredCashTransactions(txs: CashTransaction[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_TXS, JSON.stringify(txs));
+    window.dispatchEvent(new Event('artaroma_cash_updated'));
+  } catch (e) {
+    console.error('Error saving cash transactions:', e);
+  }
+}
+
+/**
+ * Recalculates current_balance for all cash accounts based on transactions
+ */
+export function recalculateBalances(
+  accounts: CashAccount[],
+  transactions: CashTransaction[]
+): CashAccount[] {
+  return accounts.map((acc) => {
+    const accTxs = transactions
+      .filter((t) => t.account_id === acc.id && t.status === 'VERIFIED')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let balance = Number(acc.initial_balance) || 0;
+    accTxs.forEach((t) => {
+      const amt = Number(t.amount) || 0;
+      if (t.tx_type === 'IN') {
+        balance += amt;
+      } else if (t.tx_type === 'OUT' || t.tx_type === 'TRANSFER') {
+        balance -= amt;
+      }
+    });
+
+    return {
+      ...acc,
+      current_balance: balance,
+    };
+  });
+}
+
+/**
+ * Record a single cash inflow or outflow transaction
+ */
+export function recordCashTransaction(
+  txData: Omit<CashTransaction, 'id' | 'tx_number' | 'balance_after' | 'created_at'>
+): CashTransaction {
+  const accounts = getStoredCashAccounts();
+  const txs = getStoredCashTransactions();
+
+  const targetAcc = accounts.find((a) => a.id === txData.account_id) || accounts[0];
+  const prefix = txData.tx_type === 'IN' ? 'BKM' : 'BKK';
+  const monthStr = new Date().toISOString().slice(0, 7).replace('-', '');
+  const count = txs.filter((t) => t.tx_number.startsWith(prefix)).length + 1;
+  const txNumber = `${prefix}-${monthStr}-${String(count).padStart(4, '0')}`;
+
+  const currentBal = Number(targetAcc.current_balance) || 0;
+  const newBal = txData.tx_type === 'IN' ? currentBal + Number(txData.amount) : currentBal - Number(txData.amount);
+
+  const newTx: CashTransaction = {
+    ...txData,
+    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    tx_number: txNumber,
+    account_name: targetAcc.name,
+    balance_after: newBal,
+    created_at: new Date().toISOString(),
+  };
+
+  const updatedTxs = [newTx, ...txs];
+  const updatedAccs = recalculateBalances(accounts, updatedTxs);
+
+  saveStoredCashTransactions(updatedTxs);
+  saveStoredCashAccounts(updatedAccs);
+
+  return newTx;
+}
+
+/**
+ * Inter-Account Transfer (e.g. Kas Besar -> Kas Kantor / Kas Kecil / Kas Sales, or Setor Balik)
+ */
+export function transferCashBetweenAccounts(params: {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string;
+  category?: 'TOPUP_KAS' | 'SETOR_BALIK';
+  notes?: string;
+  proofUrl?: string;
+  createdBy?: string;
+}): { outTx: CashTransaction; inTx: CashTransaction } {
+  const accounts = getStoredCashAccounts();
+  const txs = getStoredCashTransactions();
+
+  const fromAcc = accounts.find((a) => a.id === params.fromAccountId);
+  const toAcc = accounts.find((a) => a.id === params.toAccountId);
+
+  if (!fromAcc || !toAcc) {
+    throw new Error('Akun asal atau akun tujuan tidak ditemukan.');
+  }
+
+  const monthStr = new Date().toISOString().slice(0, 7).replace('-', '');
+  const trfCount = txs.filter((t) => t.tx_type === 'TRANSFER').length + 1;
+  const trfNumber = `TRF-${monthStr}-${String(trfCount).padStart(4, '0')}`;
+
+  const pairId = `pair-${Date.now()}`;
+  const outTxId = `tx-${Date.now()}-out`;
+  const inTxId = `tx-${Date.now()}-in`;
+
+  const category = params.category || 'TOPUP_KAS';
+
+  const outTx: CashTransaction = {
+    id: outTxId,
+    tx_number: trfNumber,
+    date: params.date,
+    account_id: fromAcc.id,
+    account_name: fromAcc.name,
+    tx_type: 'TRANSFER',
+    category,
+    amount: params.amount,
+    balance_after: (Number(fromAcc.current_balance) || 0) - params.amount,
+    recipient_or_payer: toAcc.name,
+    reference_number: trfNumber,
+    notes: params.notes || `Transfer dana ke ${toAcc.name}`,
+    proof_url: params.proofUrl,
+    created_by: params.createdBy || 'Finance Treasury',
+    transfer_pair_id: inTxId,
+    status: 'VERIFIED',
+    created_at: new Date().toISOString(),
+  };
+
+  const inTx: CashTransaction = {
+    id: inTxId,
+    tx_number: `${trfNumber}-IN`,
+    date: params.date,
+    account_id: toAcc.id,
+    account_name: toAcc.name,
+    tx_type: 'IN',
+    category,
+    amount: params.amount,
+    balance_after: (Number(toAcc.current_balance) || 0) + params.amount,
+    recipient_or_payer: fromAcc.name,
+    reference_number: trfNumber,
+    notes: params.notes ? `[Diterima dari ${fromAcc.name}] ${params.notes}` : `Penerimaan transfer dari ${fromAcc.name}`,
+    proof_url: params.proofUrl,
+    created_by: params.createdBy || 'Finance Treasury',
+    transfer_pair_id: outTxId,
+    status: 'VERIFIED',
+    created_at: new Date().toISOString(),
+  };
+
+  const updatedTxs = [outTx, inTx, ...txs];
+  const updatedAccs = recalculateBalances(accounts, updatedTxs);
+
+  saveStoredCashTransactions(updatedTxs);
+  saveStoredCashAccounts(updatedAccs);
+
+  return { outTx, inTx };
+}
+
+/**
+ * Delete a transaction and update running balances
+ */
+export function deleteCashTransaction(txId: string): void {
+  const accounts = getStoredCashAccounts();
+  const txs = getStoredCashTransactions();
+
+  const target = txs.find((t) => t.id === txId);
+  if (!target) return;
+
+  // Also remove pair transaction if it was an inter-account transfer
+  const updatedTxs = txs.filter(
+    (t) => t.id !== txId && (target.transfer_pair_id ? t.id !== target.transfer_pair_id : true)
+  );
+
+  const updatedAccs = recalculateBalances(accounts, updatedTxs);
+
+  saveStoredCashTransactions(updatedTxs);
+  saveStoredCashAccounts(updatedAccs);
+}

@@ -665,3 +665,46 @@ export function exportTransactionsToXLSX(transactions: any[], customFileName?: s
     sheetName: 'Log Transaksi',
   });
 }
+
+/**
+ * Helper khusus ekspor Buku Kas & Jurnal Mutasi (Manajemen Kas)
+ */
+export function exportCashLedgerToXLSX(
+  transactions: any[],
+  accounts: any[],
+  customFileName?: string
+): boolean {
+  if (!transactions || transactions.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data mutasi kas untuk diekspor.');
+    return false;
+  }
+
+  const rows = transactions.map((t, index) => {
+    const isMasuk = t.tx_type === 'IN';
+    const isKeluar = t.tx_type === 'OUT' || t.tx_type === 'TRANSFER';
+
+    return {
+      'No': index + 1,
+      'No Bukti Transaksi': t.tx_number || '-',
+      'Tanggal': t.date || '-',
+      'Akun Kas': t.account_name || '-',
+      'Tipe Mutasi': t.tx_type === 'IN' ? 'KAS MASUK' : t.tx_type === 'OUT' ? 'KAS KELUAR' : 'TRANSFER ANTAR KAS',
+      'Kategori': t.category || '-',
+      'No Referensi': t.reference_number || '-',
+      'Pihak Pembayar / Penerima': t.recipient_or_payer || '-',
+      'Keterangan': t.notes || '-',
+      'Kas Masuk / Debit (IDR)': isMasuk ? Number(t.amount) : 0,
+      'Kas Keluar / Kredit (IDR)': isKeluar ? Number(t.amount) : 0,
+      'Saldo Akhir (IDR)': Number(t.balance_after) || 0,
+      'User / PIC': t.created_by || '-',
+      'Status': t.status || 'VERIFIED',
+    };
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Buku_Kas_Mutasi_Artaroma_${timestamp}.xlsx`,
+    sheetName: 'Buku Kas & Mutasi',
+  });
+}
+
