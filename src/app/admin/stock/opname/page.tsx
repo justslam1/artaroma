@@ -22,6 +22,8 @@ import {
   Plus,
   X,
   FileSpreadsheet,
+  Package,
+  Check,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -203,6 +205,9 @@ export default function StockOpnamePage() {
     );
   });
 
+  // State for itemized confirmation modal before saving
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
   // Calculations for modified rows
   const modifiedBatches = batches.filter((b) => {
     const inputVal = parseFloat(physicalQtys[b.id]) || 0;
@@ -211,23 +216,22 @@ export default function StockOpnamePage() {
     return Math.abs(inputVal - currentVal) > 0.001;
   });
 
-  const handleSaveOpname = async (e: React.FormEvent) => {
+  const handleOpenConfirmModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (modifiedBatches.length === 0) {
       alert('Tidak ada selisih stok yang terdeteksi. Silakan ubah "Stok Riil" jika ingin menyesuaikan stok.');
       return;
     }
+    setIsConfirmModalOpen(true);
+  };
 
-    if (!confirm(`Apakah Anda yakin ingin memproses penyesuaian stok opname untuk ${modifiedBatches.length} batch?\n\nTindakan ini akan langsung memperbarui stok di aplikasi.`)) {
-      return;
-    }
-
+  const handleExecuteSaveOpname = async () => {
     setIsSaving(true);
     try {
       const batchUpdates = modifiedBatches.map((b) => ({
         id: b.id,
         current_qty_kg: parseFloat(physicalQtys[b.id]) || 0,
-        notes: opnameNotes[b.id] || '',
+        notes: opnameNotes[b.id] || generalNotes || '',
       }));
 
       const res = await fetch('/api/stock-batches', {
@@ -238,8 +242,13 @@ export default function StockOpnamePage() {
 
       const json = await res.json();
       if (json.success) {
-        alert('Hasil audit Stok Opname berhasil disimpan dan stok gudang telah diselaraskan!');
-        router.push('/admin/stock');
+        setIsConfirmModalOpen(false);
+        // Kosongkan seluruh isian form stok opname
+        setGeneralNotes('');
+        setSearchTerm('');
+        setOpnameNotes({});
+        await fetchData(); // Mengambil data terbaru dari MySQL dan reset form
+        alert('✅ Hasil audit Stok Opname berhasil disimpan dan seluruh isian form telah dikosongkan!');
       } else {
         alert('Gagal menyimpan stok opname: ' + json.message);
       }
@@ -667,9 +676,9 @@ export default function StockOpnamePage() {
                   </Link>
                   <button
                     type="button"
-                    onClick={handleSaveOpname}
+                    onClick={handleOpenConfirmModal}
                     disabled={modifiedBatches.length === 0 || isSaving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-extrabold px-6 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all disabled:cursor-not-allowed"
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-extrabold px-6 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isSaving ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan Audit...</>
@@ -896,6 +905,169 @@ export default function StockOpnamePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Rincian Stok Opname yang Berubah */}
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 px-6 py-4 flex items-center justify-between text-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <ClipboardList className="w-5 h-5 text-blue-300" />
+                <div>
+                  <h3 className="text-base font-bold">Konfirmasi Penyesuaian Stok Opname</h3>
+                  <p className="text-xs text-blue-200">Periksa kembali rincian produk dan batch yang mengalami perubahan kuantitas</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="text-blue-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Table of Modified Batches */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-amber-900">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block text-amber-800">
+                    Terdapat {modifiedBatches.length} batch yang mengalami perubahan stok fisik:
+                  </span>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Pastikan angka stok fisik riil di bawah ini sudah sesuai dengan hasil perhitungan fisik di gudang sebelum menyelaraskan ke database.
+                  </p>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-gray-200 text-slate-500 uppercase font-bold text-[10px] tracking-wider">
+                      <th className="px-4 py-2.5">No</th>
+                      <th className="px-4 py-2.5">Nama Produk &amp; SKU</th>
+                      <th className="px-4 py-2.5">No. Batch (Lot)</th>
+                      <th className="px-4 py-2.5 text-center">Kemasan</th>
+                      <th className="px-4 py-2.5 text-right">Stok Sistem (A)</th>
+                      <th className="px-4 py-2.5 text-right">Stok Riil (B)</th>
+                      <th className="px-4 py-2.5 text-right">Selisih (B - A)</th>
+                      <th className="px-4 py-2.5">Catatan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {modifiedBatches.map((b, idx) => {
+                      const prod = products.find((p) => p.id === b.product_id);
+                      const sys = b.current_qty_kg ?? 0;
+                      const phys = parseFloat(physicalQtys[b.id]) || 0;
+                      const diff = phys - sys;
+                      const note = opnameNotes[b.id] || generalNotes || '-';
+
+                      return (
+                        <tr key={b.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3 text-slate-400 font-mono">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-800">{prod?.name || 'Produk'}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{b.variant_sku || prod?.sku || '-'}</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-slate-700">
+                            {b.batch_number}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                              {b.pack_size_kg ? `${b.pack_size_kg} Kg` : '-'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-slate-600">
+                            {sys.toFixed(3)} kg
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-blue-700">
+                            {phys.toFixed(3)} kg
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span
+                              className={`font-mono font-extrabold px-2 py-0.5 rounded text-[11px] ${
+                                diff > 0
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-red-100 text-red-800 border border-red-300'
+                              }`}
+                            >
+                              {diff > 0 ? `+${diff.toFixed(3)}` : diff.toFixed(3)} kg
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 italic max-w-xs truncate">
+                            {note}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total Selisih Summary */}
+              {(() => {
+                let totalSys = 0;
+                let totalPhys = 0;
+                modifiedBatches.forEach((b) => {
+                  totalSys += b.current_qty_kg ?? 0;
+                  totalPhys += parseFloat(physicalQtys[b.id]) || 0;
+                });
+                const totalDiff = totalPhys - totalSys;
+
+                return (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Total Batch Berubah:</span>
+                      <span className="font-bold text-slate-800 text-sm">{modifiedBatches.length} Batch</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Total Stok Sistem:</span>
+                      <span className="font-mono font-bold text-slate-800 text-sm">{totalSys.toFixed(3)} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Total Stok Fisik Riil:</span>
+                      <span className="font-mono font-bold text-blue-700 text-sm">{totalPhys.toFixed(3)} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Total Selisih Netto:</span>
+                      <span className={`font-mono font-extrabold text-sm ${totalDiff >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {totalDiff >= 0 ? `+${totalDiff.toFixed(3)}` : totalDiff.toFixed(3)} kg
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-gray-200 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Batal / Tinjau Ulang
+              </button>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleExecuteSaveOpname}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer"
+              >
+                {isSaving ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan &amp; Menyelaraskan...</>
+                ) : (
+                  <><Check className="w-4 h-4" /> Ya, Simpan &amp; Selaraskan Stok</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
