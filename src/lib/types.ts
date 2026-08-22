@@ -69,6 +69,10 @@ export interface Customer {
   username?: string;
   password?: string;
   phone: string;
+  pic_name_2?: string;
+  phone_2?: string;
+  pic_name_3?: string;
+  phone_3?: string;
   address: string;
   npwp?: string;
   ktp_file?: string;        // filename/URL of uploaded KTP scan

@@ -84,6 +84,32 @@ export async function ensureSchemaMigrations(): Promise<void> {
         console.warn('[Schema Migration Invoices Warning]:', e.message);
       }
 
+      // 2b. Check & Add missing columns in customers (PIC 2, PIC 3 & Phone numbers)
+      try {
+        const [custCols]: any = await conn.query('SHOW COLUMNS FROM customers');
+        const custColNames = new Set(custCols.map((c: any) => c.Field.toLowerCase()));
+
+        const custMigrations = [
+          { col: 'pic_name_2', sql: "ALTER TABLE customers ADD COLUMN pic_name_2 VARCHAR(100) DEFAULT NULL" },
+          { col: 'phone_2', sql: "ALTER TABLE customers ADD COLUMN phone_2 VARCHAR(50) DEFAULT NULL" },
+          { col: 'pic_name_3', sql: "ALTER TABLE customers ADD COLUMN pic_name_3 VARCHAR(100) DEFAULT NULL" },
+          { col: 'phone_3', sql: "ALTER TABLE customers ADD COLUMN phone_3 VARCHAR(50) DEFAULT NULL" },
+        ];
+
+        for (const m of custMigrations) {
+          if (!custColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column customers.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] customers.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Customers Warning]:', e.message);
+      }
+
       // 3. Ensure operational_logs table exists
       try {
         await conn.query(`

@@ -164,10 +164,10 @@ export default function CustomerCatalogPage() {
 
   const filteredProducts = products.filter((p) => {
     // 1. Check if product is set/allowed for this customer by Super Admin
-    const isAllowedForCustomer =
-      !currentCustomer.allowed_product_ids ||
-      currentCustomer.allowed_product_ids.length === 0 ||
-      currentCustomer.allowed_product_ids.includes(p.id);
+    const isAllowedForCustomer = Boolean(
+      currentCustomer.allowed_product_ids &&
+      currentCustomer.allowed_product_ids.includes(p.id)
+    );
 
     // 2. Application & Search filters
     const prodApps = p.applications && p.applications.length > 0

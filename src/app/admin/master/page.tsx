@@ -444,6 +444,10 @@ export default function MasterDataPage() {
     username: '',
     password: 'Artaroma2026!',
     phone: '',
+    pic_name_2: '',
+    phone_2: '',
+    pic_name_3: '',
+    phone_3: '',
     address: '',
     office_address: '',
     shipping_lat: '',
@@ -469,9 +473,7 @@ export default function MasterDataPage() {
   const [specialPricePct, setSpecialPricePct] = useState<Record<string, number>>({});
 
   const allowedProducts = products.filter((p) => 
-    !customerForm.allowed_product_ids || 
-    customerForm.allowed_product_ids.length === 0 || 
-    customerForm.allowed_product_ids.includes(p.id)
+    Boolean(customerForm.allowed_product_ids && customerForm.allowed_product_ids.includes(p.id))
   );
 
 
@@ -760,6 +762,10 @@ export default function MasterDataPage() {
         username: '',
         password: 'Artaroma2026!',
         phone: '',
+        pic_name_2: '',
+        phone_2: '',
+        pic_name_3: '',
+        phone_3: '',
         address: '',
         office_address: '',
         shipping_lat: '',
@@ -773,7 +779,7 @@ export default function MasterDataPage() {
         is_credit_eligible: true,
         credit_limit: 40000000,
         credit_terms_days: 30,
-        allowed_product_ids: products.map((p) => p.id),
+        allowed_product_ids: [],
         special_prices: {},
       });
       setCustomerFormTab('info');
@@ -846,6 +852,10 @@ export default function MasterDataPage() {
         username: c.username || c.email,
         password: c.password || 'Artaroma2026!',
         phone: c.phone,
+        pic_name_2: (c as any).pic_name_2 || '',
+        phone_2: (c as any).phone_2 || '',
+        pic_name_3: (c as any).pic_name_3 || '',
+        phone_3: (c as any).phone_3 || '',
         address: c.address,
         office_address: (c as any).office_address || '',
         shipping_lat: (c as any).shipping_lat || '',
@@ -859,9 +869,7 @@ export default function MasterDataPage() {
         is_credit_eligible: c.is_credit_eligible ?? (c.credit_limit > 0),
         credit_limit: c.credit_limit,
         credit_terms_days: c.credit_terms_days || 30,
-        allowed_product_ids: c.allowed_product_ids && c.allowed_product_ids.length > 0
-          ? c.allowed_product_ids
-          : products.map((p) => p.id),
+        allowed_product_ids: Array.isArray(c.allowed_product_ids) ? c.allowed_product_ids : [],
         special_prices: (c as any).special_prices || {},
       });
       setCustomerFormTab('info');
@@ -1091,6 +1099,10 @@ export default function MasterDataPage() {
         pic_name: customerForm.pic_name,
         email: customerForm.email,
         phone: customerForm.phone,
+        pic_name_2: customerForm.pic_name_2 || '',
+        phone_2: customerForm.phone_2 || '',
+        pic_name_3: customerForm.pic_name_3 || '',
+        phone_3: customerForm.phone_3 || '',
         address: customerForm.address,
         office_address: (customerForm as any).office_address || '',
         shipping_lat: (customerForm as any).shipping_lat || '',
@@ -1299,6 +1311,10 @@ export default function MasterDataPage() {
         pic_name: customerForm.pic_name,
         email: customerForm.email,
         phone: customerForm.phone,
+        pic_name_2: customerForm.pic_name_2 || '',
+        phone_2: customerForm.phone_2 || '',
+        pic_name_3: customerForm.pic_name_3 || '',
+        phone_3: customerForm.phone_3 || '',
         address: customerForm.address,
         office_address: (customerForm as any).office_address || '',
         shipping_lat: (customerForm as any).shipping_lat || '',
@@ -1616,7 +1632,7 @@ export default function MasterDataPage() {
   // --- CATALOG MAPPING MODAL ---
   const handleOpenCatalogMapping = (c: Customer) => {
     setMappingCustomer(c);
-    setSelectedProductIds(c.allowed_product_ids || products.map((p) => p.id));
+    setSelectedProductIds(Array.isArray(c.allowed_product_ids) ? c.allowed_product_ids : []);
   };
 
   const handleToggleProductCheck = (prodId: string) => {
@@ -2367,13 +2383,13 @@ export default function MasterDataPage() {
                     .filter((c) =>
                       c.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       c.pic_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      ((c as any).pic_name_2 && (c as any).pic_name_2.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                      ((c as any).pic_name_3 && (c as any).pic_name_3.toLowerCase().includes(searchTerm.toLowerCase())) ||
                       c.email.toLowerCase().includes(searchTerm.toLowerCase())
                     )
                     .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'id', { sensitivity: 'base' }))
                     .map((c) => {
-                      const allowedCount = c.allowed_product_ids && c.allowed_product_ids.length > 0
-                        ? c.allowed_product_ids.length
-                        : products.length;
+                      const allowedCount = Array.isArray(c.allowed_product_ids) ? c.allowed_product_ids.length : 0;
 
                       const isCreditActive = (c.is_credit_eligible ?? true) && c.credit_limit > 0;
 
@@ -2385,8 +2401,18 @@ export default function MasterDataPage() {
                           </td>
 
                           <td className="px-6 py-3.5 text-xs">
-                            <div className="font-medium text-slate-800">{c.pic_name} | {c.phone}</div>
-                            <div className="text-blue-700 font-mono font-semibold flex items-center gap-1 mt-0.5">
+                            <div className="font-medium text-slate-800">{c.pic_name} {c.phone ? `| ${c.phone}` : ''}</div>
+                            {(c as any).pic_name_2 && (
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                <span className="font-semibold text-slate-600">PIC 2:</span> {(c as any).pic_name_2} {(c as any).phone_2 ? `(${(c as any).phone_2})` : ''}
+                              </div>
+                            )}
+                            {(c as any).pic_name_3 && (
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                <span className="font-semibold text-slate-600">PIC 3:</span> {(c as any).pic_name_3} {(c as any).phone_3 ? `(${(c as any).phone_3})` : ''}
+                              </div>
+                            )}
+                            <div className="text-blue-700 font-mono font-semibold flex items-center gap-1 mt-1">
                               <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span className="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">{c.username || c.email}</span>
                             </div>
@@ -3989,24 +4015,70 @@ export default function MasterDataPage() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="font-bold text-slate-700 block mb-1">Nama PIC</label>
+                          <label className="font-bold text-slate-700 block mb-1">Nama PIC (Utama)</label>
                           <input
                             type="text"
                             required
-                            placeholder="Nama PIC"
+                            placeholder="Nama PIC 1"
                             value={customerForm.pic_name}
                             onChange={(e) => setCustomerForm({ ...customerForm, pic_name: e.target.value })}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
                           />
                         </div>
                         <div>
-                          <label className="font-bold text-slate-700 block mb-1">Nomor Telepon</label>
+                          <label className="font-bold text-slate-700 block mb-1">Nomor Telepon (PIC 1)</label>
                           <input
                             type="text"
                             required
                             placeholder="0812-xxxx-xxxx"
                             value={customerForm.phone}
                             onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nama PIC 2 <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="Nama PIC 2"
+                            value={customerForm.pic_name_2 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, pic_name_2: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nomor Telepon (PIC 2) <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="08xx-xxxx-xxxx"
+                            value={customerForm.phone_2 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, phone_2: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nama PIC 3 <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="Nama PIC 3"
+                            value={customerForm.pic_name_3 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, pic_name_3: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nomor Telepon (PIC 3) <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="08xx-xxxx-xxxx"
+                            value={customerForm.phone_3 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, phone_3: e.target.value })}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
                           />
                         </div>
@@ -4367,15 +4439,38 @@ export default function MasterDataPage() {
                       <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-start gap-2">
                         <Tag className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
                         <div className="text-[11px] text-orange-800 font-medium">
-                          Harga khusus per varian untuk <strong>{customerForm.company_name || 'customer ini'}</strong>. Harga ini akan menggantikan harga jual umum saat customer membuat pesanan.
+                          Harga khusus per varian untuk <strong>{customerForm.company_name || 'customer ini'}</strong>. Default produk non-aktif; aktifkan produk yang diizinkan untuk customer ini.
                         </div>
                       </div>
+
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <span className="text-xs text-slate-600 font-medium">
+                          Produk Aktif: <strong className="text-blue-700 font-bold">{(customerForm.allowed_product_ids || []).length}</strong> dari {products.length}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, allowed_product_ids: products.map(p => p.id) })}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                          >
+                            ✓ Aktifkan Semua
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, allowed_product_ids: [] })}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-slate-600 hover:bg-gray-200 border border-gray-200 rounded-lg transition-colors"
+                          >
+                            ✕ Nonaktifkan Semua
+                          </button>
+                        </div>
+                      </div>
+
                         {products.length === 0 ? (
                           <div className="text-center text-slate-400 text-sm py-8">Belum ada produk terdaftar.</div>
                         ) : (
                           <div className="space-y-3">
                             {products.map((p) => {
-                              const isAllowed = !customerForm.allowed_product_ids || customerForm.allowed_product_ids.length === 0 || customerForm.allowed_product_ids.includes(p.id);
+                              const isAllowed = Boolean(customerForm.allowed_product_ids && customerForm.allowed_product_ids.includes(p.id));
                               const packSizes = p.pack_sizes && p.pack_sizes.length > 0 ? p.pack_sizes : [25, 5, 1];
                               return (
                                 <div key={p.id} className={`bg-white border rounded-xl overflow-hidden transition-all ${isAllowed ? 'border-gray-200 shadow-xs' : 'border-gray-200 opacity-60 bg-gray-50'}`}>
@@ -4387,23 +4482,10 @@ export default function MasterDataPage() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          let nextAllowed: string[] = [];
-                                          if (customerForm.allowed_product_ids && customerForm.allowed_product_ids.length > 0) {
-                                            nextAllowed = [...customerForm.allowed_product_ids];
-                                          } else {
-                                            nextAllowed = products.map((prod) => prod.id);
-                                          }
-
-                                          if (nextAllowed.includes(p.id)) {
-                                            nextAllowed = nextAllowed.filter((id) => id !== p.id);
-                                          } else {
-                                            nextAllowed.push(p.id);
-                                          }
-
-                                          if (nextAllowed.length === products.length) {
-                                            nextAllowed = [];
-                                          }
-
+                                          const currentAllowed = customerForm.allowed_product_ids || [];
+                                          let nextAllowed = currentAllowed.includes(p.id)
+                                            ? currentAllowed.filter((id) => id !== p.id)
+                                            : [...currentAllowed, p.id];
                                           setCustomerForm({ ...customerForm, allowed_product_ids: nextAllowed });
                                         }}
                                         className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors flex items-center gap-1 ${
@@ -5278,22 +5360,70 @@ export default function MasterDataPage() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="font-bold text-slate-700 block mb-1">Nama PIC</label>
+                          <label className="font-bold text-slate-700 block mb-1">Nama PIC (Utama)</label>
                           <input
                             type="text"
                             required
+                            placeholder="Nama PIC 1"
                             value={customerForm.pic_name}
                             onChange={(e) => setCustomerForm({ ...customerForm, pic_name: e.target.value })}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
                           />
                         </div>
                         <div>
-                          <label className="font-bold text-slate-700 block mb-1">Nomor Telepon</label>
+                          <label className="font-bold text-slate-700 block mb-1">Nomor Telepon (PIC 1)</label>
                           <input
                             type="text"
                             required
+                            placeholder="0812-xxxx-xxxx"
                             value={customerForm.phone}
                             onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nama PIC 2 <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="Nama PIC 2"
+                            value={customerForm.pic_name_2 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, pic_name_2: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nomor Telepon (PIC 2) <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="08xx-xxxx-xxxx"
+                            value={customerForm.phone_2 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, phone_2: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nama PIC 3 <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="Nama PIC 3"
+                            value={customerForm.pic_name_3 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, pic_name_3: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nomor Telepon (PIC 3) <span className="text-[10px] text-slate-400 font-normal">(Opsional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="08xx-xxxx-xxxx"
+                            value={customerForm.phone_3 || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, phone_3: e.target.value })}
                             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-slate-800 font-mono text-xs"
                           />
                         </div>
@@ -5627,15 +5757,38 @@ export default function MasterDataPage() {
                       <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-start gap-2">
                         <Tag className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
                         <div className="text-[11px] text-orange-800 font-medium">
-                          Harga khusus per varian untuk <strong>{customerForm.company_name || 'customer ini'}</strong>. Harga ini menggantikan harga jual umum saat customer membuat pesanan.
+                          Harga khusus per varian untuk <strong>{customerForm.company_name || 'customer ini'}</strong>. Default produk non-aktif; aktifkan produk yang diizinkan untuk customer ini.
                         </div>
                       </div>
+
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <span className="text-xs text-slate-600 font-medium">
+                          Produk Aktif: <strong className="text-blue-700 font-bold">{(customerForm.allowed_product_ids || []).length}</strong> dari {products.length}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, allowed_product_ids: products.map(p => p.id) })}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                          >
+                            ✓ Aktifkan Semua
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, allowed_product_ids: [] })}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-gray-100 text-slate-600 hover:bg-gray-200 border border-gray-200 rounded-lg transition-colors"
+                          >
+                            ✕ Nonaktifkan Semua
+                          </button>
+                        </div>
+                      </div>
+
                         {products.length === 0 ? (
                           <div className="text-center text-slate-400 text-sm py-8">Belum ada produk terdaftar.</div>
                         ) : (
                           <div className="space-y-3">
                             {products.map((p) => {
-                              const isAllowed = !customerForm.allowed_product_ids || customerForm.allowed_product_ids.length === 0 || customerForm.allowed_product_ids.includes(p.id);
+                              const isAllowed = Boolean(customerForm.allowed_product_ids && customerForm.allowed_product_ids.includes(p.id));
                               const packSizes = p.pack_sizes && p.pack_sizes.length > 0 ? p.pack_sizes : [25, 5, 1];
                               return (
                                 <div key={p.id} className={`bg-white border rounded-xl overflow-hidden transition-all ${isAllowed ? 'border-gray-200 shadow-xs' : 'border-gray-200 opacity-60 bg-gray-50'}`}>
@@ -5647,23 +5800,10 @@ export default function MasterDataPage() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          let nextAllowed: string[] = [];
-                                          if (customerForm.allowed_product_ids && customerForm.allowed_product_ids.length > 0) {
-                                            nextAllowed = [...customerForm.allowed_product_ids];
-                                          } else {
-                                            nextAllowed = products.map((prod) => prod.id);
-                                          }
-
-                                          if (nextAllowed.includes(p.id)) {
-                                            nextAllowed = nextAllowed.filter((id) => id !== p.id);
-                                          } else {
-                                            nextAllowed.push(p.id);
-                                          }
-
-                                          if (nextAllowed.length === products.length) {
-                                            nextAllowed = [];
-                                          }
-
+                                          const currentAllowed = customerForm.allowed_product_ids || [];
+                                          let nextAllowed = currentAllowed.includes(p.id)
+                                            ? currentAllowed.filter((id) => id !== p.id)
+                                            : [...currentAllowed, p.id];
                                           setCustomerForm({ ...customerForm, allowed_product_ids: nextAllowed });
                                         }}
                                         className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors flex items-center gap-1 ${
