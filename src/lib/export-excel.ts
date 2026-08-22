@@ -8,6 +8,7 @@ import {
   PurchaseOrder,
   SalesOrder,
   StockBatch,
+  Invoice,
 } from './types';
 
 export interface ExportExcelOptions {
@@ -466,23 +467,59 @@ export function exportPurchaseOrdersToXLSX(pos: PurchaseOrder[], customFileName?
 /**
  * Helper khusus ekspor Sales Orders
  */
-export function exportSalesOrdersToXLSX(sos: SalesOrder[], customFileName?: string): boolean {
+export function exportSalesOrdersToXLSX(
+  sos: SalesOrder[],
+  customFileName?: string,
+  invoices?: Invoice[]
+): boolean {
   if (!sos || sos.length === 0) {
     if (typeof window !== 'undefined') alert('Tidak ada data Sales Order untuk diekspor.');
     return false;
   }
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const rows = sos.map((so, index) => {
     const totalQty = (so.items || []).reduce((s, i) => s + (i.qty_kg || 0), 0);
     const itemNames = (so.items || []).map((i) => `${i.product_name} (${i.qty_kg} kg)`).join('; ');
+    const inv = invoices?.find((i) => i.so_number === so.so_number || i.so_id === so.id);
+
+    let dueDateStr = inv?.due_date || '-';
+    let sisaHariStatus = '-';
+
+    const isPaid = so.payment_status === 'PAID' || inv?.status === 'PAID';
+    if (isPaid) {
+      sisaHariStatus = 'LUNAS';
+    } else if (inv?.due_date) {
+      const due = new Date(inv.due_date);
+      due.setHours(0, 0, 0, 0);
+      if (!isNaN(due.getTime())) {
+        const diffTime = due.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays < 0) {
+          sisaHariStatus = `Lewat ${Math.abs(diffDays)} Hari (OVERDUE)`;
+        } else if (diffDays === 0) {
+          sisaHariStatus = 'Jatuh Tempo Hari Ini';
+        } else {
+          sisaHariStatus = `Sisa ${diffDays} Hari`;
+        }
+      }
+    } else if (so.status === 'DIAJUKAN' || so.status === 'PENDING_APPROVAL') {
+      sisaHariStatus = 'Menunggu Invoice Terbit';
+    }
 
     return {
       'No': index + 1,
       'No SO': so.so_number || '-',
       'Tanggal Order': so.order_date || '-',
+      'No Invoice': inv?.invoice_number || '-',
+      'Tanggal Jatuh Tempo': dueDateStr,
+      'Sisa Hari / Status Overdue': sisaHariStatus,
       'Nama Customer': so.customer_name || '-',
       'Perusahaan': so.customer_company || '-',
       'Status SO': so.status || '-',
+      'Status Bayar': isPaid ? 'LUNAS' : inv?.status || 'BELUM LUNAS',
       'Metode Bayar': so.payment_method || '-',
       'Tipe Kirim': so.shipping_type || 'FRANCO',
       'Kurir Pengantar': so.courier_name || '-',

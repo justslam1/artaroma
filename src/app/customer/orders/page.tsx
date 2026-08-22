@@ -5,7 +5,7 @@ import { CustomerNav } from '@/components/navigation/customer-nav';
 import { CustomerOrderDetailModal } from '@/components/customer/customer-order-detail-modal';
 import { initialCustomers } from '@/lib/mock-data';
 import { Customer, Invoice, SalesOrder } from '@/lib/types';
-import { formatIDR, formatKg } from '@/lib/utils';
+import { formatIDR, formatKg, formatDate } from '@/lib/utils';
 import {
   getStoredOrders,
   getStoredInvoices,
@@ -294,10 +294,100 @@ export default function CustomerOrdersPage() {
     );
   };
 
+  const renderDueDateAndRemaining = (inv?: Invoice, so?: SalesOrder) => {
+    if (so?.status === 'CANCELLED') {
+      return <span className="text-slate-400 text-xs">-</span>;
+    }
+
+    const isPaid = so?.payment_status === 'PAID' || inv?.status === 'PAID';
+    if (isPaid) {
+      return (
+        <div className="space-y-0.5">
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lunas
+          </span>
+          {inv?.due_date && (
+            <div className="text-[10px] text-slate-400 font-mono">
+              Tempo: {formatDate(inv.due_date)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (!inv || !inv.due_date || so?.status === 'DIAJUKAN' || so?.status === 'PENDING_APPROVAL') {
+      return <span className="text-slate-400 text-xs italic">Menunggu Invoice</span>;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(inv.due_date);
+    due.setHours(0, 0, 0, 0);
+
+    if (isNaN(due.getTime())) {
+      return <span className="text-slate-400 text-xs font-mono">{inv.due_date}</span>;
+    }
+
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      const overdueDays = Math.abs(diffDays);
+      return (
+        <div className="space-y-1">
+          <div className="font-mono text-xs font-bold text-red-600">
+            {formatDate(inv.due_date)}
+          </div>
+          <span className="bg-red-50 text-red-700 border border-red-300 text-[10px] px-2 py-0.5 rounded-full font-black inline-flex items-center gap-1 shadow-2xs animate-pulse">
+            ⚠️ Lewat {overdueDays} Hari (Overdue)
+          </span>
+        </div>
+      );
+    }
+
+    if (diffDays === 0) {
+      return (
+        <div className="space-y-1">
+          <div className="font-mono text-xs font-bold text-amber-700">
+            {formatDate(inv.due_date)}
+          </div>
+          <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] px-2 py-0.5 rounded-full font-extrabold inline-flex items-center gap-1">
+            ⚠️ Jatuh Tempo Hari Ini
+          </span>
+        </div>
+      );
+    }
+
+    if (diffDays <= 3) {
+      return (
+        <div className="space-y-1">
+          <div className="font-mono text-xs font-bold text-slate-800">
+            {formatDate(inv.due_date)}
+          </div>
+          <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+            ⏳ Sisa {diffDays} Hari
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-1">
+        <div className="font-mono text-xs font-bold text-slate-800">
+          {formatDate(inv.due_date)}
+        </div>
+        <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+          Sisa {diffDays} Hari
+        </span>
+      </div>
+    );
+  };
+
   const handleExportCustomerOrders = () => {
     exportSalesOrdersToXLSX(
       customerOrders,
-      `Histori_Pesanan_${currentCustomer.company_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+      `Histori_Pesanan_${currentCustomer.company_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`,
+      invoices
     );
   };
 
@@ -384,6 +474,7 @@ export default function CustomerOrdersPage() {
                     <th className="px-6 py-3">Item Bibit Parfum (Kg)</th>
                     <th className="px-6 py-3">Total Tagihan</th>
                     <th className="px-6 py-3">Status Alur Pesanan</th>
+                    <th className="px-6 py-3">Jatuh Tempo</th>
                     <th className="px-6 py-3">Bukti Pembayaran</th>
                     <th className="px-6 py-3 text-right">Dokumen PDF</th>
                   </tr>
@@ -440,6 +531,10 @@ export default function CustomerOrdersPage() {
                           >
                             {so.status === 'PENDING_APPROVAL' ? 'DIAJUKAN' : so.status}
                           </span>
+                        </td>
+
+                        <td className="px-6 py-4">
+                          {renderDueDateAndRemaining(inv, so)}
                         </td>
 
                         <td className="px-6 py-4">
