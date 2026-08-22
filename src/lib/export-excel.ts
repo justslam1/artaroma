@@ -540,17 +540,35 @@ export function exportInvoicesToXLSX(invoices: any[], customFileName?: string): 
     return false;
   }
 
-  const rows = invoices.map((inv, index) => ({
-    'No': index + 1,
-    'No Invoice': inv.invoice_number || inv.id || '-',
-    'No SO Terkait': inv.so_number || '-',
-    'Nama Customer': inv.customer_name || '-',
-    'Perusahaan': inv.customer_company || '-',
-    'Tanggal Invoice': inv.invoice_date || inv.order_date || '-',
-    'Jatuh Tempo': inv.due_date || '-',
-    'Total Tagihan (IDR)': inv.total_amount || inv.grand_total || 0,
-    'Status Pembayaran': inv.payment_status || inv.status || 'BELUM LUNAS',
-  }));
+  const rows = invoices.map((inv, index) => {
+    const dueDateStr = inv.due_date;
+    let sisaHariText = '-';
+    if (inv.status === 'PAID' || inv.payment_status === 'PAID') {
+      sisaHariText = 'LUNAS';
+    } else if (dueDateStr) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const due = new Date(dueDateStr);
+      due.setHours(0, 0, 0, 0);
+      if (!isNaN(due.getTime())) {
+        const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        sisaHariText = diffDays < 0 ? `LEWAT ${Math.abs(diffDays)} HARI (OVERDUE)` : diffDays === 0 ? 'JATUH TEMPO HARI INI' : `SISA ${diffDays} HARI`;
+      }
+    }
+
+    return {
+      'No': index + 1,
+      'No Invoice': inv.invoice_number || inv.id || '-',
+      'No SO Terkait': inv.so_number || '-',
+      'Nama Customer': inv.customer_name || '-',
+      'Perusahaan': inv.customer_company || '-',
+      'Tanggal Invoice': inv.invoice_date || inv.issue_date || inv.order_date || '-',
+      'Jatuh Tempo': inv.due_date || '-',
+      'Sisa Hari / Status Overdue': sisaHariText,
+      'Total Tagihan (IDR)': inv.total_amount || inv.grand_total || 0,
+      'Status Pembayaran': inv.payment_status || inv.status || 'BELUM LUNAS',
+    };
+  });
 
   const timestamp = new Date().toISOString().split('T')[0];
   return exportToXLSX(rows, {

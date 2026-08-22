@@ -279,6 +279,7 @@ export default function FinanceInvoicesPage() {
                   <th className="px-6 py-3">Customer B2B</th>
                   <th className="px-6 py-3">Total Tagihan (IDR)</th>
                   <th className="px-6 py-3">Jatuh Tempo</th>
+                  <th className="px-6 py-3">Sisa Hari / Overdue</th>
                   <th className="px-6 py-3">Status Bayar</th>
                   <th className="px-6 py-3">Faktur Pajak</th>
                   <th className="px-6 py-3 text-right">Aksi Finance</th>
@@ -287,7 +288,7 @@ export default function FinanceInvoicesPage() {
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                         Memuat data Invoice...
@@ -296,43 +297,105 @@ export default function FinanceInvoicesPage() {
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm">
                       Belum ada invoice yang tercatat. Invoice akan muncul saat SO berstatus DIKONFIRMASI.
                     </td>
                   </tr>
-                ) : invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3.5">
-                      <div className="font-mono font-bold text-blue-700">{inv.invoice_number}</div>
-                      <div className="text-[11px] text-slate-400">{inv.issue_date}</div>
-                    </td>
+                ) : invoices.map((inv) => {
+                  const getRemainingDaysInfo = (dueDateStr?: string, status?: string) => {
+                    if (status === 'PAID') {
+                      return (
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                          ✓ Lunas
+                        </span>
+                      );
+                    }
 
-                    <td className="px-6 py-3.5">
-                      <Link
-                        href={`/admin/orders/${inv.so_id}`}
-                        className="font-mono font-bold text-blue-600 hover:underline"
-                      >
-                        {inv.so_number}
-                      </Link>
-                    </td>
+                    if (!dueDateStr) {
+                      return <span className="text-slate-400 text-xs">-</span>;
+                    }
 
-                    <td className="px-6 py-3.5 font-semibold text-slate-800">{inv.customer_name}</td>
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const due = new Date(dueDateStr);
+                    due.setHours(0, 0, 0, 0);
 
-                    <td className="px-6 py-3.5 font-mono font-bold text-slate-900">{formatIDR(Number(inv.total_amount) || 0)}</td>
+                    if (isNaN(due.getTime())) {
+                      return <span className="text-slate-400 text-xs">-</span>;
+                    }
 
-                    <td className="px-6 py-3.5 text-xs text-slate-600 font-mono">{inv.due_date}</td>
+                    const diffTime = due.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                    <td className="px-6 py-3.5">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
-                        inv.status === 'PAID'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : inv.status === 'OVERDUE'
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {inv.status}
+                    if (diffDays < 0) {
+                      const overdueDays = Math.abs(diffDays);
+                      return (
+                        <span className="bg-red-50 text-red-700 border border-red-300 text-[11px] px-2.5 py-0.5 rounded-full font-black inline-flex items-center gap-1 shadow-2xs animate-pulse">
+                          ⚠️ Lewat {overdueDays} Hari (Overdue)
+                        </span>
+                      );
+                    }
+
+                    if (diffDays === 0) {
+                      return (
+                        <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[11px] px-2.5 py-0.5 rounded-full font-extrabold">
+                          ⚠️ Jatuh Tempo Hari Ini
+                        </span>
+                      );
+                    }
+
+                    if (diffDays <= 3) {
+                      return (
+                        <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[11px] px-2.5 py-0.5 rounded-full font-bold">
+                          ⏳ Sisa {diffDays} Hari
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <span className="bg-blue-50 text-blue-800 border border-blue-200 text-[11px] px-2.5 py-0.5 rounded-full font-semibold">
+                        Sisa {diffDays} Hari
                       </span>
-                    </td>
+                    );
+                  };
+
+                  return (
+                    <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-3.5">
+                        <div className="font-mono font-bold text-blue-700">{inv.invoice_number}</div>
+                        <div className="text-[11px] text-slate-400">{inv.issue_date}</div>
+                      </td>
+
+                      <td className="px-6 py-3.5">
+                        <Link
+                          href={`/admin/orders/${inv.so_id}`}
+                          className="font-mono font-bold text-blue-600 hover:underline"
+                        >
+                          {inv.so_number}
+                        </Link>
+                      </td>
+
+                      <td className="px-6 py-3.5 font-semibold text-slate-800">{inv.customer_name}</td>
+
+                      <td className="px-6 py-3.5 font-mono font-bold text-slate-900">{formatIDR(Number(inv.total_amount) || 0)}</td>
+
+                      <td className="px-6 py-3.5 text-xs text-slate-600 font-mono">{inv.due_date}</td>
+
+                      <td className="px-6 py-3.5">
+                        {getRemainingDaysInfo(inv.due_date, inv.status)}
+                      </td>
+
+                      <td className="px-6 py-3.5">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
+                          inv.status === 'PAID'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : inv.status === 'OVERDUE'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {inv.status}
+                        </span>
+                      </td>
 
                     <td className="px-6 py-3.5">
                       {inv.faktur_pajak_file_url ? (
@@ -371,7 +434,8 @@ export default function FinanceInvoicesPage() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
