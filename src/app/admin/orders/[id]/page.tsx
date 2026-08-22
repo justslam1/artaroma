@@ -944,7 +944,13 @@ export default function OrderDetailPage() {
     const ppn = Math.round(calculatedGoodsTotal * 0.11);
     const grandTotal = calculatedGoodsTotal + ppn + finalShippingCost;
 
-    const newInvNumber = `INV-2026-07-${Math.floor(100 + Math.random() * 900)}`;
+    const termsDays = Number(customer?.credit_terms_days || (order.payment_method === 'TEMPO' ? 30 : 0));
+    const issueDateObj = new Date();
+    const dueDateObj = new Date(issueDateObj.getTime() + termsDays * 86400000);
+    const issueDateStr = issueDateObj.toISOString().split('T')[0];
+    const dueDateStr = dueDateObj.toISOString().split('T')[0];
+
+    const newInvNumber = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
     const newInvoice: Invoice = {
       id: `inv-${Date.now()}`,
       invoice_number: newInvNumber,
@@ -953,8 +959,8 @@ export default function OrderDetailPage() {
       customer_id: order.customer_id,
       customer_name: order.customer_company,
       status: 'UNPAID',
-      issue_date: new Date().toISOString().split('T')[0],
-      due_date: '2026-08-20',
+      issue_date: issueDateStr,
+      due_date: dueDateStr,
       shipping_type: finalShippingType,
       shipping_cost: finalShippingCost,
       total_amount: grandTotal,
