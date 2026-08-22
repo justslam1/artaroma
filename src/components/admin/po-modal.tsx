@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, Distributor, PurchaseOrder, StockBatch } from '@/lib/types';
-import { formatIDR, formatKg } from '@/lib/utils';
+import { formatIDR, formatKg, formatDate } from '@/lib/utils';
 import { X, Plus, Trash2, PackagePlus, Calendar, Layers, CheckCircle, FileText, AlertTriangle, ArrowRight, ArrowLeft, ShieldCheck, Building2 } from 'lucide-react';
 
 interface CreatePOModalProps {
@@ -1141,10 +1141,12 @@ export function GoodsReceiptModal({
   };
 
   const [entries, setEntries] = useState<BatchEntry[]>([]);
+  const [grStep, setGrStep] = useState<'INPUT' | 'CONFIRM'>('INPUT');
 
   useEffect(() => {
     if (isOpen && po) {
       setEntries(buildInitialEntries());
+      setGrStep('INPUT');
     }
   }, [isOpen, po, shipment]);
 
@@ -1160,17 +1162,22 @@ export function GoodsReceiptModal({
     setEntries(updated);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Step 1 Submit: Validate and move to Confirmation Review
+  const handleProceedToConfirm = (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validasi: Qty Diterima harus sama dengan Qty Dikirim/Dipesan
     const mismatched = entries.find((entry) => Number(entry.receivedQtyKg) !== Number(entry.orderedKg));
     if (mismatched) {
-      alert('Jumlah diterima harus sama');
+      alert('Jumlah diterima harus sama dengan yang dipesan/dikirim');
       return;
     }
 
-    // Create a stock batch for each entry
+    setGrStep('CONFIRM');
+  };
+
+  // Final Action: Save all stock batches to DB
+  const handleFinalSaveBatch = () => {
     for (const entry of entries) {
       if (entry.receivedQtyKg <= 0) continue;
       const newBatch: StockBatch = {
@@ -1195,14 +1202,22 @@ export function GoodsReceiptModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full text-slate-100 shadow-2xl overflow-hidden my-8">
+      <div className={`bg-slate-900 border border-slate-800 rounded-2xl ${grStep === 'CONFIRM' ? 'max-w-3xl' : 'max-w-3xl'} w-full text-slate-100 shadow-2xl overflow-hidden my-8 animate-in fade-in`}>
         {/* Header */}
         <div className="bg-slate-800/90 px-6 py-4 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Layers className="w-5 h-5 text-emerald-400" />
+            {grStep === 'INPUT' ? (
+              <Layers className="w-5 h-5 text-emerald-400" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            )}
             <div>
-              <h3 className="font-bold text-white text-base">Input Penerimaan Barang (Goods Receipt)</h3>
-              <p className="text-xs text-slate-400">Pencatatan Batch FEFO & Expiry Date Gudang</p>
+              <h3 className="font-bold text-white text-base">
+                {grStep === 'INPUT' ? 'Input Penerimaan Barang (Goods Receipt)' : 'Konfirmasi Penerimaan Barang (Review Batch)'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {grStep === 'INPUT' ? 'Pencatatan Batch FEFO & Expiry Date Gudang' : 'Langkah 2: Periksa kembali data batch sebelum dimasukkan ke inventaris gudang'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
@@ -1210,134 +1225,223 @@ export function GoodsReceiptModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
-          {/* PO Info */}
-          <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <div className="text-slate-400">Ref PO: <strong className="text-emerald-400 font-mono">{po.po_number}</strong></div>
-              <div className="text-slate-300 font-semibold">Distributor: {po.distributor_name}</div>
-            </div>
-            <div className="text-right text-[10px] text-slate-500">
-              <div>{entries.length} item diterima</div>
-              <div className="font-mono text-slate-400">
-                Total: {entries.reduce((s, e) => s + e.receivedQtyKg, 0).toLocaleString('id-ID')} Kg
+        {grStep === 'CONFIRM' ? (
+          /* STEP 2: CONFIRMATION & REVIEW SCREEN */
+          <div className="p-6 space-y-4 text-xs animate-in fade-in duration-200">
+            {/* PO & Vendor Meta */}
+            <div className="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="text-slate-400">Ref PO: <strong className="text-emerald-400 font-mono">{po.po_number}</strong></div>
+                <div className="text-slate-300 font-semibold">Distributor: {po.distributor_name}</div>
+              </div>
+              <div className="text-right text-[11px]">
+                <div className="text-slate-400 font-medium">{entries.length} Batch Varian</div>
+                <div className="font-mono text-emerald-400 font-bold">
+                  Total: {entries.reduce((s, e) => s + e.receivedQtyKg, 0).toLocaleString('id-ID')} Kg
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Per-Item Batch Entries */}
-          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-            {entries.map((entry, idx) => (
-              <div key={`entry-${idx}-${entry.poItemId}`} className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-3">
-                {/* Item Header */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-white text-sm">{entry.productName}</div>
-                    <div className="text-slate-400 text-[10px] mt-0.5">
-                      Dipesan: <span className="font-mono text-slate-300">{formatKg(entry.orderedKg)}</span>
-                    </div>
-                  </div>
-                  <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-700/40 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Item #{idx + 1}
-                  </span>
-                </div>
+            {/* Review Summary Table */}
+            <div className="space-y-2">
+              <div className="font-bold text-slate-300 uppercase tracking-wider text-[10px] flex items-center justify-between">
+                <span>Rincian Batch Masuk Gudang ({entries.length} Item)</span>
+                <span className="text-[10px] text-amber-400 font-mono font-normal">Auto FEFO (+24 Bulan)</span>
+              </div>
+              <div className="border border-slate-700/80 rounded-xl overflow-hidden bg-slate-950/40">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-800/80 text-[10px] text-slate-400 uppercase font-semibold border-b border-slate-700">
+                    <tr>
+                      <th className="py-2.5 px-3">#</th>
+                      <th className="py-2.5 px-3">Produk & Varian</th>
+                      <th className="py-2.5 px-3">Nomor Lot / Batch</th>
+                      <th className="py-2.5 px-3 text-center">Qty Diterima</th>
+                      <th className="py-2.5 px-3">Tgl Produksi</th>
+                      <th className="py-2.5 px-3 text-amber-400">Expiry Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {entries.map((entry, idx) => (
+                      <tr key={`review-${idx}`} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-500 font-mono">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-bold text-white">{entry.productName}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-250 font-bold">{entry.batchNumber}</td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">
+                          {formatKg(entry.receivedQtyKg)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-blue-300">
+                          {formatDate(entry.productionDate)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-amber-400">
+                          {formatDate(entry.expiryDate)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                {/* Batch Number */}
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">Nomor Lot / Batch Fisik Kemasan</label>
-                  <input
-                    type="text"
-                    required
-                    value={entry.batchNumber}
-                    onChange={(e) => updateEntry(idx, 'batchNumber', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs"
-                  />
-                </div>
-
-                {/* Qty, Production Date & Expiry Date (24 Bulan Default) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="font-bold text-slate-300 block text-[11px]">Qty Diterima (Kg)</label>
-                      {Number(entry.receivedQtyKg) !== Number(entry.orderedKg) && (
-                        <span className="text-[10px] text-rose-400 font-bold flex items-center gap-0.5">
-                          <AlertTriangle className="w-3 h-3" /> {formatKg(entry.orderedKg)}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      required
-                      value={Math.round(entry.receivedQtyKg)}
-                      onChange={(e) => updateEntry(idx, 'receivedQtyKg', Math.round(Number(e.target.value)))}
-                      className={`w-full bg-slate-900 border rounded-xl px-3 py-2 font-mono font-bold text-xs transition-colors ${
-                        Number(entry.receivedQtyKg) !== Number(entry.orderedKg)
-                          ? 'border-rose-500 text-rose-400 focus:border-rose-400 focus:ring-1 focus:ring-rose-500'
-                          : 'border-slate-700 text-emerald-400 focus:border-emerald-400'
-                      }`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
-                      <span>Tanggal Produksi (Mfg)</span>
-                      <span className="text-[9px] text-blue-400 font-normal">Tgl Buat</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={entry.productionDate}
-                      onChange={(e) => updateEntry(idx, 'productionDate', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-blue-300 font-mono font-bold text-xs focus:border-blue-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
-                      <span>Expiry Date (FEFO)</span>
-                      <span className="text-[9px] text-amber-400 font-normal">+24 Bulan</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={entry.expiryDate}
-                      onChange={(e) => updateEntry(idx, 'expiryDate', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-xs focus:border-amber-400"
-                    />
-                  </div>
+            {/* Confirmation Banner Alert */}
+            <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-300">
+              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-emerald-200">Konfirmasi Penyimpanan Masuk Gudang</div>
+                <div className="text-[11px] text-emerald-300/80 mt-0.5">
+                  Apakah Anda ingin menyimpan seluruh batch di atas atau ingin meninjau ulang? Setelah menekan tombol simpan, seluruh batch fisik ini akan langsung masuk ke inventaris FEFO gudang dan status PO akan diperbarui.
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Quantity Mismatch Notification Banner */}
-          {entries.some((entry) => Number(entry.receivedQtyKg) !== Number(entry.orderedKg)) && (
-            <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>Jumlah diterima harus sama dengan yang {shipment ? 'dikirim' : 'dipesan'}.</span>
             </div>
-          )}
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold flex items-center gap-1.5"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Simpan {entries.length} Batch Masuk Gudang
-            </button>
+            {/* Action Buttons: Tinjau Ulang vs Ya Simpan */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setGrStep('INPUT')}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" /> Tinjau Ulang (Edit Data)
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalSaveBatch}
+                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+              >
+                <CheckCircle className="w-4 h-4" /> Ya, Simpan ke Gudang Sekarang
+              </button>
+            </div>
           </div>
-        </form>
+        ) : (
+          /* STEP 1: INPUT FORM */
+          <form onSubmit={handleProceedToConfirm} className="p-6 space-y-4 text-xs">
+            {/* PO Info */}
+            <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="text-slate-400">Ref PO: <strong className="text-emerald-400 font-mono">{po.po_number}</strong></div>
+                <div className="text-slate-300 font-semibold">Distributor: {po.distributor_name}</div>
+              </div>
+              <div className="text-right text-[10px] text-slate-500">
+                <div>{entries.length} item diterima</div>
+                <div className="font-mono text-slate-400">
+                  Total: {entries.reduce((s, e) => s + e.receivedQtyKg, 0).toLocaleString('id-ID')} Kg
+                </div>
+              </div>
+            </div>
+
+            {/* Per-Item Batch Entries */}
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+              {entries.map((entry, idx) => (
+                <div key={`entry-${idx}-${entry.poItemId}`} className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-3">
+                  {/* Item Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-white text-sm">{entry.productName}</div>
+                      <div className="text-slate-400 text-[10px] mt-0.5">
+                        Dipesan: <span className="font-mono text-slate-300">{formatKg(entry.orderedKg)}</span>
+                      </div>
+                    </div>
+                    <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-700/40 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Item #{idx + 1}
+                    </span>
+                  </div>
+
+                  {/* Batch Number */}
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">Nomor Lot / Batch Fisik Kemasan</label>
+                    <input
+                      type="text"
+                      required
+                      value={entry.batchNumber}
+                      onChange={(e) => updateEntry(idx, 'batchNumber', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs"
+                    />
+                  </div>
+
+                  {/* Qty, Production Date & Expiry Date (24 Bulan Default) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-300 block text-[11px]">Qty Diterima (Kg)</label>
+                        {Number(entry.receivedQtyKg) !== Number(entry.orderedKg) && (
+                          <span className="text-[10px] text-rose-400 font-bold flex items-center gap-0.5">
+                            <AlertTriangle className="w-3 h-3" /> {formatKg(entry.orderedKg)}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        required
+                        value={Math.round(entry.receivedQtyKg)}
+                        onChange={(e) => updateEntry(idx, 'receivedQtyKg', Math.round(Number(e.target.value)))}
+                        className={`w-full bg-slate-900 border rounded-xl px-3 py-2 font-mono font-bold text-xs transition-colors ${
+                          Number(entry.receivedQtyKg) !== Number(entry.orderedKg)
+                            ? 'border-rose-500 text-rose-400 focus:border-rose-400 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-700 text-emerald-400 focus:border-emerald-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
+                        <span>Tanggal Produksi (Mfg)</span>
+                        <span className="text-[9px] text-blue-400 font-normal">Tgl Buat</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={entry.productionDate}
+                        onChange={(e) => updateEntry(idx, 'productionDate', e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-blue-300 font-mono font-bold text-xs focus:border-blue-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-300 block mb-1 text-[11px] flex items-center justify-between">
+                        <span>Expiry Date (FEFO)</span>
+                        <span className="text-[9px] text-amber-400 font-normal">+24 Bulan</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={entry.expiryDate}
+                        onChange={(e) => updateEntry(idx, 'expiryDate', e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-xs focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quantity Mismatch Notification Banner */}
+            {entries.some((entry) => Number(entry.receivedQtyKg) !== Number(entry.orderedKg)) && (
+              <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Jumlah diterima harus sama dengan yang {shipment ? 'dikirim' : 'dipesan'}.</span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Simpan {entries.length} Batch Masuk Gudang
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
