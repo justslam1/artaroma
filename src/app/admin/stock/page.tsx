@@ -604,29 +604,27 @@ export default function StockInventoryPage() {
                         <div className="text-xs text-slate-300 font-mono mt-1 flex flex-wrap items-center gap-3">
                           <span>SKU Induk: <strong>{p.sku}</strong></span>
                         </div>
-                        {/* Application badges */}
-                        {Array.isArray(p.applications) && p.applications.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                            {p.applications.map((app) => {
-                              const color =
-                                app === 'Industry'
-                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                                  : app === 'Fine Fragrance'
-                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                                  : app === 'Indoor'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                  : 'bg-slate-600/30 text-slate-300 border-slate-500/40';
-                              return (
-                                <span
-                                  key={app}
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${color}`}
-                                >
-                                  {app}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
+                        {/* Application badge */}
+                        {(() => {
+                          const app = (Array.isArray(p.applications) && p.applications.length > 0 ? p.applications[0] : (p as any).application) || 'Fine Fragrance';
+                          const color =
+                            app === 'Industry'
+                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                              : app === 'Fine Fragrance'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                              : app === 'Indoor'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : app === 'Homecare'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : 'bg-slate-600/30 text-slate-300 border-slate-500/40';
+                          return (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${color}`}>
+                                {app}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           {variantDetails.map(({ sizeKg, totalKg, units, isOutOfStock: isVOutOfStock, isLowStock: isVLowStock }) => (
                             <span 

@@ -416,13 +416,7 @@ export default function MasterDataPage() {
   });
 
   const handleToggleAppCategoryInForm = (catName: string) => {
-    const current = productForm.applications || [];
-    if (current.includes(catName)) {
-      if (current.length <= 1) return; // Keep at least 1 category selected
-      setProductForm({ ...productForm, applications: current.filter((c) => c !== catName) });
-    } else {
-      setProductForm({ ...productForm, applications: [...current, catName] });
-    }
+    setProductForm({ ...productForm, applications: [catName] });
   };
 
   const handleTogglePackSizeInForm = (size: number) => {
@@ -844,7 +838,7 @@ export default function MasterDataPage() {
     if (type === 'products') {
       const p = item as Product;
       const initialApps = p.applications && p.applications.length > 0
-        ? p.applications
+        ? [p.applications[0]]
         : [p.application || p.fragrance_family || 'Fine Fragrance'];
 
       setProductForm({
@@ -1954,17 +1948,17 @@ export default function MasterDataPage() {
                             </td>
                             <td className="px-6 py-3.5 align-top pt-3.5">
                               <div className="flex flex-wrap gap-1">
-                                {(p.applications && p.applications.length > 0
-                                  ? p.applications
-                                  : [p.application || 'Fine Fragrance']
-                                ).map((app) => (
-                                  <span
-                                    key={app}
-                                    className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap"
-                                  >
-                                    {app}
-                                  </span>
-                                ))}
+                                {(() => {
+                                  const app = (p.applications && p.applications.length > 0 ? p.applications[0] : p.application) || 'Fine Fragrance';
+                                  return (
+                                    <span
+                                      key={app}
+                                      className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap shadow-2xs"
+                                    >
+                                      {app}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </td>
                             <td className="px-6 py-3.5 align-top pt-3.5 max-w-xs text-xs space-y-0.5 text-slate-600">
@@ -3874,28 +3868,28 @@ export default function MasterDataPage() {
                         </div>
                         <div>
                           <label className="font-bold text-slate-700 block mb-1">
-                            Kategori Aplikasi <span className="text-purple-600 font-mono">*</span>
+                            Kategori Aplikasi <span className="text-[10px] text-slate-500 font-normal">(1 Produk = 1 Aplikasi)</span> <span className="text-purple-600 font-mono">*</span>
                           </label>
                           <div className="flex flex-wrap gap-1.5 pt-0.5">
                             {applicationCategories.map((app) => {
-                              const isSelected = (productForm.applications || []).includes(app);
+                              const isSelected = (productForm.applications || [])[0] === app;
                               return (
                                 <button
                                   key={app}
                                   type="button"
                                   onClick={() => handleToggleAppCategoryInForm(app)}
-                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
                                     isSelected
                                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                                       : 'bg-white text-slate-600 border-gray-300 hover:border-purple-300'
                                   }`}
                                 >
                                   <div
-                                    className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${
-                                      isSelected ? 'bg-white border-white text-purple-700 font-extrabold' : 'border-gray-400 bg-white'
+                                    className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
+                                      isSelected ? 'bg-white border-white' : 'border-gray-400 bg-white'
                                     }`}
                                   >
-                                    {isSelected && <Check className="w-2.5 h-2.5" />}
+                                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-purple-700" />}
                                   </div>
                                   <span>{app}</span>
                                 </button>
@@ -5586,28 +5580,28 @@ export default function MasterDataPage() {
                     </div>
                     <div>
                       <label className="font-bold text-slate-700 block mb-1">
-                        Kategori Aplikasi <span className="text-purple-600 font-mono">*</span>
+                        Kategori Aplikasi <span className="text-[10px] text-slate-500 font-normal">(1 Produk = 1 Aplikasi)</span> <span className="text-purple-600 font-mono">*</span>
                       </label>
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {applicationCategories.map((app) => {
-                          const isSelected = (productForm.applications || []).includes(app);
+                          const isSelected = (productForm.applications || [])[0] === app;
                           return (
                             <button
                               key={app}
                               type="button"
                               onClick={() => handleToggleAppCategoryInForm(app)}
-                              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
                                 isSelected
                                   ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                                   : 'bg-white text-slate-600 border-gray-300 hover:border-purple-300'
                               }`}
                             >
                               <div
-                                className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${
-                                  isSelected ? 'bg-white border-white text-purple-700 font-extrabold' : 'border-gray-400 bg-white'
+                                className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
+                                  isSelected ? 'bg-white border-white' : 'border-gray-400 bg-white'
                                 }`}
                               >
-                                {isSelected && <Check className="w-2.5 h-2.5" />}
+                                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-purple-700" />}
                               </div>
                               <span>{app}</span>
                             </button>
