@@ -63,8 +63,8 @@ export default function CustomerCatalogPage() {
   const [cartItems, setCartItems] = useState<{ product: Product; packSizeKg: number; quantity: number }[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Minimum purchase unit: 1 Kg whole increments
-  const presets = [1, 5, 10, 25];
+  // Minimum purchase unit: 0.1 Kg (100 gram) increments
+  const presets = [25, 5, 1, 0.1];
 
   // Fetch products from MySQL database API (/api/products)
   const fetchProducts = async () => {
@@ -289,7 +289,8 @@ export default function CustomerCatalogPage() {
         {!isLoading && !error && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => {
-              const packSizes = product.pack_sizes || [25, 5, 1];
+              const rawPackSizes = product.pack_sizes && product.pack_sizes.length > 0 ? product.pack_sizes : [25, 5, 1, 0.1];
+              const packSizes = Array.from(new Set([...rawPackSizes, 0.1])).sort((a, b) => b - a);
 
               return (
                 <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:border-slate-350 transition-all flex flex-col group">
@@ -342,18 +343,18 @@ export default function CustomerCatalogPage() {
                   <div className="p-4 space-y-3 bg-white">
                     {packSizes.map((kg) => {
                       const variant = product.variants?.find(
-                        (v) => Math.round(Number(v.pack_size_kg)) === kg
+                        (v) => Math.abs(Number(v.pack_size_kg) - Number(kg)) < 0.01
                       );
                       const variantIdr = variant?.selling_price_per_kg 
                         ? Number(variant.selling_price_per_kg) 
-                        : (product.selling_price_per_kg || (kg === 25 ? 1353000 : kg === 5 ? 1090000 : 1100000));
+                        : (product.selling_price_per_kg || (kg === 25 ? 1353000 : kg === 5 ? 1090000 : kg === 1 ? 1100000 : 1200000));
                       
                       const variantUsd = variant?.selling_price_usd_per_kg 
                         ? Number(variant.selling_price_usd_per_kg) 
                         : (product.selling_price_usd_per_kg || (variantIdr / usdRate));
 
                       const variantInCart = cartItems.find(
-                        (item) => item.product.id === product.id && item.packSizeKg === kg
+                        (item) => item.product.id === product.id && Math.abs(item.packSizeKg - kg) < 0.01
                       );
                       const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
                       const selectedWeightKg = currentQtyInCart * kg;
@@ -371,7 +372,7 @@ export default function CustomerCatalogPage() {
                           <div className="space-y-0.5 min-w-[95px]">
                             <div className="flex items-center gap-1.5">
                               <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-2 py-0.5 rounded">
-                                {kg} Kg / Kemasan
+                                {kg < 1 ? `${Math.round(kg * 1000)} gr (${kg} Kg)` : `${kg} Kg`} / Kemasan
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono">
@@ -386,11 +387,11 @@ export default function CustomerCatalogPage() {
                             </span>
                             {currentQtyInCart > 0 ? (
                               <span className="text-[10px] font-bold text-blue-700 font-mono block">
-                                Terpilih: {selectedWeightKg} Kg ({currentQtyInCart} unit)
+                                Terpilih: {formatKg(selectedWeightKg)} ({currentQtyInCart} unit)
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-400 block font-mono">
-                                Total: {formatIDR(variantIdr * kg)}/{kg}kg
+                                Total: {formatIDR(variantIdr * kg)}/{kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`}
                               </span>
                             )}
                           </div>

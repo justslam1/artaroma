@@ -68,23 +68,25 @@ export async function GET(req: NextRequest) {
           // Sync variant_prices from product_variants
           const vPricesMap: Record<string, number> = { ...(prices && typeof prices === 'object' ? prices : {}) };
           productVariants.forEach((v) => {
-            const szKey = String(Math.round(Number(v.pack_size_kg)));
+            const szKey = String(Number(v.pack_size_kg));
             if (v.selling_price_per_kg && (!vPricesMap[szKey] || vPricesMap[szKey] === 0)) {
               vPricesMap[szKey] = Number(v.selling_price_per_kg);
             }
           });
 
           const getBatchPackSize = (b: any): number => {
-            if (b.pack_size_kg && [25, 5, 1].includes(Number(b.pack_size_kg))) return Number(b.pack_size_kg);
+            if (b.pack_size_kg && [25, 5, 1, 0.1].includes(Number(b.pack_size_kg))) return Number(b.pack_size_kg);
             const skuVal = (b.variant_sku || '').toUpperCase();
             const num = (b.batch_number || '').toUpperCase();
             if (skuVal.includes('-25K') || num.includes('25K') || num.includes('-25-')) return 25;
             if (skuVal.includes('-5K') || num.includes('5K') || num.includes('-5-')) return 5;
             if (skuVal.includes('-1K') || num.includes('1K') || num.includes('-1-')) return 1;
+            if (skuVal.includes('-0.1K') || skuVal.includes('-100G') || num.includes('0.1K') || num.includes('100G')) return 0.1;
             const qty = Number(b.current_qty_kg || 0);
             if (qty >= 25 && qty % 25 === 0) return 25;
             if (qty >= 5 && qty % 5 === 0) return 5;
             if (qty >= 1 && qty % 1 === 0) return 1;
+            if (qty >= 0.1 && (qty * 10) % 1 === 0) return 0.1;
             return 25;
           };
 

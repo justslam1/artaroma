@@ -17,8 +17,11 @@ export function formatKg(kg?: number | null): string {
   if (kg === undefined || kg === null || isNaN(Number(kg))) {
     return '0 kg';
   }
-  const num = Math.round(Number(kg));
-  return `${num.toLocaleString('id-ID')} kg`;
+  const num = Number(kg);
+  const formatted = num % 1 === 0
+    ? num.toLocaleString('id-ID')
+    : num.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 3 });
+  return `${formatted} kg`;
 }
 
 export function formatDate(dateString: string): string {

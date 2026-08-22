@@ -96,19 +96,19 @@ export function CheckoutModal({
   // Helper to get variant price
   const getVariantPriceInfo = (item: CartItem) => {
     const variant = item.product.variants?.find(
-      (v) => Math.round(Number(v.pack_size_kg)) === item.packSizeKg
+      (v) => Math.abs(Number(v.pack_size_kg) - Number(item.packSizeKg)) < 0.01
     );
 
     const priceIdr = variant?.selling_price_per_kg 
       ? Number(variant.selling_price_per_kg) 
-      : (item.product.selling_price_per_kg || (item.packSizeKg === 25 ? 1353000 : item.packSizeKg === 5 ? 1090000 : 1100000));
+      : (item.product.selling_price_per_kg || (item.packSizeKg === 25 ? 1353000 : item.packSizeKg === 5 ? 1090000 : item.packSizeKg === 1 ? 1100000 : 1200000));
 
     const priceUsd = variant?.selling_price_usd_per_kg 
       ? Number(variant.selling_price_usd_per_kg) 
       : (item.product.selling_price_usd_per_kg || (priceIdr / usdRate));
 
     return {
-      variantName: variant?.variant_name || `${item.product.name} ${item.packSizeKg}K`,
+      variantName: variant?.variant_name || (item.packSizeKg < 1 ? `${item.product.name} 0.1K (100g)` : `${item.product.name} ${item.packSizeKg}K`),
       priceIdr,
       priceUsd,
       subtotal: priceIdr * (item.packSizeKg * item.quantity),
@@ -209,7 +209,7 @@ export function CheckoutModal({
                               Harga Varian: {formatIDR(info.priceIdr)} / Kg
                             </div>
                             <div className="font-mono text-[10px] font-bold text-slate-500 mt-0.5">
-                              Kemasan: {item.packSizeKg} Kg | Qty: {item.quantity} Unit ({formatKg(item.packSizeKg * item.quantity)})
+                              Kemasan: {item.packSizeKg < 1 ? `${Math.round(item.packSizeKg * 1000)} gr (${item.packSizeKg} Kg)` : `${item.packSizeKg} Kg`} | Qty: {item.quantity} Unit ({formatKg(item.packSizeKg * item.quantity)})
                             </div>
                             <div className="font-mono text-[10px] font-bold text-slate-800 mt-0.5">
                               Subtotal: {formatIDR(info.subtotal)}

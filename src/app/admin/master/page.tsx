@@ -416,12 +416,12 @@ export default function MasterDataPage() {
     sku: '',
     name: '',
     applications: ['Fine Fragrance'] as string[],
-    pack_sizes: [25, 5, 1] as number[],
+    pack_sizes: [25, 5, 1, 0.1] as number[],
     top_notes: '',
     middle_notes: '',
     base_notes: '',
     selling_price_per_kg: 1500000,
-    min_stock_kg: 3.0,
+    min_stock_kg: 0.1,
   });
 
   const handleToggleAppCategoryInForm = (catName: string) => {
@@ -971,7 +971,7 @@ export default function MasterDataPage() {
           applications: productForm.applications,
           application: productForm.applications[0] || 'Fine Fragrance',
           fragrance_family: productForm.applications[0] || 'Fine Fragrance',
-          pack_sizes: [25, 5, 1],
+          pack_sizes: [25, 5, 1, 0.1],
           top_notes: productForm.top_notes,
           middle_notes: productForm.middle_notes,
           base_notes: productForm.base_notes,
@@ -1002,7 +1002,7 @@ export default function MasterDataPage() {
         .then((res) => res.json())
         .then((json) => {
           if (json.success) {
-            // Also seed the three variants in database for this new product!
+            // Also seed the variants in database for this new product!
             const newProdId = json.data.id;
             fetch('/api/products/pricelist', {
               method: 'PUT',
@@ -1024,6 +1024,12 @@ export default function MasterDataPage() {
                   },
                   {
                     variant_id: `var-${newProd.sku.toLowerCase().replace(/[^a-z0-9]/gi, '')}-1`,
+                    selling_price_per_kg: 0,
+                    selling_price_usd_per_kg: 0,
+                    currency: 'IDR'
+                  },
+                  {
+                    variant_id: `var-${newProd.sku.toLowerCase().replace(/[^a-z0-9]/gi, '')}-0-1`,
                     selling_price_per_kg: 0,
                     selling_price_usd_per_kg: 0,
                     currency: 'IDR'
