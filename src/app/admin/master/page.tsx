@@ -61,16 +61,21 @@ import {
   LayoutGrid,
   Type,
   Eye,
+  Zap,
+  Upload,
 } from 'lucide-react';
 import {
   exportUsersToXLSX,
   exportProductsToXLSX,
   exportPricelistToXLSX,
+  exportPricelistTemplateXLSX,
   exportCustomersToXLSX,
   exportDistributorsToXLSX,
   exportCouriersToXLSX,
   exportToXLSX,
 } from '@/lib/export-excel';
+import BulkPriceModal from '@/components/admin/bulk-price-modal';
+import ImportPricelistModal from '@/components/admin/import-pricelist-modal';
 import { canUserExportXLSX } from '@/lib/auth';
 import {
   ThemeSettings,
@@ -185,6 +190,10 @@ export default function MasterDataPage() {
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
+
+  // Bulk Price Adjustment & Import Pricelist States
+  const [isBulkPriceModalOpen, setIsBulkPriceModalOpen] = useState(false);
+  const [isImportPricelistModalOpen, setIsImportPricelistModalOpen] = useState(false);
 
   // Appearance & Theme Settings States & Handlers
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => getThemeSettings());
@@ -1877,9 +1886,31 @@ export default function MasterDataPage() {
                   className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Bulk Price Update & Excel Import for Products & Pricelist */}
+                {(activeTab === 'products' || activeTab === 'pricelist') && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsBulkPriceModalOpen(true)}
+                      className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                      title="Penyesuaian Harga Massal (% atau Nominal Rp)"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-600" /> Penyesuaian Harga Massal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsImportPricelistModalOpen(true)}
+                      className="text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                      title="Impor Harga Produk dari File Excel (.xlsx)"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-teal-600" /> Impor Excel Pricelist
+                    </button>
+                  </>
+                )}
                 {canUserExportXLSX(currentUser) && (
                   <button
+                    type="button"
                     onClick={handleExportCurrentTab}
                     className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
                     title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
@@ -1889,6 +1920,7 @@ export default function MasterDataPage() {
                 )}
                 {activeTab === 'products' && (
                   <button
+                    type="button"
                     onClick={() => setIsAppModalOpen(true)}
                     className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
                   >
@@ -1897,6 +1929,7 @@ export default function MasterDataPage() {
                 )}
                 {activeTab !== 'pricelist' && activeTab !== 'finance' && (
                   <button
+                    type="button"
                     onClick={handleOpenAddModal}
                     className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
                   >
@@ -7638,6 +7671,30 @@ export default function MasterDataPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL: Bulk Price Adjustment */}
+      <BulkPriceModal
+        isOpen={isBulkPriceModalOpen}
+        onClose={() => setIsBulkPriceModalOpen(false)}
+        products={products}
+        applicationCategories={applicationCategories}
+        usdRate={usdRate}
+        onSuccess={() => {
+          fetchProducts();
+          fetchPriceLogs();
+        }}
+      />
+
+      {/* MODAL: Import Pricelist Excel */}
+      <ImportPricelistModal
+        isOpen={isImportPricelistModalOpen}
+        onClose={() => setIsImportPricelistModalOpen(false)}
+        products={products}
+        onSuccess={() => {
+          fetchProducts();
+          fetchPriceLogs();
+        }}
+      />
     </div>
   );
 }

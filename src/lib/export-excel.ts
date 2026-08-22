@@ -218,6 +218,124 @@ export function exportPricelistToXLSX(products: Product[], usdRate: number, cust
 }
 
 /**
+ * Helper khusus ekspor Template Pricelist untuk Impor / Update Massal
+ */
+export function exportPricelistTemplateXLSX(products: Product[], customFileName?: string): boolean {
+  if (!products || products.length === 0) {
+    if (typeof window !== 'undefined') alert('Tidak ada data produk untuk diekspor ke template.');
+    return false;
+  }
+
+  const rows: any[] = [];
+  let no = 1;
+
+  products.forEach((p) => {
+    const packSizes = p.pack_sizes && p.pack_sizes.length > 0 ? p.pack_sizes : [25, 5, 1];
+    packSizes.forEach((sz) => {
+      const vSku = p.variant_skus?.[sz] || `${p.sku}-${sz}K`;
+      const vName = p.variant_names?.[sz] || `${p.name} ${sz}K`;
+      const vPriceIdr = p.variant_prices?.[sz] ?? (p.selling_price_per_kg || 0);
+      const app = (p.applications && p.applications.length > 0 ? p.applications[0] : p.application) || 'Fine Fragrance';
+
+      rows.push({
+        'No': no++,
+        'ID Produk': p.id,
+        'SKU Varian': vSku,
+        'SKU Induk': p.sku,
+        'Nama Produk': vName,
+        'Kategori Aplikasi': app,
+        'Kemasan (Kg)': sz,
+        'Harga IDR / Kg': vPriceIdr,
+        'Harga USD / Kg': 0,
+      });
+    });
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  return exportToXLSX(rows, {
+    fileName: customFileName || `Template_Update_Harga_Artaroma_${timestamp}.xlsx`,
+    sheetName: 'Pricelist',
+  });
+}
+
+export interface ParsedPricelistRow {
+  rowNumber: number;
+  productId: string;
+  skuVarian: string;
+  skuInduk: string;
+  productName: string;
+  packSizeKg: number;
+  newPriceIdr: number;
+  newPriceUsd: number;
+  isValid: boolean;
+  errorMessage?: string;
+}
+
+/**
+ * Parser file Excel Pricelist untuk fitur Impor Harga Massal
+ */
+export async function parsePricelistExcel(file: File): Promise<ParsedPricelistRow[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) {
+    throw new Error('File Excel tidak memiliki sheet yang valid.');
+  }
+
+  const worksheet = workbook.Sheets[firstSheetName];
+  const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+  if (!jsonData || jsonData.length === 0) {
+    throw new Error('File Excel kosong atau format tabel tidak terbaca.');
+  }
+
+  const results: ParsedPricelistRow[] = [];
+
+  jsonData.forEach((row, idx) => {
+    // Cari field berdasarkan kemungkinan nama kolom
+    const productId = String(row['ID Produk'] || row['id_produk'] || row['Product ID'] || row['ID'] || '').trim();
+    const skuVarian = String(row['SKU Varian'] || row['sku_varian'] || row['SKU'] || row['Variant SKU'] || '').trim();
+    const skuInduk = String(row['SKU Induk'] || row['sku_induk'] || row['Parent SKU'] || '').trim();
+    const productName = String(row['Nama Produk'] || row['nama_produk'] || row['Product Name'] || '').trim();
+    
+    const packSizeRaw = row['Kemasan (Kg)'] || row['kemasan_kg'] || row['Kemasan'] || row['Pack Size'] || 25;
+    const packSizeKg = Number(String(packSizeRaw).replace(/[^0-9.]/g, '')) || 25;
+
+    const priceIdrRaw = row['Harga IDR / Kg'] || row['harga_idr'] || row['Harga IDR'] || row['Harga (IDR)'] || row['Price IDR'] || 0;
+    const newPriceIdr = Number(String(priceIdrRaw).replace(/[^0-9.]/g, '')) || 0;
+
+    const priceUsdRaw = row['Harga USD / Kg'] || row['harga_usd'] || row['Harga USD'] || row['Price USD'] || 0;
+    const newPriceUsd = Number(String(priceUsdRaw).replace(/[^0-9.]/g, '')) || 0;
+
+    let isValid = true;
+    let errorMessage = '';
+
+    if (!productId && !skuVarian && !skuInduk) {
+      isValid = false;
+      errorMessage = 'ID Produk atau SKU tidak ditemukan';
+    } else if (newPriceIdr < 0) {
+      isValid = false;
+      errorMessage = 'Harga tidak boleh minus';
+    }
+
+    results.push({
+      rowNumber: idx + 2, // Header is row 1
+      productId,
+      skuVarian,
+      skuInduk,
+      productName,
+      packSizeKg,
+      newPriceIdr,
+      newPriceUsd,
+      isValid,
+      errorMessage,
+    });
+  });
+
+  return results;
+}
+
+/**
  * Helper khusus ekspor Master Data Customer
  */
 export function exportCustomersToXLSX(customers: Customer[], customFileName?: string): boolean {
