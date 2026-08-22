@@ -46,6 +46,8 @@ import {
   XCircle,
   Sparkles,
   FileSpreadsheet,
+  Upload,
+  CreditCard,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -769,6 +771,50 @@ export default function OrderDetailPage() {
   }, [order?.shipping_type, order?.shipping_cost]);
 
   const [fulfillmentMode, setFulfillmentMode] = useState<'ADJUST_SO' | 'MULTI_TRIP'>('ADJUST_SO');
+
+  // Payment proof URL state (synchronized from Customer upload or Admin upload)
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string | null>(() => {
+    return invoice?.payment_proof_url || (order as any)?.payment_proof_url || null;
+  });
+
+  useEffect(() => {
+    if (invoice?.payment_proof_url) {
+      setPaymentProofUrl(invoice.payment_proof_url);
+    } else if ((order as any)?.payment_proof_url) {
+      setPaymentProofUrl((order as any).payment_proof_url);
+    }
+  }, [invoice?.payment_proof_url, (order as any)?.payment_proof_url]);
+
+  const handleAdminProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const url = reader.result as string;
+        setPaymentProofUrl(url);
+
+        // Save immediately to local storage invoices & sales orders
+        const currentInvs = getStoredInvoices();
+        const updatedInvs = currentInvs.map((inv) =>
+          inv.id === invoice?.id || inv.so_id === order.id
+            ? { ...inv, payment_proof_url: url }
+            : inv
+        );
+        saveStoredInvoices(updatedInvs);
+
+        const currentOrders = getStoredOrders();
+        const updatedOrders = currentOrders.map((o) =>
+          o.id === order.id || o.so_number === order.so_number
+            ? { ...o, payment_proof_url: url }
+            : o
+        );
+        saveStoredOrders(updatedOrders, false);
+        setInvoices(updatedInvs);
+        setSalesOrders(updatedOrders);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Action 1: Admin Confirm Prices & Issue Invoice -> DIKONFIRMASI (With Multi-Trip or SO Adjustment Support)
   const handleConfirmPrices = () => {
@@ -2077,22 +2123,107 @@ export default function OrderDetailPage() {
                 </button>
               </div>
 
-              {/* Bukti Transfer Box */}
-              {invoice?.payment_proof_url && (
-                <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  <img
-                    src={invoice.payment_proof_url}
-                    alt="Bukti Transfer"
-                    className="h-16 rounded border border-gray-250 cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => window.open(invoice.payment_proof_url)}
-                  />
-                  <div className="text-[11px] space-y-0.5">
-                    <div>No. Invoice: <strong className="font-mono">{invoice.invoice_number}</strong></div>
-                    <div>Total Tagihan Awal: <strong className="text-emerald-700">{formatIDR(invoice.total_amount)}</strong></div>
-                    <div className="text-[10px] text-amber-600 font-bold">BUKTI TRANSFER TERSEDIA</div>
+              {/* Bukti Transfer Box (Customer Upload + Admin Manual Upload - Opsional) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-blue-600" />
+                    <span className="font-extrabold text-slate-800 text-xs">
+                      Bukti Transfer Pembayaran Customer
+                    </span>
+                    <span className="text-[10px] bg-slate-200/80 text-slate-700 font-bold px-2 py-0.5 rounded-full">
+                      Bersifat Opsional
+                    </span>
+                  </div>
+
+                  {paymentProofUrl ? (
+                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 w-max">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Bukti Transfer Tersedia (Customer / Admin)
+                    </span>
+                  ) : (
+                    <span className="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 w-max">
+                      <Clock className="w-3 h-3 text-slate-500" /> Belum Ada Bukti (Bisa Diunggah Manual)
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  {paymentProofUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={paymentProofUrl}
+                        alt="Bukti Transfer"
+                        className="h-16 w-16 object-cover rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:scale-105 transition-transform"
+                        onClick={() => window.open(paymentProofUrl)}
+                        title="Klik untuk melihat ukuran penuh"
+                      />
+                      <div className="space-y-1 text-xs">
+                        <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <span>Resi Pembayaran Terlampir</span>
+                          <button
+                            type="button"
+                            onClick={() => window.open(paymentProofUrl)}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 underline font-bold"
+                          >
+                            Lihat Foto / Dokumen
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {invoice?.invoice_number ? `No. Invoice: ${invoice.invoice_number}` : `Nomor SO: ${order.so_number}`}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 leading-relaxed">
+                      Bukti transfer dapat diunggah sendiri oleh customer via halaman akun customer mereka, atau Admin/Finance dapat mengunggahnya langsung jika customer mengirimkan resi via WhatsApp/email.
+                    </div>
+                  )}
+
+                  {/* Upload Action Button for Admin */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{paymentProofUrl ? 'Ganti Bukti Transfer' : 'Upload Bukti Transfer (Admin)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleAdminProofFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    {paymentProofUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm('Hapus bukti transfer ini?')) {
+                            setPaymentProofUrl(null);
+                            const currentInvs = getStoredInvoices();
+                            const updatedInvs = currentInvs.map((inv) =>
+                              inv.id === invoice?.id || inv.so_id === order.id
+                                ? { ...inv, payment_proof_url: undefined }
+                                : inv
+                            );
+                            saveStoredInvoices(updatedInvs);
+                            const currentOrders = getStoredOrders();
+                            const updatedOrders = currentOrders.map((o) =>
+                              o.id === order.id || o.so_number === order.so_number
+                                ? { ...o, payment_proof_url: undefined }
+                                : o
+                            );
+                            saveStoredOrders(updatedOrders, false);
+                            setInvoices(updatedInvs);
+                            setSalesOrders(updatedOrders);
+                          }
+                        }}
+                        className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                        title="Hapus Bukti Transfer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Edit Items Panel */}
               {isEditingItems ? (
