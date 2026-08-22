@@ -120,7 +120,13 @@ export interface Courier {
   name: string;
   phone: string;
   vehicle_number: string;
+  courier_type?: 'INTERNAL' | 'EKSTERNAL';
+  service_type?: string;
+  notes?: string;
   is_active: boolean;
+  linked_user_id?: string | null;
+  linked_user_email?: string | null;
+  has_login_account?: boolean;
 }
 
 export const SYSTEM_MODULES = [

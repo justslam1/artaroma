@@ -43,13 +43,16 @@ CREATE TABLE IF NOT EXISTS distributors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 4. TABEL COURIERS (Kurir & Armada Ekspedisi Internal)
+-- 4. TABEL COURIERS (Kurir Internal & Ekspedisi Luar)
 CREATE TABLE IF NOT EXISTS couriers (
     id VARCHAR(64) PRIMARY KEY,
     code VARCHAR(64) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     phone VARCHAR(64),
     vehicle_number VARCHAR(64),
+    courier_type VARCHAR(20) DEFAULT 'INTERNAL',
+    service_type VARCHAR(100) DEFAULT NULL,
+    notes TEXT DEFAULT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

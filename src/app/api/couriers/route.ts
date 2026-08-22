@@ -41,26 +41,43 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, code, name, phone, vehicle_number, is_active, create_user_account, login_email, password } = body;
+    const {
+      id,
+      code,
+      name,
+      phone,
+      vehicle_number,
+      courier_type,
+      service_type,
+      notes,
+      is_active,
+      create_user_account,
+      login_email,
+      password
+    } = body;
     const courierId = id || `cour-${Date.now()}`;
     const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+    const typeVal = courier_type === 'EKSTERNAL' ? 'EKSTERNAL' : 'INTERNAL';
     
     // 1. Insert into couriers table
     await executeQuery(
-      `INSERT INTO couriers (id, code, name, phone, vehicle_number, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO couriers (id, code, name, phone, vehicle_number, courier_type, service_type, notes, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         courierId,
         code,
         name,
         phone,
         vehicle_number || null,
+        typeVal,
+        service_type || null,
+        notes || null,
         activeVal
       ]
     );
 
-    // 2. Auto-provision user account if requested (default: true)
-    if (create_user_account !== false) {
+    // 2. Auto-provision user account ONLY for INTERNAL couriers if requested
+    if (typeVal === 'INTERNAL' && create_user_account !== false) {
       const cleanName = (name || 'kurir').toLowerCase().replace(/[^a-z0-9]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
       const userEmail = (login_email && login_email.trim()) ? login_email.trim() : `${cleanName}@artaroma.co.id`;
       const userPassword = (password && password.trim()) ? password.trim() : 'Artaroma2026!';
@@ -91,8 +108,10 @@ export async function POST(req: Request) {
     
     return NextResponse.json({ 
       success: true, 
-      message: 'Kurir dan akun login pengguna berhasil dibuat secara otomatis.',
-      data: { id: courierId, name } 
+      message: typeVal === 'INTERNAL' 
+        ? 'Kurir internal dan akun login berhasil dibuat.' 
+        : 'Ekspedisi eksternal berhasil didaftarkan.',
+      data: { id: courierId, name, courier_type: typeVal } 
     });
   } catch (error: any) {
     return NextResponse.json(

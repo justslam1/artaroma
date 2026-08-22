@@ -506,6 +506,9 @@ export default function MasterDataPage() {
     name: '',
     phone: '',
     vehicle_number: '',
+    courier_type: 'INTERNAL' as 'INTERNAL' | 'EKSTERNAL',
+    service_type: '',
+    notes: '',
     create_user_account: true,
     login_email: '',
     password: 'Artaroma2026!',
@@ -814,6 +817,9 @@ export default function MasterDataPage() {
         name: '',
         phone: '',
         vehicle_number: 'B 7721 KFP (Blind Van)',
+        courier_type: 'INTERNAL',
+        service_type: 'Cargo Darat / Box Van',
+        notes: '',
         create_user_account: true,
         login_email: '',
         password: 'Artaroma2026!',
@@ -912,7 +918,10 @@ export default function MasterDataPage() {
         code: k.code,
         name: k.name,
         phone: k.phone,
-        vehicle_number: k.vehicle_number,
+        vehicle_number: k.vehicle_number || '',
+        courier_type: (k as any).courier_type || 'INTERNAL',
+        service_type: (k as any).service_type || '',
+        notes: (k as any).notes || '',
         create_user_account: false,
         login_email: (k as any).linked_user_email || '',
         password: 'Artaroma2026!',
@@ -1185,6 +1194,9 @@ export default function MasterDataPage() {
         name: courierForm.name,
         phone: courierForm.phone,
         vehicle_number: courierForm.vehicle_number,
+        courier_type: courierForm.courier_type,
+        service_type: courierForm.service_type,
+        notes: courierForm.notes,
         is_active: true,
         create_user_account: courierForm.create_user_account,
         login_email: courierForm.login_email,
@@ -1400,6 +1412,9 @@ export default function MasterDataPage() {
         name: courierForm.name,
         phone: courierForm.phone,
         vehicle_number: courierForm.vehicle_number,
+        courier_type: courierForm.courier_type,
+        service_type: courierForm.service_type,
+        notes: courierForm.notes,
         is_active: editingItem.data.is_active,
       };
       fetch(`/api/couriers/${editingItem.data.id}`, {
@@ -2629,9 +2644,11 @@ export default function MasterDataPage() {
               <table className="w-full text-sm text-left">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
-                    <th className="px-6 py-3">Kode / Nama Kurir</th>
-                    <th className="px-6 py-3">Nomor HP</th>
-                    <th className="px-6 py-3">Kendaraan Cargo</th>
+                    <th className="px-6 py-3">Kode / Nama Kurir & Ekspedisi</th>
+                    <th className="px-6 py-3">Tipe Kurir</th>
+                    <th className="px-6 py-3">Nomor HP / Kontak</th>
+                    <th className="px-6 py-3">Kendaraan / Layanan</th>
+                    <th className="px-6 py-3">Akun Login Aplikasi Mobile</th>
                     <th className="px-6 py-3">Status</th>
                     <th className="px-6 py-3 text-right">Aksi Super Admin</th>
                   </tr>
@@ -2641,52 +2658,96 @@ export default function MasterDataPage() {
                     .filter((k) =>
                       k.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       (k.code && k.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                      (k.phone && k.phone.toLowerCase().includes(searchTerm.toLowerCase()))
+                      (k.phone && k.phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                      ((k as any).vehicle_number && (k as any).vehicle_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                      ((k as any).service_type && (k as any).service_type.toLowerCase().includes(searchTerm.toLowerCase()))
                     )
                     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' }))
-                    .map((k) => (
-                    <tr key={k.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-3.5">
-                        <div className="font-semibold text-slate-800">{k.name}</div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                          <span className="font-mono text-[11px] text-blue-600 font-bold">{k.code}</span>
-                          {(k as any).linked_user_email ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                              <UserCheck className="w-3 h-3 text-emerald-600" /> {(k as any).linked_user_email}
+                    .map((k) => {
+                      const isExternal = (k as any).courier_type === 'EKSTERNAL';
+
+                      return (
+                        <tr key={k.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-3.5">
+                            <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                              {isExternal ? (
+                                <Package className="w-4 h-4 text-amber-600 shrink-0" />
+                              ) : (
+                                <Truck className="w-4 h-4 text-blue-600 shrink-0" />
+                              )}
+                              <span>{k.name}</span>
+                            </div>
+                            <span className="font-mono text-[11px] text-blue-600 font-bold block mt-0.5">{k.code}</span>
+                            {(k as any).notes && (
+                              <div className="text-[10px] text-slate-400 mt-0.5 max-w-xs truncate" title={(k as any).notes}>
+                                📝 {(k as any).notes}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5">
+                            {isExternal ? (
+                              <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1">
+                                <Package className="w-3 h-3" /> EKSTERNAL
+                              </span>
+                            ) : (
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1">
+                                <Truck className="w-3 h-3" /> INTERNAL
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5 font-mono text-slate-600 text-xs">{k.phone}</td>
+
+                          <td className="px-6 py-3.5 text-xs">
+                            <div className="font-semibold text-amber-800">{k.vehicle_number || (k as any).service_type || '—'}</div>
+                            {isExternal && (
+                              <div className="text-[10px] text-slate-400">Vendor Cargo Ekspedisi</div>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5 text-xs">
+                            {isExternal ? (
+                              <span className="text-slate-400 italic text-[11px] bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                — Ekspedisi Luar (Tanpa Login) —
+                              </span>
+                            ) : (k as any).linked_user_email ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold">
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> {(k as any).linked_user_email}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                                Belum terhubung akun login
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5">
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold">
+                              SIAP TUGAS
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200">
-                              Belum ada akun login
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3.5 font-mono text-slate-600">{k.phone}</td>
-                      <td className="px-6 py-3.5 text-amber-700 font-semibold text-sm">{k.vehicle_number}</td>
-                      <td className="px-6 py-3.5">
-                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold">
-                          SIAP TUGAS
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditModal('couriers', k)}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center gap-1 transition-colors"
-                          >
-                            <Pencil className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete('couriers', k.id, k.name)}
-                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs p-1.5 rounded-lg transition-colors"
-                            title="Hapus Kurir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+
+                          <td className="px-6 py-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditModal('couriers', k)}
+                                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center gap-1 transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete('couriers', k.id, k.name)}
+                                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs p-1.5 rounded-lg transition-colors"
+                                title="Hapus Kurir"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -5104,9 +5165,57 @@ export default function MasterDataPage() {
 
               {activeTab === 'couriers' && (
                 <>
+                  {/* Pilihan Tipe Kurir */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1 text-xs">Tipe Pengantaran / Kurir</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCourierForm({ ...courierForm, courier_type: 'INTERNAL', create_user_account: true })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                          courierForm.courier_type === 'INTERNAL'
+                            ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 text-blue-900'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-slate-600'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${courierForm.courier_type === 'INTERNAL' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-slate-500'}`}>
+                          <Truck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs">🏢 Kurir Internal</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            Staf pengantaran internal Artaroma. Perlu akun login aplikasi mobile.
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCourierForm({ ...courierForm, courier_type: 'EKSTERNAL', create_user_account: false })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                          courierForm.courier_type === 'EKSTERNAL'
+                            ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-900'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-slate-600'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${courierForm.courier_type === 'EKSTERNAL' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-slate-500'}`}>
+                          <Package className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs">📦 Ekspedisi Eksternal</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            Vendor rekanan cargo (JNE, Indah, Dakota, dll). Tanpa akun login.
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Kode Kurir</label>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Kode Kurir' : 'Kode Ekspedisi'}
+                      </label>
                       <input
                         type="text"
                         required
@@ -5116,11 +5225,13 @@ export default function MasterDataPage() {
                       />
                     </div>
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Nama Lengkap Kurir</label>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nama Lengkap Kurir Staf' : 'Nama Ekspedisi / Vendor Cargo'}
+                      </label>
                       <input
                         type="text"
                         required
-                        placeholder="Contoh: Budi Gunawan"
+                        placeholder={courierForm.courier_type === 'INTERNAL' ? 'Contoh: Budi Gunawan' : 'Contoh: Indah Logistik Cargo / JNE Trucking'}
                         value={courierForm.name}
                         onChange={(e) => setCourierForm({ ...courierForm, name: e.target.value })}
                         className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-bold text-xs"
@@ -5128,73 +5239,97 @@ export default function MasterDataPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Nomor Telepon / WhatsApp</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="0813-xxxx-xxxx"
-                      value={courierForm.phone}
-                      onChange={(e) => setCourierForm({ ...courierForm, phone: e.target.value })}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Jenis & Nomor Plat Kendaraan Cargo</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: B 7721 SXX (Box Truck)"
-                      value={courierForm.vehicle_number}
-                      onChange={(e) => setCourierForm({ ...courierForm, vehicle_number: e.target.value })}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono font-bold text-xs text-amber-700"
-                    />
-                  </div>
-
-                  {/* Auto-provision User Account Section */}
-                  <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3.5 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nomor HP / WhatsApp Staf' : 'Nomor Kontak CS / PIC Ekspedisi'}
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={courierForm.create_user_account}
-                        onChange={(e) => setCourierForm({ ...courierForm, create_user_account: e.target.checked })}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        type="text"
+                        required
+                        placeholder="0813-xxxx-xxxx"
+                        value={courierForm.phone}
+                        onChange={(e) => setCourierForm({ ...courierForm, phone: e.target.value })}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
                       />
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <UserCheck className="w-4 h-4 text-blue-600" />
-                        Buatkan akun login pengguna untuk kurir ini secara otomatis
-                      </span>
-                    </label>
-
-                    {courierForm.create_user_account && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Email Login Driver</label>
-                          <input
-                            type="email"
-                            placeholder={
-                              courierForm.name
-                                ? `${courierForm.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@artaroma.co.id`
-                                : 'driver@artaroma.co.id'
-                            }
-                            value={courierForm.login_email}
-                            onChange={(e) => setCourierForm({ ...courierForm, login_email: e.target.value })}
-                            className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Kata Sandi Default</label>
-                          <input
-                            type="text"
-                            value={courierForm.password}
-                            onChange={(e) => setCourierForm({ ...courierForm, password: e.target.value })}
-                            className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nomor Plat Kendaraan Cargo' : 'Jenis Layanan Ekspedisi'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={courierForm.courier_type === 'INTERNAL' ? 'Contoh: B 7721 SXX (Box Truck)' : 'Contoh: Cargo Darat / Trucking FTL'}
+                        value={courierForm.vehicle_number}
+                        onChange={(e) => setCourierForm({ ...courierForm, vehicle_number: e.target.value })}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono font-bold text-xs text-amber-700"
+                      />
+                    </div>
                   </div>
+
+                  {courierForm.courier_type === 'EKSTERNAL' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1 text-xs">Catatan / Lokasi Drop Point Ekspedisi</label>
+                        <textarea
+                          rows={2}
+                          placeholder="Contoh: Drop point agen Indah Cargo Jl. Raya Daan Mogot No. 45. Tarif langganan diskon 15%."
+                          value={courierForm.notes || ''}
+                          onChange={(e) => setCourierForm({ ...courierForm, notes: e.target.value })}
+                          className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-slate-800 text-xs"
+                        />
+                      </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2.5 text-xs text-amber-850">
+                        <Package className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>Ekspedisi Eksternal dikelola via nomor resi pengiriman. <strong>Tidak memerlukan akun login</strong> ke aplikasi kurir mobile.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Auto-provision User Account Section for INTERNAL */
+                    <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3.5 space-y-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={courierForm.create_user_account}
+                          onChange={(e) => setCourierForm({ ...courierForm, create_user_account: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <UserCheck className="w-4 h-4 text-blue-600" />
+                          Buatkan akun login pengguna untuk kurir internal ini
+                        </span>
+                      </label>
+
+                      {courierForm.create_user_account && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 pl-6">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Email Login Driver</label>
+                            <input
+                              type="email"
+                              placeholder={
+                                courierForm.name
+                                  ? `${courierForm.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@artaroma.co.id`
+                                  : 'driver@artaroma.co.id'
+                              }
+                              value={courierForm.login_email}
+                              onChange={(e) => setCourierForm({ ...courierForm, login_email: e.target.value })}
+                              className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Kata Sandi Default</label>
+                            <input
+                              type="text"
+                              value={courierForm.password}
+                              onChange={(e) => setCourierForm({ ...courierForm, password: e.target.value })}
+                              className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-slate-800 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -6582,9 +6717,57 @@ export default function MasterDataPage() {
               {/* EDIT COURIER */}
               {editingItem.type === 'couriers' && (
                 <>
+                  {/* Pilihan Tipe Kurir */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1 text-xs">Tipe Pengantaran / Kurir</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCourierForm({ ...courierForm, courier_type: 'INTERNAL' })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                          courierForm.courier_type === 'INTERNAL'
+                            ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 text-blue-900'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-slate-600'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${courierForm.courier_type === 'INTERNAL' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-slate-500'}`}>
+                          <Truck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs">🏢 Kurir Internal</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            Staf pengantaran internal Artaroma.
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCourierForm({ ...courierForm, courier_type: 'EKSTERNAL' })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                          courierForm.courier_type === 'EKSTERNAL'
+                            ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-900'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-slate-600'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${courierForm.courier_type === 'EKSTERNAL' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-slate-500'}`}>
+                          <Package className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs">📦 Ekspedisi Eksternal</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                            Vendor rekanan cargo (tanpa login).
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Kode Kurir</label>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Kode Kurir' : 'Kode Ekspedisi'}
+                      </label>
                       <input
                         type="text"
                         required
@@ -6594,10 +6777,13 @@ export default function MasterDataPage() {
                       />
                     </div>
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Nama Lengkap Kurir</label>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nama Lengkap Kurir' : 'Nama Ekspedisi / Vendor Cargo'}
+                      </label>
                       <input
                         type="text"
                         required
+                        placeholder={courierForm.courier_type === 'INTERNAL' ? 'Contoh: Budi Gunawan' : 'Contoh: Indah Logistik Cargo / JNE Trucking'}
                         value={courierForm.name}
                         onChange={(e) => setCourierForm({ ...courierForm, name: e.target.value })}
                         className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-bold text-xs"
@@ -6605,27 +6791,58 @@ export default function MasterDataPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Nomor Telepon / WhatsApp</label>
-                    <input
-                      type="text"
-                      required
-                      value={courierForm.phone}
-                      onChange={(e) => setCourierForm({ ...courierForm, phone: e.target.value })}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nomor HP / WhatsApp' : 'Nomor Kontak CS / PIC Ekspedisi'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="0813-xxxx-xxxx"
+                        value={courierForm.phone}
+                        onChange={(e) => setCourierForm({ ...courierForm, phone: e.target.value })}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        {courierForm.courier_type === 'INTERNAL' ? 'Nomor Plat Kendaraan Cargo' : 'Jenis Layanan Ekspedisi'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={courierForm.courier_type === 'INTERNAL' ? 'Contoh: B 7721 SXX (Box Truck)' : 'Contoh: Cargo Darat / Trucking FTL'}
+                        value={courierForm.vehicle_number}
+                        onChange={(e) => setCourierForm({ ...courierForm, vehicle_number: e.target.value })}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono font-bold text-xs text-amber-700"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Jenis & Nomor Plat Kendaraan Cargo</label>
-                    <input
-                      type="text"
-                      required
-                      value={courierForm.vehicle_number}
-                      onChange={(e) => setCourierForm({ ...courierForm, vehicle_number: e.target.value })}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono font-bold text-xs text-amber-700"
-                    />
-                  </div>
+                  {courierForm.courier_type === 'EKSTERNAL' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1 text-xs">Catatan / Lokasi Drop Point Ekspedisi</label>
+                        <textarea
+                          rows={2}
+                          placeholder="Contoh: Drop point agen Indah Cargo Jl. Raya Daan Mogot No. 45. Tarif langganan diskon 15%."
+                          value={courierForm.notes || ''}
+                          onChange={(e) => setCourierForm({ ...courierForm, notes: e.target.value })}
+                          className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-slate-800 text-xs"
+                        />
+                      </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2.5 text-xs text-amber-850">
+                        <Package className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>Ekspedisi Eksternal dikelola via nomor resi pengiriman. <strong>Tidak memerlukan akun login</strong> ke aplikasi kurir mobile.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span>Akun kurir internal terhubung dengan sistem login pengguna untuk aplikasi kurir mobile.</span>
+                    </div>
+                  )}
                 </>
               )}
 

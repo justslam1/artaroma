@@ -115,6 +115,31 @@ export async function ensureSchemaMigrations(): Promise<void> {
         console.warn('[Schema Migration Customers Warning]:', e.message);
       }
 
+      // 2c. Check & Add missing columns in couriers (Internal vs Eksternal support)
+      try {
+        const [courCols]: any = await conn.query('SHOW COLUMNS FROM couriers');
+        const courColNames = new Set(courCols.map((c: any) => c.Field.toLowerCase()));
+
+        const courMigrations = [
+          { col: 'courier_type', sql: "ALTER TABLE couriers ADD COLUMN courier_type VARCHAR(20) DEFAULT 'INTERNAL'" },
+          { col: 'service_type', sql: "ALTER TABLE couriers ADD COLUMN service_type VARCHAR(100) DEFAULT NULL" },
+          { col: 'notes', sql: "ALTER TABLE couriers ADD COLUMN notes TEXT DEFAULT NULL" },
+        ];
+
+        for (const m of courMigrations) {
+          if (!courColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column couriers.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] couriers.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Couriers Warning]:', e.message);
+      }
+
       // 3. Ensure operational_logs table exists
       try {
         await conn.query(`
