@@ -524,8 +524,8 @@ export function CreatePOModal({
                       <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs pointer-events-none">Rp</span>
                       <input
                         type="number"
-                        min="1"
-                        step="10"
+                        min="0"
+                        step="any"
                         value={exchangeRate}
                         onChange={(e) => handleExchangeRateChange(Number(e.target.value) || 1)}
                         className="w-full bg-slate-900 border border-amber-500/70 rounded-xl pl-9 pr-3 py-2 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-500"
@@ -560,7 +560,7 @@ export function CreatePOModal({
                     type="button"
                     onClick={addItemRow}
                     disabled={unselectedVariants.length === 0}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> Tambah Baris
                   </button>
@@ -655,7 +655,7 @@ export function CreatePOModal({
                       {/* Pack Size (auto-filled, read-only) */}
                       <div className="w-20">
                         <label className="text-[10px] text-slate-400 block mb-0.5">Kemasan</label>
-                        <div className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-400 font-mono font-bold text-center">
+                        <div className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold text-center">
                           {item.packSizeKg} Kg
                         </div>
                       </div>
@@ -666,7 +666,7 @@ export function CreatePOModal({
                       {/* Total Kg (calculated) */}
                       <div className="w-20">
                         <label className="text-[10px] text-slate-400 block mb-0.5">Total (Kg)</label>
-                        <div className="w-full bg-slate-950/60 border border-emerald-800/40 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-mono font-bold text-center">
+                        <div className="w-full bg-slate-950/60 border border-emerald-800/40 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono font-bold text-center">
                           {(item.jumlah * item.packSizeKg).toLocaleString('id-ID')} Kg
                         </div>
                       </div>
@@ -680,7 +680,7 @@ export function CreatePOModal({
                           <div className="relative">
                             <input
                               type="number"
-                              step="0.01"
+                              step="any"
                               min="0"
                               value={item.foreignCostPerKg || 0}
                               onChange={(e) => handleForeignCostChange(idx, e.target.value)}
@@ -697,7 +697,8 @@ export function CreatePOModal({
                           <label className="text-[10px] text-slate-400 block mb-0.5">HPP / Kg (IDR)</label>
                           <input
                             type="number"
-                            step="10000"
+                            step="any"
+                            min="0"
                             value={item.costPerKg}
                             onChange={(e) => handleCostChange(idx, e.target.value)}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
