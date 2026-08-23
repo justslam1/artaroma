@@ -1011,6 +1011,7 @@ export default function OrderDetailPage() {
         shipping_cost: finalShippingCost,
         items: finalItemsToSave,
         confirmed_by: currentUser?.name || currentUser?.username || 'Super Admin HQ',
+        confirmed_at: new Date().toISOString(),
         invoice_id: newInvoice.id,
         surat_jalan_number: shipments ? shipments[0].surat_jalan_number : (order.surat_jalan_number || `SJ-ART-2026-${order.so_number.split('-').pop()}`),
         shipments: shipments,
@@ -1219,6 +1220,8 @@ export default function OrderDetailPage() {
 
     updateSalesOrderStatus(order.id, 'DIKIRIM', {
       items: updatedItems,
+      shipped_at: new Date().toISOString(),
+      shipped_by: order.courier_name ? `Kurir (${order.courier_name})` : (currentUser?.name || 'Kurir Cargo'),
     });
     alert(`Pesanan '${order.so_number}' berhasil diserahkan ke kurir untuk pengiriman!`);
   };
@@ -1307,6 +1310,26 @@ export default function OrderDetailPage() {
   const soShippedActor = order.shipped_by || (order.courier_name ? `Kurir (${order.courier_name})` : (currentUser?.name ? `${currentUser.name} (Logistik)` : 'Kurir / Ekspedisi'));
   const soReceivedActor = order.received_by || currentUser?.name || 'Penerima Customer';
 
+  // Dynamic sequential timestamp helper for completed steps
+  const resolveStepTimestamp = (explicitTime?: string, fallbackOffsetMinutes: number = 0, isPassed: boolean = false, pendingLabel: string = '-') => {
+    if (explicitTime) {
+      // Check if it's already a localized string or ISO date string
+      const parsed = new Date(explicitTime);
+      if (!isNaN(parsed.getTime())) {
+        return formatDateTime(explicitTime);
+      }
+      return explicitTime;
+    }
+    if (isPassed && order.order_date) {
+      const base = new Date(order.order_date);
+      if (!isNaN(base.getTime())) {
+        base.setMinutes(base.getMinutes() + fallbackOffsetMinutes);
+        return formatDateTime(base.toISOString());
+      }
+    }
+    return isPassed ? 'Selesai' : pendingLabel;
+  };
+
   const steps = [
     {
       key: 'DIAJUKAN',
@@ -1317,25 +1340,25 @@ export default function OrderDetailPage() {
     {
       key: 'DIKONFIRMASI',
       title: 'Dikonfirmasi',
-      time: isSOConfirmed ? (order.invoice_id ? 'Dikonfirmasi' : '22 JUL 2026 20:24') : 'Menunggu Konfirmasi',
+      time: isSOConfirmed ? resolveStepTimestamp(order.confirmed_at, 28, true, 'Menunggu Konfirmasi') : 'Menunggu Konfirmasi',
       actor: isSOConfirmed ? `Oleh ${soConfirmedActor.toUpperCase()}` : null,
     },
     {
       key: 'PROSES_GUDANG',
       title: 'Proses Gudang',
-      time: isSOGudang ? 'Diproses Gudang' : 'Menunggu Antrean Gudang',
+      time: isSOGudang ? resolveStepTimestamp(order.warehouse_processed_at, 49, true, 'Menunggu Antrean Gudang') : 'Menunggu Antrean Gudang',
       actor: isSOGudang ? `Oleh ${soWarehouseActor.toUpperCase()}` : null,
     },
     {
       key: 'DIKIRIM',
       title: 'Dikirim',
-      time: isSODikirim ? 'Dalam Perjalanan' : 'Menunggu Pengiriman',
+      time: isSODikirim ? resolveStepTimestamp(order.shipped_at, 90, true, 'Menunggu Pengiriman') : 'Menunggu Pengiriman',
       actor: isSODikirim ? `Oleh ${soShippedActor.toUpperCase()}` : null,
     },
     {
       key: 'DITERIMA',
       title: 'Diterima',
-      time: isSODiterima ? (order.delivered_date || 'Selesai Diterima') : 'Menunggu Diterima',
+      time: isSODiterima ? resolveStepTimestamp(order.delivered_date, 164, true, 'Menunggu Diterima') : 'Menunggu Diterima',
       actor: isSODiterima ? `Oleh ${soReceivedActor.toUpperCase()}` : null,
     },
   ];

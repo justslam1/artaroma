@@ -300,8 +300,11 @@ export interface SalesOrder {
   received_signature?: string;
   created_by?: string;
   confirmed_by?: string;
+  confirmed_at?: string;
   warehouse_processed_by?: string;
+  warehouse_processed_at?: string;
   shipped_by?: string;
+  shipped_at?: string;
   // Cancellation fields
   cancellation_reason?: string;
   cancelled_at?: string;
