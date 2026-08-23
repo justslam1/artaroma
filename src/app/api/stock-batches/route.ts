@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
     }
 
     const normalizedBatches = batches.map((b: any) => {
-      let packSize = b.pack_size_kg ? parseInt(b.pack_size_kg) : 0;
-      if (![25, 5, 1].includes(packSize)) {
+      const isSample = Boolean(b.is_sample || b.variant_sku?.includes('-SMP') || b.batch_number?.startsWith('SMP-'));
+      let packSize = b.pack_size_kg ? parseFloat(b.pack_size_kg) : 0;
+      if (!isSample && ![25, 5, 1].includes(packSize)) {
         const sku = (b.variant_sku || '').toUpperCase();
         const num = (b.batch_number || '').toUpperCase();
         if (sku.includes('-25K') || num.includes('25K') || num.includes('-25-')) packSize = 25;
@@ -38,6 +39,8 @@ export async function GET(req: NextRequest) {
           else if (qty >= 1 && qty % 1 === 0) packSize = 1;
           else packSize = 25;
         }
+      } else if (isSample && packSize <= 0) {
+        packSize = parseFloat(b.current_qty_kg || b.initial_qty_kg || 0.1);
       }
 
       let unitCount = (b.unit_count !== undefined && b.unit_count !== null) ? parseInt(b.unit_count) : 0;
@@ -46,11 +49,11 @@ export async function GET(req: NextRequest) {
 
       if (unitCount <= 0 && dbCurrentQty !== 0) {
         const rawQty = dbCurrentQty !== null ? dbCurrentQty : (dbInitialQty || packSize);
-        unitCount = Math.max(1, Math.round(rawQty / packSize));
+        unitCount = Math.max(1, Math.round(rawQty / (packSize || 1)));
       }
 
-      const exactQtyKg = dbCurrentQty !== null ? dbCurrentQty : (unitCount * packSize);
-      const exactInitialQtyKg = dbInitialQty || (unitCount * packSize);
+      const exactQtyKg = dbCurrentQty !== null ? dbCurrentQty : (unitCount * (packSize || 1));
+      const exactInitialQtyKg = dbInitialQty || (unitCount * (packSize || 1));
 
       return {
         ...b,
@@ -58,6 +61,7 @@ export async function GET(req: NextRequest) {
         unit_count: unitCount,
         initial_qty_kg: exactInitialQtyKg,
         current_qty_kg: exactQtyKg,
+        is_sample: isSample,
       };
     });
 

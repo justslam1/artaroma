@@ -34,6 +34,9 @@ import {
   AlertCircle,
   FileSpreadsheet,
   Trash2,
+  FlaskConical,
+  Sparkles,
+  Filter,
 } from 'lucide-react';
 import { exportStockInventoryToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -42,6 +45,7 @@ import {
   DisposalReason,
   DEFAULT_DISPOSAL_REASONS,
 } from '@/lib/disposal-reason-store';
+import { Distributor } from '@/lib/types';
 
 export default function StockInventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -136,6 +140,41 @@ export default function StockInventoryPage() {
   const [disposalHistory, setDisposalHistory] = useState<any[]>([]);
   const [isLoadingDisposalHistory, setIsLoadingDisposalHistory] = useState(false);
 
+  // Distributors state for vendor sample sources
+  const [distributors, setDistributors] = useState<Distributor[]>([]);
+
+  // Filter Stock Type: 'ALL' | 'COMMERCIAL' | 'SAMPLE'
+  const [stockTypeFilter, setStockTypeFilter] = useState<'ALL' | 'COMMERCIAL' | 'SAMPLE'>('ALL');
+
+  // Sample Intake & Evaluation Modals State
+  const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
+  const [isSampleSubmitting, setIsSampleSubmitting] = useState(false);
+  const [sampleForm, setSampleForm] = useState({
+    is_new_product: false,
+    product_id: '',
+    custom_product_name: '',
+    batch_number: '',
+    supplier_name: 'Luzi AG (Switzerland)',
+    pack_size_kg: 0.1,
+    unit_count: 1,
+    initial_qty_kg: 0.1,
+    packaging_type: 'Botol Tester 100ml',
+    sample_target: 'Evaluasi Aroma Suplier Baru',
+    sample_status: 'UJI_COBA' as 'UJI_COBA' | 'DISETUJUI_PO' | 'DITOLAK' | 'HABIS',
+    sample_notes: '',
+    production_date: new Date().toISOString().split('T')[0],
+    expiry_date: '',
+  });
+
+  // Editing Sample Status Modal
+  const [editingSampleBatch, setEditingSampleBatch] = useState<StockBatch | null>(null);
+  const [isSampleStatusModalOpen, setIsSampleStatusModalOpen] = useState(false);
+  const [sampleStatusForm, setSampleStatusForm] = useState({
+    sample_status: 'UJI_COBA' as 'UJI_COBA' | 'DISETUJUI_PO' | 'DITOLAK' | 'HABIS',
+    sample_notes: '',
+  });
+  const [isSampleStatusSubmitting, setIsSampleStatusSubmitting] = useState(false);
+
   // Form State for Receiving New Stock Batch (Penerimaan Stok PO)
   const [newBatchForm, setNewBatchForm] = useState({
     product_id: '',
@@ -224,10 +263,165 @@ export default function StockInventoryPage() {
   useEffect(() => {
     fetchStockData();
     fetchDisposalReasons();
+
+    fetch('/api/distributors', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setDistributors(json.data);
+        }
+      })
+      .catch((err) => console.warn('Failed to load distributors in stock page:', err));
+
     const handleDisposalUpdate = () => setDisposalReasons(getStoredDisposalReasons());
     window.addEventListener('artaroma_disposal_reasons_updated', handleDisposalUpdate);
     return () => window.removeEventListener('artaroma_disposal_reasons_updated', handleDisposalUpdate);
   }, []);
+
+  const handleOpenSampleModal = () => {
+    const defaultProdId = products.length > 0 ? products[0].id : '';
+    const defaultSupplier = distributors.length > 0 ? distributors[0].name : 'Luzi AG (Switzerland)';
+    const randNum = Math.floor(100 + Math.random() * 900);
+    const defaultExp = new Date();
+    defaultExp.setFullYear(defaultExp.getFullYear() + 2);
+
+    setSampleForm({
+      is_new_product: false,
+      product_id: defaultProdId,
+      custom_product_name: '',
+      batch_number: `SMP-${defaultSupplier.substring(0, 3).toUpperCase()}-${new Date().getFullYear()}-${randNum}`,
+      supplier_name: defaultSupplier,
+      pack_size_kg: 0.1,
+      unit_count: 1,
+      initial_qty_kg: 0.1,
+      packaging_type: 'Botol Tester 100ml',
+      sample_target: 'Evaluasi Aroma Suplier Baru',
+      sample_status: 'UJI_COBA',
+      sample_notes: '',
+      production_date: new Date().toISOString().split('T')[0],
+      expiry_date: defaultExp.toISOString().split('T')[0],
+    });
+    setIsSampleModalOpen(true);
+  };
+
+  const handleConfirmSampleIntake = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let targetProductId = sampleForm.product_id;
+    let targetProductName = '';
+    let targetSku = '';
+
+    if (sampleForm.is_new_product) {
+      if (!sampleForm.custom_product_name.trim()) {
+        alert('Nama varian aroma sampel baru wajib diisi.');
+        return;
+      }
+      targetProductId = `SMP-PROD-${Date.now()}`;
+      targetProductName = sampleForm.custom_product_name.trim();
+      targetSku = `FO-SMP-${sampleForm.custom_product_name.trim().substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+    } else {
+      const prod = products.find((p) => p.id === sampleForm.product_id);
+      if (!prod) {
+        alert('Pilih produk dari master data.');
+        return;
+      }
+      targetProductId = prod.id;
+      targetProductName = prod.name;
+      targetSku = `${prod.sku}-SMP`;
+    }
+
+    const qty = parseFloat(String(sampleForm.initial_qty_kg));
+    if (isNaN(qty) || qty <= 0) {
+      alert('Kuantitas sampel harus lebih dari 0 Kg.');
+      return;
+    }
+
+    setIsSampleSubmitting(true);
+    try {
+      const res = await fetch('/api/stock-samples', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_number: sampleForm.batch_number,
+          product_id: targetProductId,
+          product_name: targetProductName,
+          variant_sku: targetSku,
+          pack_size_kg: sampleForm.pack_size_kg || qty,
+          unit_count: sampleForm.unit_count || 1,
+          production_date: sampleForm.production_date,
+          expiry_date: sampleForm.expiry_date,
+          initial_qty_kg: qty,
+          supplier_name: sampleForm.supplier_name,
+          sample_target: sampleForm.sample_target,
+          sample_notes: sampleForm.sample_notes,
+          sample_status: sampleForm.sample_status,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        setIsSampleModalOpen(false);
+        alert(`✅ Sampel ${sampleForm.batch_number} (${targetProductName}) sebanyak ${formatKg(qty)} berhasil diterima ke gudang!`);
+        await fetchStockData();
+      } else {
+        alert('Gagal mencatat penerimaan sampel: ' + (json.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Gagal mencatat penerimaan sampel: ' + err.message);
+    } finally {
+      setIsSampleSubmitting(false);
+    }
+  };
+
+  const handleOpenEditSampleStatus = (batch: StockBatch) => {
+    setEditingSampleBatch(batch);
+    setSampleStatusForm({
+      sample_status: batch.sample_status || 'UJI_COBA',
+      sample_notes: batch.sample_notes || '',
+    });
+    setIsSampleStatusModalOpen(true);
+  };
+
+  const handleSaveSampleStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSampleBatch) return;
+
+    setIsSampleStatusSubmitting(true);
+    try {
+      const res = await fetch('/api/stock-samples', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingSampleBatch.id,
+          sample_status: sampleStatusForm.sample_status,
+          sample_notes: sampleStatusForm.sample_notes,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setBatches((prev) =>
+          prev.map((b) =>
+            b.id === editingSampleBatch.id
+              ? {
+                  ...b,
+                  sample_status: sampleStatusForm.sample_status,
+                  sample_notes: sampleStatusForm.sample_notes,
+                }
+              : b
+          )
+        );
+        setIsSampleStatusModalOpen(false);
+        setEditingSampleBatch(null);
+        alert('✅ Status evaluasi sampel berhasil diperbarui!');
+      } else {
+        alert('Gagal memperbarui status: ' + (json.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Gagal memperbarui status sampel: ' + err.message);
+    } finally {
+      setIsSampleStatusSubmitting(false);
+    }
+  };
 
   const handleOpenDisposal = (batchId?: string) => {
     const activeBatches = batches.filter((b) => Number(b.current_qty_kg || 0) > 0);
@@ -557,7 +751,14 @@ export default function StockInventoryPage() {
         (Array.isArray(p.applications)
           ? p.applications.some((a: string) => a.toLowerCase() === selectedAplikasi.toLowerCase())
           : (p as any).application?.toLowerCase() === selectedAplikasi.toLowerCase());
-      return matchesSearch && matchesAplikasi;
+
+      const matchesStockType =
+        stockTypeFilter === 'ALL' ||
+        (stockTypeFilter === 'SAMPLE'
+          ? batches.some((b) => b.product_id === p.id && b.is_sample && Number(b.current_qty_kg || 0) > 0)
+          : true);
+
+      return matchesSearch && matchesAplikasi && matchesStockType;
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -598,6 +799,14 @@ export default function StockInventoryPage() {
                 <Package className="w-4 h-4" /> 1. Terima Stok PO Vendor
               </Link>
               <button
+                type="button"
+                onClick={handleOpenSampleModal}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all cursor-pointer"
+                title="Input penerimaan botol sampel baru dari suplier / vendor"
+              >
+                <FlaskConical className="w-4 h-4 text-indigo-200" /> 2. Penerimaan Sampel
+              </button>
+              <button
                 onClick={() => {
                   if (batches.length > 0) {
                     setRepackForm({
@@ -611,19 +820,19 @@ export default function StockInventoryPage() {
                 }}
                 className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
               >
-                <RotateCcw className="w-4 h-4" /> 2. Repack Varian Stok
+                <RotateCcw className="w-4 h-4" /> 3. Repack Varian Stok
               </button>
               <Link
                 href="/admin/sales-orders"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
               >
-                <Truck className="w-4 h-4" /> 3. Menyiapkan Barang (Pick/Pack)
+                <Truck className="w-4 h-4" /> 4. Menyiapkan Barang (Pick/Pack)
               </Link>
               <Link
                 href="/admin/stock/opname"
                 className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
               >
-                <ClipboardList className="w-4 h-4" /> 4. Stok Opname (Audit)
+                <ClipboardList className="w-4 h-4" /> 5. Stok Opname (Audit)
               </Link>
               <button
                 type="button"
@@ -631,7 +840,7 @@ export default function StockInventoryPage() {
                 className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all cursor-pointer"
                 title="Input pembuangan produk rusak, kadaluwarsa, tumpah, atau sampel"
               >
-                <Trash2 className="w-4 h-4" /> 5. Pembuangan Stok (Rusak/Expired)
+                <Trash2 className="w-4 h-4" /> 6. Pembuangan Stok (Rusak/Expired)
               </button>
               <button
                 type="button"
@@ -646,6 +855,40 @@ export default function StockInventoryPage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Stock Type Filter Tabs (Semua / Komersil / Sampel) */}
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'ALL', label: 'Semua Stok', count: batches.length, icon: Boxes },
+            { id: 'COMMERCIAL', label: 'Stok Komersil', count: batches.filter((b) => !b.is_sample).length, icon: Package },
+            { id: 'SAMPLE', label: 'Stok Sampel & Tester', count: batches.filter((b) => b.is_sample).length, icon: FlaskConical },
+          ].map((tab) => {
+            const isSelected = stockTypeFilter === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStockTypeFilter(tab.id as any)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+                  isSelected
+                    ? tab.id === 'SAMPLE'
+                      ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                      : 'bg-slate-900 border-slate-900 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-slate-700 hover:bg-gray-50'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : tab.id === 'SAMPLE' ? 'text-purple-600' : 'text-slate-500'}`} />
+                <span>{tab.label}</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search & Fragrance Family Filter Bar */}
@@ -1108,11 +1351,255 @@ export default function StockInventoryPage() {
                           </div>
                         );
                       })}
+
+                      {/* SECTION: Batch Sampel & Tester untuk Produk Ini */}
+                      {(() => {
+                        const sampleBatchesOfProd = productBatches.filter(
+                          (b) => b.is_sample && Number(b.current_qty_kg || 0) > 0
+                        );
+                        if (sampleBatchesOfProd.length === 0) return null;
+
+                        return (
+                          <div className="mt-4 bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50/30 border border-purple-200 rounded-xl p-4 space-y-3">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <FlaskConical className="w-4 h-4 text-purple-700" />
+                                <span className="font-extrabold text-xs text-purple-950 uppercase tracking-wide">
+                                  Koleksi Sampel &amp; Tester Lab (Non-Komersil)
+                                </span>
+                                <span className="bg-purple-200 text-purple-900 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
+                                  {sampleBatchesOfProd.length} Batch Sampel
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="overflow-x-auto bg-white rounded-lg border border-purple-200 shadow-2xs">
+                              <table className="w-full text-left text-xs">
+                                <thead>
+                                  <tr className="bg-purple-100/70 border-b border-purple-200 text-[10px] uppercase font-bold text-purple-900">
+                                    <th className="px-3 py-2">No. Batch Sampel</th>
+                                    <th className="px-3 py-2">Suplier / Vendor</th>
+                                    <th className="px-3 py-2">Tujuan Sampel</th>
+                                    <th className="px-3 py-2">Tgl Terima &amp; ED</th>
+                                    <th className="px-3 py-2 text-right">Sisa Stok</th>
+                                    <th className="px-3 py-2 text-center">Status Evaluasi</th>
+                                    {canEditBatch && <th className="px-3 py-2 text-center">Aksi</th>}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-purple-100 font-medium">
+                                  {sampleBatchesOfProd.map((sb) => (
+                                    <tr key={sb.id} className="hover:bg-purple-50/60 transition-colors">
+                                      <td className="px-3 py-2.5 font-mono font-bold text-purple-900">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full bg-purple-600" />
+                                          {sb.batch_number}
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2.5 font-semibold text-slate-800">
+                                        {sb.supplier_name || 'Vendor Suplier'}
+                                      </td>
+                                      <td className="px-3 py-2.5 text-slate-600">
+                                        <div className="font-semibold text-slate-800">{sb.sample_target || 'Evaluasi Aroma'}</div>
+                                        {sb.sample_notes && (
+                                          <div className="text-[10px] text-slate-400 italic mt-0.5 line-clamp-1" title={sb.sample_notes}>
+                                            {sb.sample_notes}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                                        <div>Rec: {formatDate(sb.production_date)}</div>
+                                        <div className="text-slate-400">ED: {formatDate(sb.expiry_date)}</div>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right font-mono font-bold text-purple-900">
+                                        {formatKg(Number(sb.current_qty_kg || 0))}
+                                      </td>
+                                      <td className="px-3 py-2.5 text-center">
+                                        {sb.sample_status === 'DISETUJUI_PO' ? (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
+                                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> APPROVED (LAYAK PO)
+                                          </span>
+                                        ) : sb.sample_status === 'DITOLAK' ? (
+                                          <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-rose-300">
+                                            ✕ DITOLAK
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-300">
+                                            🧪 DALAM UJI COBA
+                                          </span>
+                                        )}
+                                      </td>
+                                      {canEditBatch && (
+                                        <td className="px-3 py-2.5 text-center">
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenEditSampleStatus(sb)}
+                                              className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-800 hover:text-purple-950 bg-purple-100 hover:bg-purple-200 border border-purple-300 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                                              title="Ubah Status Evaluasi Sampel"
+                                            >
+                                              <Edit3 className="w-3 h-3 text-purple-700" />
+                                              Evaluasi
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenDisposal(sb.id)}
+                                              className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                                              title="Catat pembuangan / pemakaian sampel"
+                                            >
+                                              <Trash2 className="w-3 h-3 text-rose-600" />
+                                              Buang
+                                            </button>
+                                            {sb.sample_status === 'DISETUJUI_PO' && (
+                                              <Link
+                                                href={`/admin/procurement`}
+                                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                                                title="Buat PO Vendor untuk Varian Ini"
+                                              >
+                                                <Package className="w-3 h-3 text-emerald-700" />
+                                                Order PO
+                                              </Link>
+                                            )}
+                                          </div>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
               );
             })}
+
+            {/* NEW SAMPLE AROMAS (Sampel Varian Baru dari Suplier yang Belum Ada di Master Produk) */}
+            {(() => {
+              const newAromaSamples = batches.filter(
+                (b) => b.is_sample && !products.some((p) => p.id === b.product_id) && Number(b.current_qty_kg || 0) > 0
+              );
+              if (newAromaSamples.length === 0) return null;
+
+              return (
+                <div className="bg-white border-2 border-purple-300 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="p-5 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-purple-200 font-extrabold text-sm shrink-0">
+                        🧪
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-extrabold tracking-widest text-purple-300 uppercase">
+                            Sampel Varian Baru
+                          </span>
+                          <span className="bg-purple-500/20 text-purple-200 border border-purple-400/40 text-[10px] px-2 py-0.5 rounded font-bold font-mono">
+                            {newAromaSamples.length} Varian Aroma Baru
+                          </span>
+                        </div>
+                        <h2 className="text-lg font-extrabold text-white mt-0.5">
+                          Koleksi Sampel Aroma Baru (Belum Masuk Master Produk)
+                        </h2>
+                        <p className="text-xs text-purple-200 mt-0.5">
+                          Sampel formulasi baru dari suplier yang sedang dalam tahap pengujian aroma dan belum diproduksi massal.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-purple-50 border-b border-purple-200 text-[11px] uppercase font-bold text-purple-950">
+                          <th className="px-4 py-3">Nama Varian Aroma</th>
+                          <th className="px-4 py-3">No. Batch Sampel</th>
+                          <th className="px-4 py-3">Suplier / Vendor</th>
+                          <th className="px-4 py-3">Tujuan &amp; Catatan Aroma</th>
+                          <th className="px-4 py-3 text-right">Sisa Stok</th>
+                          <th className="px-4 py-3 text-center">Status Evaluasi</th>
+                          {canEditBatch && <th className="px-4 py-3 text-center">Aksi</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-purple-100 font-medium">
+                        {newAromaSamples.map((sb) => (
+                          <tr key={sb.id} className="hover:bg-purple-50/50 transition-colors">
+                            <td className="px-4 py-3.5 font-bold text-slate-900 text-sm">
+                              {sb.product_name || 'Varian Sampel Baru'}
+                            </td>
+                            <td className="px-4 py-3.5 font-mono font-bold text-purple-800">
+                              #{sb.batch_number}
+                            </td>
+                            <td className="px-4 py-3.5 font-semibold text-slate-800">
+                              {sb.supplier_name || 'Vendor Suplier'}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-600 max-w-xs">
+                              <div className="font-semibold text-slate-800">{sb.sample_target || 'Evaluasi Suplier'}</div>
+                              {sb.sample_notes && (
+                                <div className="text-[11px] text-slate-500 italic mt-0.5">{sb.sample_notes}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-purple-900 text-sm">
+                              {formatKg(Number(sb.current_qty_kg || 0))}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              {sb.sample_status === 'DISETUJUI_PO' ? (
+                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-emerald-300">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> APPROVED (LAYAK PO)
+                                </span>
+                              ) : sb.sample_status === 'DITOLAK' ? (
+                                <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-rose-300">
+                                  ✕ DITOLAK
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-amber-300">
+                                  🧪 DALAM UJI COBA
+                                </span>
+                              )}
+                            </td>
+                            {canEditBatch && (
+                              <td className="px-4 py-3.5 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditSampleStatus(sb)}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-800 hover:text-purple-950 bg-purple-100 hover:bg-purple-200 border border-purple-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                                    title="Ubah Status Evaluasi"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-purple-700" />
+                                    Evaluasi
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDisposal(sb.id)}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                                    title="Catat pembuangan sampel"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-rose-600" />
+                                    Buang
+                                  </button>
+                                  {sb.sample_status === 'DISETUJUI_PO' && (
+                                    <Link
+                                      href={`/admin/procurement`}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                                      title="Ajukan PO Vendor"
+                                    >
+                                      <Package className="w-3 h-3 text-emerald-700" />
+                                      Ajukan PO
+                                    </Link>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </main>
@@ -2280,6 +2767,414 @@ export default function StockInventoryPage() {
                 Tutup
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INPUT PENERIMAAN SAMPEL BARU DARI SUPLIER */}
+      {isSampleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[95vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-purple-800 via-indigo-800 to-slate-900 px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-xs">
+                  <FlaskConical className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base">Penerimaan Sampel Bibit Parfum</h3>
+                  <p className="text-purple-200 text-[11px]">Pencatatan sampel uji coba, evaluasi R&amp;D, atau tester suplier (Non-Komersil)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSampleModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmSampleIntake} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Opsi Tipe Varian: Pilih Master Produk vs Varian Baru */}
+              <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3">
+                <label className="font-extrabold text-purple-950 block mb-2">
+                  Pilih Kategori Varian Sampel:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSampleForm({ ...sampleForm, is_new_product: false })}
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                      !sampleForm.is_new_product
+                        ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                        : 'bg-white text-slate-700 border-gray-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Varian yang Sudah Terdaftar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSampleForm({ ...sampleForm, is_new_product: true })}
+                    className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                      sampleForm.is_new_product
+                        ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                        : 'bg-white text-slate-700 border-gray-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    + Formulasi / Aroma Baru
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. Pilih / Input Produk */}
+              {!sampleForm.is_new_product ? (
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    1. Pilih Varian Produk (Master Data) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={sampleForm.product_id}
+                    onChange={(e) => setSampleForm({ ...sampleForm, product_id: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    1. Nama Varian Aroma Baru dari Suplier <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Rose Oud Velvet / Citrus Breeze Formulation B"
+                    value={sampleForm.custom_product_name}
+                    onChange={(e) => setSampleForm({ ...sampleForm, custom_product_name: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  />
+                  <span className="text-[10px] text-purple-700 font-medium mt-0.5 block">
+                    Varian baru ini akan dicatat sebagai inventaris sampel khusus untuk evaluasi QC / R&amp;D.
+                  </span>
+                </div>
+              )}
+
+              {/* 2. Suplier & Nomor Lot */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    2. Suplier / Vendor Pengirim <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    list="distributors-list"
+                    required
+                    value={sampleForm.supplier_name}
+                    onChange={(e) => setSampleForm({ ...sampleForm, supplier_name: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                    placeholder="Luzi / Bell / Parfex..."
+                  />
+                  <datalist id="distributors-list">
+                    {distributors.map((d) => (
+                      <option key={d.id} value={d.name} />
+                    ))}
+                    <option value="Luzi AG (Switzerland)" />
+                    <option value="Bell Flavors & Fragrances (Germany)" />
+                    <option value="Parfex (France)" />
+                    <option value="Düllberg Konzentra (Germany)" />
+                    <option value="Firmenich (Switzerland)" />
+                    <option value="Givaudan (Switzerland)" />
+                    <option value="Expressions Parfumées (France)" />
+                    <option value="Mane (France)" />
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    3. No. Lot / Batch Sampel Suplier <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={sampleForm.batch_number}
+                    onChange={(e) => setSampleForm({ ...sampleForm, batch_number: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 font-mono text-xs font-bold text-purple-700 focus:outline-none focus:border-purple-500"
+                    placeholder="SMP-LUZ-2026-001"
+                  />
+                </div>
+              </div>
+
+              {/* 3. Kuantitas Sampel & Kemasan */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  4. Kuantitas / Berat Sampel (Kg) <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {[
+                    { label: '50g (0.05 Kg)', val: 0.05 },
+                    { label: '100g (0.1 Kg)', val: 0.1 },
+                    { label: '250g (0.25 Kg)', val: 0.25 },
+                    { label: '500g (0.5 Kg)', val: 0.5 },
+                    { label: '1.0 Kg', val: 1.0 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setSampleForm({ ...sampleForm, initial_qty_kg: preset.val, pack_size_kg: preset.val })}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                        Number(sampleForm.initial_qty_kg) === preset.val
+                          ? 'bg-purple-100 border-purple-400 text-purple-900'
+                          : 'bg-slate-50 border-gray-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={sampleForm.initial_qty_kg}
+                      onChange={(e) =>
+                        setSampleForm({
+                          ...sampleForm,
+                          initial_qty_kg: parseFloat(e.target.value) || 0,
+                          pack_size_kg: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-3 pr-10 font-mono font-bold text-xs text-purple-800 focus:outline-none focus:border-purple-500"
+                    />
+                    <span className="absolute right-3 top-2 font-bold text-slate-400 text-xs">Kg</span>
+                  </div>
+
+                  <select
+                    value={sampleForm.packaging_type}
+                    onChange={(e) => setSampleForm({ ...sampleForm, packaging_type: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="Botol Tester 50ml">Botol Tester Vial 50ml</option>
+                    <option value="Botol Tester 100ml">Botol Tester 100ml</option>
+                    <option value="Botol Tester 250ml">Botol Sample 250ml</option>
+                    <option value="Botol Aluminium 500ml">Botol Aluminium 500ml</option>
+                    <option value="Jerigen Sample 1 Kg">Jerigen Sample 1 Kg</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 4. Tanggal Penerimaan & Expired */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    5. Tanggal Terima Sampel <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={sampleForm.production_date}
+                    onChange={(e) => setSampleForm({ ...sampleForm, production_date: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 font-mono text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    Tanggal Expired Sampel (ED)
+                  </label>
+                  <input
+                    type="date"
+                    value={sampleForm.expiry_date}
+                    onChange={(e) => setSampleForm({ ...sampleForm, expiry_date: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 font-mono text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* 5. Tujuan & Status Evaluasi Awal */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    6. Tujuan Pengambilan Sampel <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={sampleForm.sample_target}
+                    onChange={(e) => setSampleForm({ ...sampleForm, sample_target: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="Evaluasi Aroma Suplier Baru">Evaluasi Aroma Suplier Baru (R&amp;D)</option>
+                    <option value="Permintaan Tester Khusus Pelanggan">Permintaan Tester Khusus Pelanggan</option>
+                    <option value="Pembanding / Benchmarking Kualitas QC">Pembanding / Benchmarking QC</option>
+                    <option value="Uji Coba Formulasi Produk Jadi">Uji Coba Formulasi Produk Jadi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    7. Status Evaluasi Awal
+                  </label>
+                  <select
+                    value={sampleForm.sample_status}
+                    onChange={(e) => setSampleForm({ ...sampleForm, sample_status: e.target.value as any })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="UJI_COBA">🧪 Sedang Dalam Uji Coba</option>
+                    <option value="DISETUJUI_PO">✓ Disetujui (Layak Dipesan via PO)</option>
+                    <option value="DITOLAK">✕ Ditolak (Tidak Sesuai Spesifikasi)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 6. Catatan / Karakter Aroma */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  8. Catatan Olfaktori / Karakter Aroma (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Aroma vanilla manis lembut, top note citrus, daya tahan 8 jam di kulit/kain, evaluasi cocok untuk hotel amenities..."
+                  value={sampleForm.sample_notes}
+                  onChange={(e) => setSampleForm({ ...sampleForm, sample_notes: e.target.value })}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSampleModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSampleSubmitting}
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isSampleSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Mencatat Sampel...
+                    </>
+                  ) : (
+                    <>
+                      <FlaskConical className="w-4 h-4" />
+                      Terima Sampel ke Gudang
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: UBAH STATUS EVALUASI SAMPEL */}
+      {isSampleStatusModalOpen && editingSampleBatch && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-purple-800 to-indigo-900 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2.5">
+                <FlaskConical className="w-5 h-5 text-purple-300" />
+                <div>
+                  <h3 className="font-extrabold text-base">Evaluasi Status Sampel</h3>
+                  <p className="text-purple-200 text-[11px]">#{editingSampleBatch.batch_number} — {editingSampleBatch.product_name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSampleStatusModalOpen(false)}
+                className="text-purple-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSampleStatus} className="p-6 space-y-4 text-xs">
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-1.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Varian Aroma:</span>
+                  <strong className="text-slate-800">{editingSampleBatch.product_name}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Suplier / Vendor:</span>
+                  <span className="text-purple-900 font-semibold">{editingSampleBatch.supplier_name || 'Vendor Luar'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sisa Stok Fisik:</span>
+                  <span className="font-mono font-bold text-purple-700">{formatKg(Number(editingSampleBatch.current_qty_kg || 0))}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  Pilih Hasil Evaluasi Sampel <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={sampleStatusForm.sample_status}
+                  onChange={(e) => setSampleStatusForm({ ...sampleStatusForm, sample_status: e.target.value as any })}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                >
+                  <option value="UJI_COBA">🧪 Sedang Dalam Uji Coba (R&amp;D / Olfactory Test)</option>
+                  <option value="DISETUJUI_PO">✓ Disetujui (Approved &amp; Layak Dipesan via PO Komersil)</option>
+                  <option value="DITOLAK">✕ Ditolak (Kualitas / Aroma Tidak Sesuai)</option>
+                  <option value="HABIS">Habis Terpakai Seluruhnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  Catatan Evaluasi / Uji Aroma
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Catat hasil uji lab, komentar pelanggan, atau rekomendasi pemesanan PO..."
+                  value={sampleStatusForm.sample_notes}
+                  onChange={(e) => setSampleStatusForm({ ...sampleStatusForm, sample_notes: e.target.value })}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-xs text-slate-700 focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSampleStatusModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSampleStatusSubmitting}
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isSampleStatusSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Simpan Status Evaluasi
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -48,7 +48,7 @@ export interface StockBatch {
   product_id: string;
   product_name?: string;
   variant_sku?: string; // e.g. 'FO-VAN-001-25K'
-  pack_size_kg?: number; // 25, 5, or 1
+  pack_size_kg?: number; // 25, 5, 1, or sample sizes (0.05, 0.1, 0.25, 0.5)
   unit_count?: number; // e.g. 10 jerigen/botol
   po_item_id?: string;
   production_date: string;
@@ -58,6 +58,11 @@ export interface StockBatch {
   unit_cost_per_kg: number;
   is_expired: boolean;
   created_at: string;
+  is_sample?: boolean;
+  supplier_name?: string;
+  sample_target?: string;
+  sample_notes?: string;
+  sample_status?: 'UJI_COBA' | 'DISETUJUI_PO' | 'DITOLAK' | 'HABIS';
 }
 
 export interface Customer {
