@@ -237,6 +237,53 @@ export default function PODetailPage() {
           qty_shipped_kg: 0,
         }));
       } else if (po.status === 'DITERIMA') {
+        // === VALIDASI PENGGUNAAN STOK ===
+        const poItemIds = new Set(po.items.map((i) => i.id));
+        const associatedBatches = batches.filter(
+          (b) =>
+            (b.po_item_id && poItemIds.has(b.po_item_id)) ||
+            (b.batch_number && b.batch_number.includes(po.po_number))
+        );
+
+        const usedBatches = associatedBatches.filter((b) => {
+          const initial = Number(b.initial_qty_kg || 0);
+          const current = Number(b.current_qty_kg || 0);
+          return current < initial;
+        });
+
+        if (usedBatches.length > 0) {
+          const details = usedBatches
+            .map((b) => {
+              const init = Number(b.initial_qty_kg || 0);
+              const curr = Number(b.current_qty_kg || 0);
+              const used = Math.max(0, init - curr);
+              return `• ${b.product_name || 'Item'} (Batch: ${b.batch_number}): Terpakai ${formatKg(used)} (Sisa: ${formatKg(curr)} dari ${formatKg(init)})`;
+            })
+            .join('\n');
+
+          alert(
+            `⛔ ROLLBACK DITOLAK — STOK SUDAH TERPAKAI!\n\nStatus PO tidak dapat dikembalikan ke 'DIKIRIM' karena batch barang dari PO ini telah terpakai dalam transaksi penjualan (SO) atau repacking:\n\n${details}\n\n💡 Saran: Lakukan penyesuaian selisih fisik melalui modul Stok Opname / Stock Adjustment demi menjaga konsistensi inventaris.`
+          );
+          setIsRevertSubmitting(false);
+          return;
+        }
+
+        // Jika stok masih utuh 100%, hapus batch penerimaan yang belum terpakai dari inventaris gudang
+        if (associatedBatches.length > 0) {
+          try {
+            for (const b of associatedBatches) {
+              await fetch(`/api/stock-batches?id=${encodeURIComponent(b.id)}`, {
+                method: 'DELETE',
+              });
+            }
+            // Update local state batches
+            const deletedIds = new Set(associatedBatches.map((b) => b.id));
+            setBatches((prev) => prev.filter((b) => !deletedIds.has(b.id)));
+          } catch (batchErr) {
+            console.warn('Failed to delete associated untouched batches on rollback:', batchErr);
+          }
+        }
+
         newStatus = 'DIKIRIM';
         // Set completed shipments back to DIKIRIM
         updatedShipments = (po.shipments || []).map((s) => ({
@@ -266,7 +313,7 @@ export default function PODetailPage() {
       alert(
         `✅ Status PO berhasil dikembalikan ke tahap "${
           newStatus === 'BUAT_EMAIL' ? 'Diajukan (BUAT_EMAIL)' : 'Dikirim (DIKIRIM)'
-        }". Anda kini dapat mengoreksi data yang salah input.`
+        }". Data inventaris telah diverifikasi dan Anda kini dapat mengoreksi data dengan aman.`
       );
     } catch (err: any) {
       console.error('Failed to revert PO status:', err);
@@ -2039,108 +2086,179 @@ export default function PODetailPage() {
       )}
 
       {/* ===== Revert / Rollback Status Confirmation Modal ===== */}
-      {isRevertModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <RotateCcw className="w-5 h-5 text-amber-200" />
-                <div>
-                  <h3 className="font-bold text-base">Kembali ke Tahap Sebelumnya</h3>
-                  <p className="text-xs text-amber-100">{po.po_number} — {po.distributor_name}</p>
+      {isRevertModalOpen && (() => {
+        const poItemIds = new Set(po.items.map((i) => i.id));
+        const associatedBatches = batches.filter(
+          (b) =>
+            (b.po_item_id && poItemIds.has(b.po_item_id)) ||
+            (b.batch_number && b.batch_number.includes(po.po_number))
+        );
+
+        const usedBatches = associatedBatches.filter((b) => {
+          const initial = Number(b.initial_qty_kg || 0);
+          const current = Number(b.current_qty_kg || 0);
+          return current < initial;
+        });
+
+        const isStockBlocked = po.status === 'DITERIMA' && usedBatches.length > 0;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className={`px-6 py-4 flex items-center justify-between text-white ${
+                isStockBlocked
+                  ? 'bg-gradient-to-r from-red-600 to-rose-700'
+                  : 'bg-gradient-to-r from-amber-600 to-amber-700'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <RotateCcw className="w-5 h-5 text-amber-200" />
+                  <div>
+                    <h3 className="font-bold text-base">Kembali ke Tahap Sebelumnya</h3>
+                    <p className="text-xs text-amber-100">{po.po_number} — {po.distributor_name}</p>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRevertModalOpen(false)}
-                className="text-amber-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-amber-900">
-                <div className="font-bold text-sm text-amber-950 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  {po.status === 'DIKIRIM'
-                    ? 'Konfirmasi Rollback ke Tahap 1: Diajukan (BUAT_EMAIL)'
-                    : 'Konfirmasi Rollback ke Tahap 2: Dikirim (DIKIRIM)'}
-                </div>
-                <p className="text-xs text-amber-800 leading-relaxed">
-                  {po.status === 'DIKIRIM'
-                    ? 'Gunakan opsi ini jika terdapat kesalahan input data kuantitas dikirim, salah nomor Surat Jalan, atau distributor belum jadi mengirimkan barang.'
-                    : 'Gunakan opsi ini jika terdapat kesalahan saat proses penerimaan barang atau input nomor batch di gudang.'}
-                </p>
-
-                <div className="space-y-1.5 pt-1 text-[11px] border-t border-amber-200/80">
-                  <div className="font-semibold text-amber-950">Dampak Aksi Ini:</div>
-                  {po.status === 'DIKIRIM' ? (
-                    <ul className="list-disc list-inside space-y-1 text-amber-850">
-                      <li>Status PO dikembalikan ke <strong>DIAJUKAN (BUAT_EMAIL)</strong>.</li>
-                      <li>Data pengiriman dan Surat Jalan yang ada akan direset agar Anda dapat menginput ulang dari awal dengan benar.</li>
-                      <li>Kuantitas terkirim seluruh item dikembalikan ke 0 Kg.</li>
-                    </ul>
-                  ) : (
-                    <ul className="list-disc list-inside space-y-1 text-amber-850">
-                      <li>Status PO dikembalikan ke <strong>DIKIRIM</strong>.</li>
-                      <li>Status pengiriman barang dikembalikan ke dalam perjalanan sehingga verifikasi penerimaan gudang dapat dilakukan ulang.</li>
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              {/* Catatan Alasan */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Catatan Alasan Koreksi (Opsional)
-                </label>
-                <textarea
-                  value={revertNote}
-                  onChange={(e) => setRevertNote(e.target.value)}
-                  placeholder="Contoh: Koreksi jumlah kg salah input / salah nomor surat jalan vendor..."
-                  rows={2}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500 resize-none"
-                />
-              </div>
-
-              {/* Buttons */}
-              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => { setIsRevertModalOpen(false); setRevertNote(''); }}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
+                  onClick={() => setIsRevertModalOpen(false)}
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 >
-                  Batal
+                  <XCircle className="w-5 h-5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleRevertStatus}
-                  disabled={isRevertSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isRevertSubmitting ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Memproses...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="w-3.5 h-3.5" />
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Blocked Alert if stock is used */}
+                {isStockBlocked ? (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3 text-red-900">
+                    <div className="font-bold text-sm text-red-950 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                      <span>Rollback Ditolak: Sebagian Stok Telah Terpakai</span>
+                    </div>
+                    <p className="text-xs text-red-800 leading-relaxed">
+                      Status penerimaan PO ini tidak dapat di-rollback otomatis karena barang sudah terpotong oleh transaksi penjualan (SO) atau proses repacking. Mereset status sekarang akan menyebabkan <strong>stok gudang minus atau tidak seimbang</strong>.
+                    </p>
+
+                    <div className="space-y-1.5 pt-2 border-t border-red-200">
+                      <div className="font-bold text-[11px] text-red-950 uppercase tracking-wider">
+                        Rincian Batch yang Telah Digunakan:
+                      </div>
+                      <div className="divide-y divide-red-200/70 max-h-36 overflow-y-auto bg-white/70 rounded-lg p-2.5 border border-red-200">
+                        {usedBatches.map((b) => {
+                          const init = Number(b.initial_qty_kg || 0);
+                          const curr = Number(b.current_qty_kg || 0);
+                          const used = Math.max(0, init - curr);
+                          return (
+                            <div key={b.id} className="py-1.5 first:pt-0 last:pb-0 flex items-center justify-between text-[11px]">
+                              <div>
+                                <strong className="text-slate-800">{b.product_name || 'Bibit Parfum'}</strong>
+                                <div className="text-[10px] text-slate-500 font-mono">Batch #{b.batch_number}</div>
+                              </div>
+                              <div className="text-right font-mono">
+                                <span className="text-red-700 font-bold">Terpakai: {formatKg(used)}</span>
+                                <div className="text-[10px] text-slate-500">Sisa: {formatKg(curr)} / {formatKg(init)}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-red-200 text-[11px] text-slate-700 flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <span>
-                        {po.status === 'DIKIRIM'
-                          ? 'Konfirmasi Kembali ke Tahap Diajukan'
-                          : 'Konfirmasi Kembali ke Tahap Dikirim'}
+                        <strong>Solusi Rekomendasi:</strong> Jika terjadi selisih kuantitas fisik di gudang, silakan gunakan fitur <strong>Stok Opname / Stock Adjustment</strong> untuk menyesuaikan stok secara akuntabel.
                       </span>
-                    </>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-amber-900">
+                    <div className="font-bold text-sm text-amber-950 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      {po.status === 'DIKIRIM'
+                        ? 'Konfirmasi Rollback ke Tahap 1: Diajukan (BUAT_EMAIL)'
+                        : 'Konfirmasi Rollback ke Tahap 2: Dikirim (DIKIRIM)'}
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      {po.status === 'DIKIRIM'
+                        ? 'Gunakan opsi ini jika terdapat kesalahan input data kuantitas dikirim, salah nomor Surat Jalan, atau distributor belum jadi mengirimkan barang.'
+                        : 'Gunakan opsi ini jika terdapat kesalahan saat proses penerimaan barang atau input nomor batch di gudang.'}
+                    </p>
+
+                    <div className="space-y-1.5 pt-1 text-[11px] border-t border-amber-200/80">
+                      <div className="font-semibold text-amber-950">Dampak Aksi Ini:</div>
+                      {po.status === 'DIKIRIM' ? (
+                        <ul className="list-disc list-inside space-y-1 text-amber-850">
+                          <li>Status PO dikembalikan ke <strong>DIAJUKAN (BUAT_EMAIL)</strong>.</li>
+                          <li>Data pengiriman dan Surat Jalan yang ada akan direset agar Anda dapat menginput ulang dari awal dengan benar.</li>
+                          <li>Kuantitas terkirim seluruh item dikembalikan ke 0 Kg.</li>
+                        </ul>
+                      ) : (
+                        <ul className="list-disc list-inside space-y-1 text-amber-850">
+                          <li>Status PO dikembalikan ke <strong>DIKIRIM</strong>.</li>
+                          <li>Status pengiriman barang dikembalikan ke dalam perjalanan sehingga tim gudang dapat menginput ulang penerimaan.</li>
+                          <li>Batch barang masuk ({associatedBatches.length} batch) terverifikasi <strong>masih utuh 100%</strong> dan akan otomatis ditarik dari gudang FEFO.</li>
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Catatan Alasan */}
+                {!isStockBlocked && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Catatan Alasan Koreksi (Opsional)
+                    </label>
+                    <textarea
+                      value={revertNote}
+                      onChange={(e) => setRevertNote(e.target.value)}
+                      placeholder="Contoh: Koreksi jumlah kg salah input / salah nomor surat jalan vendor..."
+                      rows={2}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500 resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => { setIsRevertModalOpen(false); setRevertNote(''); }}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
+                  >
+                    {isStockBlocked ? 'Tutup' : 'Batal'}
+                  </button>
+                  {!isStockBlocked && (
+                    <button
+                      type="button"
+                      onClick={handleRevertStatus}
+                      disabled={isRevertSubmitting}
+                      className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isRevertSubmitting ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Memproses...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>
+                            {po.status === 'DIKIRIM'
+                              ? 'Konfirmasi Kembali ke Tahap Diajukan'
+                              : 'Konfirmasi Kembali ke Tahap Dikirim'}
+                          </span>
+                        </>
+                      )}
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* POPaymentModal */}
       <POPaymentModal

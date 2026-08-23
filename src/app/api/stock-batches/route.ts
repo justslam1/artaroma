@@ -316,3 +316,42 @@ export async function PATCH(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const poItemId = searchParams.get('po_item_id');
+
+    if (!id && !poItemId) {
+      return NextResponse.json(
+        { success: false, message: 'id or po_item_id is required' },
+        { status: 400 }
+      );
+    }
+
+    try {
+      if (id) {
+        await executeQuery('DELETE FROM stock_batches WHERE id = ?', [id]);
+      } else if (poItemId) {
+        await executeQuery('DELETE FROM stock_batches WHERE po_item_id = ?', [poItemId]);
+      }
+    } catch (dbErr: any) {
+      console.warn('Database stock batch delete error:', dbErr.message);
+      return NextResponse.json(
+        { success: false, message: dbErr.message || 'Failed to delete batch from database' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Batch deleted successfully from database',
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, message: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
