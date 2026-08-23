@@ -72,7 +72,7 @@ export default function StockInventoryPage() {
       .catch((err) => console.warn('Failed to load user info in stock page:', err));
   }, []);
 
-  // Determine permission to edit batch & ED (Restricted: only Super Admin, Admin, Warehouse role, or explicit 'Edit Batch & ED (Gudang)' permission)
+  // Determine permission to access warehouse operations & Stok Opname
   const canEditBatch =
     Boolean(currentUser) &&
     (currentUser.is_super_admin ||
@@ -80,9 +80,11 @@ export default function StockInventoryPage() {
       currentUser.role === 'SUPER_ADMIN' ||
       currentUser.role === 'WAREHOUSE' ||
       currentUser.role === 'GUDANG' ||
+      currentUser.role === 'STAFF' ||
       (Array.isArray(currentUser.allowed_modules) &&
-        (currentUser.allowed_modules.includes('Edit Batch & ED (Gudang)') ||
-          currentUser.allowed_modules.includes('Stok & Gudang'))));
+        (currentUser.allowed_modules.includes('Lihat Stok (Gudang)') ||
+          currentUser.allowed_modules.includes('Stok & Gudang') ||
+          currentUser.allowed_modules.includes('Edit Batch & ED (Gudang)'))));
 
   // Expanded product IDs for inline lot/batch hierarchy drawers (Expand All by default)
   const [expandedProductIds, setExpandedProductIds] = useState<string[]>([]);
