@@ -975,8 +975,219 @@ export default function StockInventoryPage() {
           </div>
         )}
 
-        {/* 3-LEVEL PRODUCT HIERARCHY DISPLAY */}
-        {!isLoading && !error && (
+        {/* DEDICATED VIEW: STOK SAMPEL & TESTER (When stockTypeFilter === 'SAMPLE') */}
+        {!isLoading && !error && stockTypeFilter === 'SAMPLE' && (() => {
+          const sampleList = batches
+            .filter((b) => b.is_sample && Number(b.current_qty_kg || 0) > 0)
+            .filter((b) => {
+              const pName = b.product_name || products.find((p) => p.id === b.product_id)?.name || '';
+              const matchesSearch =
+                pName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (b.variant_sku || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (b.batch_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (b.supplier_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+              return matchesSearch;
+            });
+
+          const totalSampleKg = sampleList.reduce((sum, b) => sum + Number(b.current_qty_kg || 0), 0);
+          const ujiCobaCount = sampleList.filter((b) => b.sample_status === 'UJI_COBA' || !b.sample_status).length;
+          const approvedCount = sampleList.filter((b) => b.sample_status === 'DISETUJUI_PO').length;
+
+          return (
+            <div className="space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white border border-purple-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
+                    <FlaskConical className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Batch Sampel</div>
+                    <div className="text-2xl font-extrabold text-purple-900 mt-0.5">{sampleList.length} Batch</div>
+                    <div className="text-[11px] text-purple-700 font-mono font-bold">Total: {formatKg(totalSampleKg)}</div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-amber-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Dalam Uji Coba (R&amp;D)</div>
+                    <div className="text-2xl font-extrabold text-amber-900 mt-0.5">{ujiCobaCount} Batch</div>
+                    <div className="text-[11px] text-amber-700">Tahap Evaluasi Olfaktori</div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-emerald-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Disetujui (Approved Layak PO)</div>
+                    <div className="text-2xl font-extrabold text-emerald-900 mt-0.5">{approvedCount} Batch</div>
+                    <div className="text-[11px] text-emerald-700 font-semibold">Siap Dipesan via Procurement</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Sample Table */}
+              <div className="bg-white border-2 border-purple-300 rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-5 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-purple-200 font-bold shrink-0">
+                      🧪
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-extrabold">Daftar Stok Sampel &amp; Tester Suplier</h2>
+                      <p className="text-xs text-purple-200">
+                        Isolasi stok non-komersil: Sampel tidak akan terpotong saat pengemasan Sales Order (SO) reguler.
+                      </p>
+                    </div>
+                  </div>
+
+                  {canEditBatch && (
+                    <button
+                      type="button"
+                      onClick={handleOpenSampleModal}
+                      className="bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" /> + Penerimaan Sampel Baru
+                    </button>
+                  )}
+                </div>
+
+                {sampleList.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-purple-50 border-b border-purple-200 text-[11px] font-bold text-purple-950 uppercase tracking-wider">
+                          <th className="px-4 py-3.5">Nama Aroma / Produk</th>
+                          <th className="px-4 py-3.5">No. Batch Sampel</th>
+                          <th className="px-4 py-3.5">Suplier / Vendor</th>
+                          <th className="px-4 py-3.5">Tujuan &amp; Catatan Olfaktori</th>
+                          <th className="px-4 py-3.5">Tgl Terima &amp; ED</th>
+                          <th className="px-4 py-3.5 text-right">Sisa Stok</th>
+                          <th className="px-4 py-3.5 text-center">Status Evaluasi</th>
+                          {canEditBatch && <th className="px-4 py-3.5 text-center">Aksi</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-purple-100 font-medium">
+                        {sampleList.map((sb) => {
+                          const prod = products.find((p) => p.id === sb.product_id);
+                          const productName = sb.product_name || prod?.name || 'Varian Sampel';
+
+                          return (
+                            <tr key={sb.id} className="hover:bg-purple-50/50 transition-colors">
+                              <td className="px-4 py-3.5">
+                                <div className="font-bold text-slate-900 text-sm">{productName}</div>
+                                <div className="text-[11px] text-purple-700 font-mono">{sb.variant_sku || 'FO-SMP'}</div>
+                              </td>
+                              <td className="px-4 py-3.5 font-mono font-bold text-purple-800">
+                                #{sb.batch_number}
+                              </td>
+                              <td className="px-4 py-3.5 font-semibold text-slate-800">
+                                {sb.supplier_name || 'Vendor Suplier'}
+                              </td>
+                              <td className="px-4 py-3.5 text-slate-600 max-w-xs">
+                                <div className="font-semibold text-slate-800">{sb.sample_target || 'Evaluasi Suplier'}</div>
+                                {sb.sample_notes ? (
+                                  <div className="text-[11px] text-slate-500 italic mt-0.5" title={sb.sample_notes}>
+                                    {sb.sample_notes}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-slate-400 italic mt-0.5">—</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 font-mono text-[11px] text-slate-600">
+                                <div>Terima: {formatDate(sb.production_date)}</div>
+                                <div className="text-slate-400">ED: {formatDate(sb.expiry_date)}</div>
+                              </td>
+                              <td className="px-4 py-3.5 text-right font-mono font-bold text-purple-900 text-sm">
+                                {formatKg(Number(sb.current_qty_kg || 0))}
+                              </td>
+                              <td className="px-4 py-3.5 text-center">
+                                {sb.sample_status === 'DISETUJUI_PO' ? (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-emerald-300">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> APPROVED (LAYAK PO)
+                                  </span>
+                                ) : sb.sample_status === 'DITOLAK' ? (
+                                  <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-rose-300">
+                                    ✕ DITOLAK
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-amber-300">
+                                    🧪 DALAM UJI COBA
+                                  </span>
+                                )}
+                              </td>
+                              {canEditBatch && (
+                                <td className="px-4 py-3.5 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditSampleStatus(sb)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-800 hover:text-purple-950 bg-purple-100 hover:bg-purple-200 border border-purple-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                      title="Ubah Status Hasil Evaluasi Sampel"
+                                    >
+                                      <Edit3 className="w-3 h-3 text-purple-700" />
+                                      Evaluasi
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDisposal(sb.id)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                      title="Catat pembuangan / pemakaian habis sampel"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-600" />
+                                      Buang
+                                    </button>
+                                    {sb.sample_status === 'DISETUJUI_PO' && (
+                                      <Link
+                                        href={`/admin/procurement`}
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                        title="Lanjut buat PO Pembelian Vendor untuk Varian Ini"
+                                      >
+                                        <Package className="w-3 h-3 text-emerald-700" />
+                                        Ajukan PO
+                                      </Link>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-12 text-center space-y-3 bg-purple-50/30">
+                    <div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+                      🧪
+                    </div>
+                    <div className="font-extrabold text-slate-800 text-base">Belum Ada Stok Sampel Tercatat</div>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Stok sampel dari suplier atau tester QC akan tercatat di sini. Klik tombol di bawah untuk mencatat penerimaan botol sampel baru.
+                    </p>
+                    {canEditBatch && (
+                      <button
+                        type="button"
+                        onClick={handleOpenSampleModal}
+                        className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow inline-flex items-center gap-2 transition-all cursor-pointer mt-2"
+                      >
+                        <Plus className="w-4 h-4" /> Penerimaan Sampel Baru
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 3-LEVEL PRODUCT HIERARCHY DISPLAY (For ALL and COMMERCIAL) */}
+        {!isLoading && !error && stockTypeFilter !== 'SAMPLE' && (
           <div className="space-y-6">
             {filteredProducts.map((p, index) => {
               const productBatches = batches.filter((b) => b.product_id === p.id);
