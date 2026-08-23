@@ -1479,20 +1479,54 @@ export default function PODetailPage() {
                       </td>
 
                       {/* Dikirim */}
-                      <td className="px-6 py-4 font-mono font-bold text-slate-800 text-center">
-                        {isShipped ? (
-                          <span className="text-slate-800">{formatKg(displayShippedKg)}</span>
+                      <td className="px-6 py-4 text-center">
+                        {displayShippedKg > 0 ? (
+                          displayShippedKg < item.qty_ordered_kg ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-blue-800 font-mono font-bold text-sm">
+                                {formatKg(displayShippedKg)}
+                              </span>
+                              <span className="text-[10px] text-blue-600 font-semibold mt-0.5">
+                                Parsial (Sisa {formatKg(item.qty_ordered_kg - displayShippedKg)})
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-slate-800 font-mono font-bold">
+                                {formatKg(displayShippedKg)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 mt-0.5">
+                                Lengkap ✓
+                              </span>
+                            </div>
+                          )
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
                       </td>
 
                       {/* Diterima */}
-                      <td className="px-6 py-4 font-mono font-bold text-center">
-                        {isDelivered ? (
-                          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md inline-block">
-                            {formatKg(displayReceivedKg)}
-                          </span>
+                      <td className="px-6 py-4 text-center">
+                        {receivedSum > 0 || isDelivered ? (
+                          receivedSum > 0 && receivedSum < item.qty_ordered_kg && !isDelivered ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs">
+                                {formatKg(receivedSum)}
+                              </span>
+                              <span className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                                Parsial (Sisa {formatKg(item.qty_ordered_kg - receivedSum)})
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs">
+                                {formatKg(displayReceivedKg)}
+                              </span>
+                              <span className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                                Lengkap ✓
+                              </span>
+                            </div>
+                          )
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
