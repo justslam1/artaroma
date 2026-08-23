@@ -263,8 +263,8 @@ export default function StockOpnamePage() {
       const draftItems: StockOpnameDraftItem[] = modifiedBatches.map((b) => {
         const prod = products.find((p) => p.id === b.product_id);
         const sys = b.current_qty_kg ?? 0;
-        const phys = parseFloat(physicalQtys[b.id]) || 0;
-        const diff = phys - sys;
+        const phys = Math.round((parseFloat(physicalQtys[b.id]) || 0) * 10) / 10;
+        const diff = Math.round((phys - sys) * 10) / 10;
         return {
           batch_id: b.id,
           product_id: b.product_id,
@@ -424,12 +424,11 @@ export default function StockOpnamePage() {
   // State for itemized confirmation modal before saving
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
-  // Calculations for modified rows
+  // Calculations for modified rows (0.1 kg smallest unit)
   const modifiedBatches = batches.filter((b) => {
-    const inputVal = parseFloat(physicalQtys[b.id]) || 0;
-    const currentVal = b.current_qty_kg ?? 0;
-    // Round to 3 decimal places to prevent floating point inaccuracy
-    return Math.abs(inputVal - currentVal) > 0.001;
+    const inputVal = Math.round((parseFloat(physicalQtys[b.id]) || 0) * 10) / 10;
+    const currentVal = Math.round((b.current_qty_kg ?? 0) * 10) / 10;
+    return Math.abs(inputVal - currentVal) >= 0.05;
   });
 
   const handleOpenConfirmModal = (e: React.FormEvent) => {
@@ -483,7 +482,7 @@ export default function StockOpnamePage() {
 
       const batchUpdates = modifiedBatches.map((b) => ({
         id: b.id,
-        current_qty_kg: parseFloat(physicalQtys[b.id]) || 0,
+        current_qty_kg: Math.round((parseFloat(physicalQtys[b.id]) || 0) * 10) / 10,
         notes: opnameNotes[b.id] || generalNotes || '',
       }));
 
@@ -822,10 +821,10 @@ export default function StockOpnamePage() {
                             ) : (
                               prodBatches.map((b) => {
                                 const inputStr = physicalQtys[b.id] ?? '0';
-                                const inputVal = parseFloat(inputStr) || 0;
-                                const currentVal = b.current_qty_kg ?? 0;
-                                const diff = inputVal - currentVal;
-                                const isChanged = Math.abs(diff) > 0.001;
+                                const inputVal = Math.round((parseFloat(inputStr) || 0) * 10) / 10;
+                                const currentVal = Math.round((b.current_qty_kg ?? 0) * 10) / 10;
+                                const diff = Math.round((inputVal - currentVal) * 10) / 10;
+                                const isChanged = Math.abs(diff) >= 0.05;
 
                                 return (
                                   <tr
@@ -864,12 +863,12 @@ export default function StockOpnamePage() {
                                       {formatKg(b.current_qty_kg ?? 0)}
                                     </td>
 
-                                    {/* Physical Input */}
+                                    {/* Physical Input (0.1 kg step) */}
                                     <td className="px-6 py-3 text-center">
                                       <div className="relative inline-block">
                                         <input
                                           type="number"
-                                          step="any"
+                                          step="0.1"
                                           min="0"
                                           value={physicalQtys[b.id] ?? '0'}
                                           onChange={(e) => {
@@ -901,10 +900,10 @@ export default function StockOpnamePage() {
                                           }`}
                                         >
                                           {diff > 0 ? '+' : ''}
-                                          {diff.toFixed(3)} kg
+                                          {diff.toFixed(1)} kg
                                         </span>
                                       ) : (
-                                        <span className="text-slate-400 font-bold">0.000 kg</span>
+                                        <span className="text-slate-400 font-bold">0.0 kg</span>
                                       )}
                                     </td>
 
@@ -1330,7 +1329,7 @@ export default function StockOpnamePage() {
                     type="number"
                     required
                     min="0"
-                    step="1"
+                    step="0.1"
                     value={newBatchForm.initial_qty_kg}
                     onChange={(e) => setNewBatchForm({ ...newBatchForm, initial_qty_kg: parseFloat(e.target.value) || 0 })}
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 font-mono font-bold"

@@ -1220,7 +1220,7 @@ export default function StockInventoryPage() {
                   <label className="font-bold text-slate-700 block mb-1">Hasil Hitung Fisik (Kg)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     required
                     value={opnameForm.physical_qty_kg}
                     onChange={(e) => setOpnameForm({ ...opnameForm, physical_qty_kg: Number(e.target.value) })}
