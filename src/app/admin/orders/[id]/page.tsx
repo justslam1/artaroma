@@ -3143,11 +3143,11 @@ export default function OrderDetailPage() {
                 <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                   <th className="px-6 py-3">Material / Bibit Parfum</th>
                   <th className="px-6 py-3 text-center">Pesanan</th>
-                  <th className="px-6 py-3 text-right">Harga Satuan</th>
-                  <th className="px-6 py-3 text-right">Subtotal</th>
                   <th className="px-6 py-3 text-center">Alokasi Batch (FEFO)</th>
                   <th className="px-6 py-3 text-center">Dikirim</th>
                   <th className="px-6 py-3 text-center">Diterima</th>
+                  <th className="px-6 py-3 text-right">Harga Satuan</th>
+                  <th className="px-6 py-3 text-right">Subtotal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -3173,16 +3173,6 @@ export default function OrderDetailPage() {
                       {/* Pesanan */}
                       <td className="px-6 py-4 font-mono font-bold text-slate-800 text-center">
                         {formatKg(item.qty_kg)}
-                      </td>
-
-                      {/* Harga Satuan */}
-                      <td className="px-6 py-4 font-mono font-bold text-slate-700 text-right">
-                        {formatIDR(unitPrice)} <span className="text-[10px] text-slate-400 font-normal">/Kg</span>
-                      </td>
-
-                      {/* Subtotal */}
-                      <td className="px-6 py-4 font-mono font-extrabold text-blue-700 text-right">
-                        {formatIDR(itemSubtotal)}
                       </td>
 
                       {/* Dialokasikan (Batch FEFO) */}
@@ -3225,6 +3215,16 @@ export default function OrderDetailPage() {
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
+                      </td>
+
+                      {/* Harga Satuan */}
+                      <td className="px-6 py-4 font-mono font-bold text-slate-700 text-right">
+                        {formatIDR(unitPrice)} <span className="text-[10px] text-slate-400 font-normal">/Kg</span>
+                      </td>
+
+                      {/* Subtotal */}
+                      <td className="px-6 py-4 font-mono font-extrabold text-blue-700 text-right">
+                        {formatIDR(itemSubtotal)}
                       </td>
                     </tr>
                   );
