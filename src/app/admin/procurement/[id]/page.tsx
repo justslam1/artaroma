@@ -35,6 +35,9 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Calendar,
+  RotateCcw,
+  Undo2,
+  Trash2,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -81,6 +84,11 @@ export default function PODetailPage() {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelNote, setCancelNote] = useState('');
   const [isCancelSubmitting, setIsCancelSubmitting] = useState(false);
+
+  // Revert / Rollback Status Modal state
+  const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
+  const [revertNote, setRevertNote] = useState('');
+  const [isRevertSubmitting, setIsRevertSubmitting] = useState(false);
 
   // Surat Jalan list modal state
   const [isSJModalOpen, setIsSJModalOpen] = useState(false);
@@ -210,6 +218,95 @@ export default function PODetailPage() {
     } finally {
       setIsPaymentSubmitting(false);
     }
+  };
+
+  const handleRevertStatus = async () => {
+    if (!po) return;
+    setIsRevertSubmitting(true);
+    try {
+      let newStatus: PurchaseOrder['status'] = 'BUAT_EMAIL';
+      let updatedShipments = po.shipments;
+      let updatedItems = po.items;
+
+      if (po.status === 'DIKIRIM') {
+        newStatus = 'BUAT_EMAIL';
+        // Reset shipments & shipped quantities so user can re-input correctly
+        updatedShipments = [];
+        updatedItems = po.items.map((item) => ({
+          ...item,
+          qty_shipped_kg: 0,
+        }));
+      } else if (po.status === 'DITERIMA') {
+        newStatus = 'DIKIRIM';
+        // Set completed shipments back to DIKIRIM
+        updatedShipments = (po.shipments || []).map((s) => ({
+          ...s,
+          status: 'DIKIRIM' as const,
+          received_by: undefined,
+        }));
+      }
+
+      const updatedPO: PurchaseOrder = {
+        ...po,
+        status: newStatus,
+        shipped_by: newStatus === 'BUAT_EMAIL' ? undefined : po.shipped_by,
+        received_by: undefined,
+        shipments: updatedShipments,
+        items: updatedItems,
+      };
+
+      setPurchaseOrders((prev) =>
+        prev.map((p) => (p.id === po.id ? updatedPO : p))
+      );
+
+      await savePOUpdate(updatedPO);
+
+      setIsRevertModalOpen(false);
+      setRevertNote('');
+      alert(
+        `✅ Status PO berhasil dikembalikan ke tahap "${
+          newStatus === 'BUAT_EMAIL' ? 'Diajukan (BUAT_EMAIL)' : 'Dikirim (DIKIRIM)'
+        }". Anda kini dapat mengoreksi data yang salah input.`
+      );
+    } catch (err: any) {
+      console.error('Failed to revert PO status:', err);
+      alert('Gagal mengembalikan status PO: ' + err.message);
+    } finally {
+      setIsRevertSubmitting(false);
+    }
+  };
+
+  const handleDeleteShipment = async (shipmentId: string) => {
+    if (!po || !po.shipments) return;
+    if (!confirm('Apakah Anda yakin ingin menghapus pengiriman / Surat Jalan ini untuk mengoreksi input?')) return;
+
+    const filteredShipments = po.shipments.filter((s) => s.id !== shipmentId);
+    const newStatus: PurchaseOrder['status'] = filteredShipments.length === 0 ? 'BUAT_EMAIL' : 'DIKIRIM';
+
+    const updatedPOItems = po.items.map((item) => {
+      const sumShipped = filteredShipments.reduce((sum, s) => {
+        const match = s.items.find((si) =>
+          si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id
+        );
+        return sum + (match ? match.qty_shipped_kg : 0);
+      }, 0);
+      return { ...item, qty_shipped_kg: sumShipped };
+    });
+
+    const updatedPO: PurchaseOrder = {
+      ...po,
+      status: newStatus,
+      shipped_by: newStatus === 'BUAT_EMAIL' ? undefined : po.shipped_by,
+      shipments: filteredShipments,
+      items: updatedPOItems,
+    };
+
+    setPurchaseOrders((prev) =>
+      prev.map((p) => (p.id === po.id ? updatedPO : p))
+    );
+
+    await savePOUpdate(updatedPO);
+    alert('✅ Pengiriman / Surat Jalan berhasil dihapus. Kuantitas dikirim telah disesuaikan.');
   };
 
   const fetchPurchaseOrders = async () => {
@@ -768,22 +865,39 @@ export default function PODetailPage() {
 
         {/* === Status Stepper === */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               Status Purchase Order (3 Tahapan Alur Kerja)
             </div>
-            {/* Opsi 3: Badge DIKIRIM SEBAGIAN */}
-            {isPartiallyShipped && po.status === 'DIKIRIM' && (
-              <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-300 text-amber-700 text-[10px] font-bold px-3 py-1 rounded-full">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                DIKIRIM SEBAGIAN — {shipmentPct}%
-              </span>
-            )}
-            {isFullyShipped && po.status === 'DIKIRIM' && (
-              <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full">
-                <CheckCircle2 className="w-3 h-3" /> DIKIRIM LENGKAP
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Tombol Rollback / Kembali ke Tahap Sebelumnya */}
+              {(po.status === 'DIKIRIM' || po.status === 'DITERIMA') && (
+                <button
+                  type="button"
+                  onClick={() => setIsRevertModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-extrabold px-3 py-1 rounded-full transition-all cursor-pointer shadow-2xs hover:border-amber-400"
+                  title="Kembali ke tahap sebelumnya untuk mengoreksi salah input"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                  <span>
+                    {po.status === 'DIKIRIM' ? '↩️ Kembali ke Tahap Diajukan (Koreksi)' : '↩️ Kembali ke Tahap Dikirim (Koreksi)'}
+                  </span>
+                </button>
+              )}
+
+              {/* Opsi 3: Badge DIKIRIM SEBAGIAN */}
+              {isPartiallyShipped && po.status === 'DIKIRIM' && (
+                <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-300 text-amber-700 text-[10px] font-bold px-3 py-1 rounded-full">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  DIKIRIM SEBAGIAN — {shipmentPct}%
+                </span>
+              )}
+              {isFullyShipped && po.status === 'DIKIRIM' && (
+                <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full">
+                  <CheckCircle2 className="w-3 h-3" /> DIKIRIM LENGKAP
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1048,6 +1162,21 @@ export default function PODetailPage() {
             </button>
           )}
 
+          {/* Rollback / Kembali ke Tahap Sebelumnya */}
+          {(po.status === 'DIKIRIM' || po.status === 'DITERIMA') && (
+            <button
+              type="button"
+              onClick={() => setIsRevertModalOpen(true)}
+              className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:border-amber-400"
+              title="Kembali ke tahap sebelumnya untuk mengoreksi salah input"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+              <span>
+                {po.status === 'DIKIRIM' ? '↩️ Kembali ke Tahap Diajukan (Koreksi Input)' : '↩️ Kembali ke Tahap Dikirim (Koreksi Penerimaan)'}
+              </span>
+            </button>
+          )}
+
           {/* Cancel PO Button — only if not yet completed/cancelled */}
           {(po.status === 'BUAT_EMAIL' || po.status === 'DIKIRIM') && (
             <button
@@ -1244,10 +1373,35 @@ export default function PODetailPage() {
           {/* Action Step 2: DIKIRIM */}
           {po.status === 'DIKIRIM' && (
             <div className="space-y-4 animate-in fade-in duration-300">
+              {/* Alert Rollback / Koreksi */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-amber-900">
+                    <strong className="block font-bold">Perlu mengoreksi data atau salah input pengiriman?</strong>
+                    <span className="text-amber-800 text-[11px]">
+                      Anda dapat menghapus trip pengiriman individu atau mengembalikan status PO secara penuh ke tahap awal (Diajukan).
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRevertModalOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 flex-shrink-0 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Kembalikan ke Tahap 1 (Diajukan)
+                </button>
+              </div>
+
               {/* Shipments List */}
               <div className="bg-white p-5 rounded-xl border border-blue-100 text-xs space-y-3 shadow-sm">
-                <div className="font-bold text-slate-800 text-sm border-b border-gray-100 pb-2 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-blue-600" /> Daftar Pengiriman Multi-Trip (Surat Jalan)
+                <div className="font-bold text-slate-800 text-sm border-b border-gray-100 pb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-blue-600" /> Daftar Pengiriman Multi-Trip (Surat Jalan)
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-normal">
+                    {(po.shipments || []).length} Trip Pengiriman
+                  </span>
                 </div>
                 
                 <div className="space-y-3.5 pt-1">
@@ -1261,13 +1415,25 @@ export default function PODetailPage() {
                           <span className="text-slate-400">|</span>
                           <span className="text-slate-500 font-normal">{s.shipment_date}</span>
                         </div>
-                        <span className={`font-bold text-[10px] px-2 py-0.5 rounded-full ${
-                          s.status === 'DITERIMA' 
-                            ? 'bg-emerald-100 text-emerald-800 font-extrabold' 
-                            : 'bg-amber-100 text-amber-800 font-extrabold'
-                        }`}>
-                          {s.status === 'DITERIMA' ? 'Sudah Masuk Gudang' : 'Dalam Perjalanan'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-[10px] px-2 py-0.5 rounded-full ${
+                            s.status === 'DITERIMA' 
+                              ? 'bg-emerald-100 text-emerald-800 font-extrabold' 
+                              : 'bg-amber-100 text-amber-800 font-extrabold'
+                          }`}>
+                            {s.status === 'DITERIMA' ? 'Sudah Masuk Gudang' : 'Dalam Perjalanan'}
+                          </span>
+                          {s.status === 'DIKIRIM' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteShipment(s.id)}
+                              className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 p-1 rounded-md transition-colors cursor-pointer"
+                              title="Hapus / Batalkan trip pengiriman ini untuk koreksi"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-b border-slate-100 py-2.5 my-1">
@@ -1284,15 +1450,25 @@ export default function PODetailPage() {
                         </div>
                         
                         {s.status === 'DIKIRIM' && (
-                          <button
-                            onClick={() => {
-                              setActiveShipmentForGR(s);
-                              setIsGRModalOpen(true);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1"
-                          >
-                            <PackageCheck className="w-3.5 h-3.5" /> Input Goods Receipt (Masuk Gudang)
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteShipment(s.id)}
+                              className="bg-white hover:bg-red-50 text-red-600 border border-red-200 font-semibold text-[10px] px-2.5 py-1.5 rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Hapus trip ini jika ada salah input jumlah atau no. SJ"
+                            >
+                              <Trash2 className="w-3 h-3" /> Hapus Trip
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveShipmentForGR(s);
+                                setIsGRModalOpen(true);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <PackageCheck className="w-3.5 h-3.5" /> Input Goods Receipt (Masuk Gudang)
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -1509,11 +1685,26 @@ export default function PODetailPage() {
 
           {/* Action Step 3: DITERIMA */}
           {po.status === 'DITERIMA' && (
-            <div className="bg-white p-4 rounded-lg border border-blue-100 text-xs space-y-1 text-slate-700">
-              <div className="font-bold text-emerald-700 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" /> Procurement Selesai — Goods Receipt & Batch FEFO Telah Masuk Inventaris Gudang
+            <div className="bg-white p-5 rounded-xl border border-emerald-200 text-xs space-y-3 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-emerald-800 text-sm flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Procurement Selesai — Barang Telah Masuk Gudang FEFO
+                  </div>
+                  <div className="text-slate-500 text-xs mt-0.5">
+                    Seluruh item dan batch barang telah tercatat dalam inventaris stok aktif gudang.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRevertModalOpen(true)}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0"
+                  title="Kembali ke tahap pengiriman jika ada salah input penerimaan barang"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Koreksi Penerimaan (Kembali ke Status Dikirim)</span>
+                </button>
               </div>
-              <div>Tanggal Penerimaan Gudang: 23 JUL 2026 08:30</div>
             </div>
           )}
         </div>
@@ -1840,6 +2031,110 @@ export default function PODetailPage() {
                   className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition-colors"
                 >
                   Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Revert / Rollback Status Confirmation Modal ===== */}
+      {isRevertModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <RotateCcw className="w-5 h-5 text-amber-200" />
+                <div>
+                  <h3 className="font-bold text-base">Kembali ke Tahap Sebelumnya</h3>
+                  <p className="text-xs text-amber-100">{po.po_number} — {po.distributor_name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRevertModalOpen(false)}
+                className="text-amber-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-amber-900">
+                <div className="font-bold text-sm text-amber-950 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  {po.status === 'DIKIRIM'
+                    ? 'Konfirmasi Rollback ke Tahap 1: Diajukan (BUAT_EMAIL)'
+                    : 'Konfirmasi Rollback ke Tahap 2: Dikirim (DIKIRIM)'}
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  {po.status === 'DIKIRIM'
+                    ? 'Gunakan opsi ini jika terdapat kesalahan input data kuantitas dikirim, salah nomor Surat Jalan, atau distributor belum jadi mengirimkan barang.'
+                    : 'Gunakan opsi ini jika terdapat kesalahan saat proses penerimaan barang atau input nomor batch di gudang.'}
+                </p>
+
+                <div className="space-y-1.5 pt-1 text-[11px] border-t border-amber-200/80">
+                  <div className="font-semibold text-amber-950">Dampak Aksi Ini:</div>
+                  {po.status === 'DIKIRIM' ? (
+                    <ul className="list-disc list-inside space-y-1 text-amber-850">
+                      <li>Status PO dikembalikan ke <strong>DIAJUKAN (BUAT_EMAIL)</strong>.</li>
+                      <li>Data pengiriman dan Surat Jalan yang ada akan direset agar Anda dapat menginput ulang dari awal dengan benar.</li>
+                      <li>Kuantitas terkirim seluruh item dikembalikan ke 0 Kg.</li>
+                    </ul>
+                  ) : (
+                    <ul className="list-disc list-inside space-y-1 text-amber-850">
+                      <li>Status PO dikembalikan ke <strong>DIKIRIM</strong>.</li>
+                      <li>Status pengiriman barang dikembalikan ke dalam perjalanan sehingga verifikasi penerimaan gudang dapat dilakukan ulang.</li>
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* Catatan Alasan */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Catatan Alasan Koreksi (Opsional)
+                </label>
+                <textarea
+                  value={revertNote}
+                  onChange={(e) => setRevertNote(e.target.value)}
+                  placeholder="Contoh: Koreksi jumlah kg salah input / salah nomor surat jalan vendor..."
+                  rows={2}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500 resize-none"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setIsRevertModalOpen(false); setRevertNote(''); }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRevertStatus}
+                  disabled={isRevertSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isRevertSubmitting ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>
+                        {po.status === 'DIKIRIM'
+                          ? 'Konfirmasi Kembali ke Tahap Diajukan'
+                          : 'Konfirmasi Kembali ke Tahap Dikirim'}
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
