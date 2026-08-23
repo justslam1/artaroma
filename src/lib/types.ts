@@ -445,3 +445,34 @@ export interface CashTransaction {
 }
 
 export type UserRole = 'ADMIN' | 'FINANCE' | 'SALES' | 'CUSTOMER' | 'COURIER' | 'WAREHOUSE';
+
+export interface StockOpnameDraftItem {
+  batch_id: string;
+  product_id: string;
+  product_name?: string;
+  variant_sku?: string;
+  batch_number: string;
+  pack_size_kg: number;
+  system_qty_kg: number;
+  physical_qty_kg: number;
+  difference_qty_kg: number;
+  notes?: string;
+}
+
+export interface StockOpnameDraft {
+  id: string;
+  draft_number: string;
+  title: string;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  created_at: string;
+  created_by: string;
+  approved_at?: string;
+  approved_by?: string;
+  rejection_reason?: string;
+  general_notes?: string;
+  total_items: number;
+  total_system_kg: number;
+  total_physical_kg: number;
+  total_difference_kg: number;
+  items: StockOpnameDraftItem[];
+}

@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
-import { Product, StockBatch } from '@/lib/types';
-import { formatKg, formatDate, formatDateTime } from '@/lib/utils';
+import { Product, StockBatch, StockOpnameDraft, StockOpnameDraftItem } from '@/lib/types';
+import { formatKg, formatDate, formatDateTime, formatIDR } from '@/lib/utils';
 import {
   ArrowLeft,
   ClipboardList,
@@ -26,6 +26,14 @@ import {
   ShieldCheck,
   ShieldAlert,
   KeyRound,
+  FileText,
+  Eye,
+  CheckCircle,
+  XCircle,
+  Trash2,
+  Hourglass,
+  Layers,
+  Send,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -51,8 +59,18 @@ export default function StockOpnamePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sub-tabs: 'audit' | 'history'
-  const [subTab, setSubTab] = useState<'audit' | 'history'>('audit');
+  // Sub-tabs: 'audit' | 'drafts' | 'history'
+  const [subTab, setSubTab] = useState<'audit' | 'drafts' | 'history'>('audit');
+  const [drafts, setDrafts] = useState<StockOpnameDraft[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [selectedDraft, setSelectedDraft] = useState<StockOpnameDraft | null>(null);
+  const [isDraftDetailOpen, setIsDraftDetailOpen] = useState(false);
+  const [isApprovingDraft, setIsApprovingDraft] = useState(false);
+  const [isRejectingDraft, setIsRejectingDraft] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectDraftId, setRejectDraftId] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -206,15 +224,188 @@ export default function StockOpnamePage() {
     }
   };
 
+  const fetchDrafts = async () => {
+    setDraftsLoading(true);
+    try {
+      const res = await fetch('/api/stock-opname/drafts', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setDrafts(json.data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch drafts:', err);
+    } finally {
+      setDraftsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchDrafts();
   }, []);
 
   useEffect(() => {
     if (subTab === 'history') {
       fetchHistoryLogs();
+    } else if (subTab === 'drafts') {
+      fetchDrafts();
     }
   }, [subTab]);
+
+  const handleSaveAsDraft = async () => {
+    if (modifiedBatches.length === 0) {
+      alert('Tidak ada selisih stok yang terdeteksi. Silakan isi "Stok Riil" terlebih dahulu.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const draftItems: StockOpnameDraftItem[] = modifiedBatches.map((b) => {
+        const prod = products.find((p) => p.id === b.product_id);
+        const sys = b.current_qty_kg ?? 0;
+        const phys = parseFloat(physicalQtys[b.id]) || 0;
+        const diff = phys - sys;
+        return {
+          batch_id: b.id,
+          product_id: b.product_id,
+          product_name: prod?.name || 'Produk',
+          variant_sku: b.variant_sku || prod?.sku || '',
+          batch_number: b.batch_number || '',
+          pack_size_kg: b.pack_size_kg || 25,
+          system_qty_kg: sys,
+          physical_qty_kg: phys,
+          difference_qty_kg: diff,
+          notes: opnameNotes[b.id] || generalNotes || '',
+        };
+      });
+
+      const creatorName = currentUser?.name || currentUser?.username || 'Staff Gudang';
+
+      const res = await fetch('/api/stock-opname/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Audit Stok Opname Gudang (${modifiedBatches.length} Batch)`,
+          created_by: creatorName,
+          general_notes: generalNotes,
+          items: draftItems,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setIsConfirmModalOpen(false);
+        setGeneralNotes('Audit Stok Opname Bulanan / Penyelarasan Gudang');
+        setSearchTerm('');
+        setOpnameNotes({});
+        await fetchData();
+        await fetchDrafts();
+        setSubTab('drafts');
+        alert(`✅ Hasil audit Stok Opname (${modifiedBatches.length} batch) BERHASIL DISIMPAN SEBAGAI DRAFT!\n\nPengajuan ini telah masuk ke antrean dan menunggu persetujuan dari Super Admin.`);
+      } else {
+        alert('Gagal menyimpan draft opname: ' + json.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleApproveDraft = async (draftId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menyetujui draft opname ini dan menyelaraskan stok ke database MySQL?')) {
+      return;
+    }
+    setIsApprovingDraft(true);
+    try {
+      const approverName = currentUser?.name || currentUser?.username || 'SUPER ADMIN HQ';
+      const res = await fetch('/api/stock-opname/drafts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: draftId,
+          action: 'APPROVE',
+          approved_by: approverName,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert('✅ ' + json.message);
+        setIsDraftDetailOpen(false);
+        await fetchDrafts();
+        await fetchData();
+      } else {
+        alert('Gagal menyetujui draft: ' + json.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsApprovingDraft(false);
+    }
+  };
+
+  const handleOpenRejectModal = (draftId: string) => {
+    setRejectDraftId(draftId);
+    setRejectionReason('');
+    setRejectModalOpen(true);
+  };
+
+  const handleExecuteRejectDraft = async () => {
+    if (!rejectionReason.trim()) {
+      alert('Mohon isi alasan penolakan draft opname.');
+      return;
+    }
+    setIsRejectingDraft(true);
+    try {
+      const res = await fetch('/api/stock-opname/drafts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: rejectDraftId,
+          action: 'REJECT',
+          rejection_reason: rejectionReason.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert('Draft Opname telah ditolak dan dikembalikan ke staf gudang.');
+        setRejectModalOpen(false);
+        setIsDraftDetailOpen(false);
+        await fetchDrafts();
+      } else {
+        alert('Gagal menolak draft: ' + json.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsRejectingDraft(false);
+    }
+  };
+
+  const handleDeleteDraft = async (draftId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus draft opname ini secara permanen?')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/stock-opname/drafts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: draftId,
+          action: 'DELETE',
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setIsDraftDetailOpen(false);
+        await fetchDrafts();
+      } else {
+        alert('Gagal menghapus draft: ' + json.message);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
 
   // Helper to find product details by product_id
   const getProductDetails = (productId: string) => {
@@ -461,7 +652,7 @@ export default function StockOpnamePage() {
 
         {/* Sub-tab Navigation */}
         <div className="flex border-b border-gray-200 justify-between items-center bg-white px-6 py-3 rounded-xl shadow-xs flex-wrap gap-3">
-          <div className="flex gap-6 text-xs font-bold">
+          <div className="flex gap-4 sm:gap-6 text-xs font-bold flex-wrap">
             <button
               onClick={() => setSubTab('audit')}
               className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -471,6 +662,25 @@ export default function StockOpnamePage() {
               }`}
             >
               <ClipboardList className="w-4 h-4" /> Lakukan Audit Opname
+            </button>
+            <button
+              onClick={() => setSubTab('drafts')}
+              className={`pb-2 px-1 border-b-2 transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                subTab === 'drafts'
+                  ? 'border-blue-600 text-blue-700 font-extrabold'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <FileText className="w-4 h-4" /> Draft Opname
+              {drafts.filter((d) => d.status === 'PENDING_APPROVAL').length > 0 ? (
+                <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse shadow-xs">
+                  {drafts.filter((d) => d.status === 'PENDING_APPROVAL').length} Menunggu
+                </span>
+              ) : drafts.length > 0 ? (
+                <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  {drafts.length}
+                </span>
+              ) : null}
             </button>
             <button
               onClick={() => setSubTab('history')}
@@ -490,7 +700,7 @@ export default function StockOpnamePage() {
               title="Ekspor ke Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              Ekspor {subTab === 'history' ? 'Riwayat' : 'Audit'} XLSX
+              Ekspor {subTab === 'history' ? 'Riwayat' : subTab === 'drafts' ? 'Draft' : 'Audit'} XLSX
             </button>
           )}
         </div>
@@ -561,175 +771,167 @@ export default function StockOpnamePage() {
                         <td colSpan={7} className="px-6 py-16 text-center text-slate-400">
                           <div className="flex flex-col items-center justify-center gap-2">
                             <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                            <span className="font-medium">Memuat database batch gudang...</span>
+                            <span className="font-medium">Memuat data inventori dari database MySQL...</span>
                           </div>
                         </td>
                       </tr>
-                    ) : batches.length === 0 ? (
+                    ) : filteredProducts.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
-                          Tidak ada batch stok aktif di database.
+                          Tidak ada produk inventori yang sesuai dengan pencarian.
                         </td>
                       </tr>
                     ) : (
                       filteredProducts.map((prod) => {
-                        const productBatches = batches
-                          .filter((b) => b.product_id === prod.id)
-                          .sort((a, b) => {
-                            const sizeA = Number(a.pack_size_kg || 0);
-                            const sizeB = Number(b.pack_size_kg || 0);
-                            if (sizeA !== sizeB) {
-                              return sizeB - sizeA;
-                            }
-                            const dateA = a.expiry_date ? new Date(a.expiry_date).getTime() : Infinity;
-                            const dateB = b.expiry_date ? new Date(b.expiry_date).getTime() : Infinity;
-                            return dateA - dateB;
-                          });
+                        const prodBatches = batches.filter((b) => b.product_id === prod.id);
 
                         return (
                           <React.Fragment key={prod.id}>
-                          {/* Parent Product Header Row */}
-                          <tr className="bg-slate-100/85 border-t border-slate-250 border-b border-slate-200">
-                            <td colSpan={7} className="px-6 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <span className="bg-slate-700 text-white text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">
-                                  {prod.fragrance_family || 'Gourmand'}
-                                </span>
-                                <span className="font-extrabold text-slate-800 text-[13px]">{prod.name}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">({prod.sku})</span>
-                                
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenAddBatch(prod.id)}
-                                  className="ml-3 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-xs"
-                                >
-                                  <Plus className="w-3.5 h-3.5" /> Tambah Batch
-                                </button>
-
-                                <span className="ml-auto text-[10px] text-slate-500 font-semibold bg-white border border-slate-250 px-2 py-0.5 rounded-full">
-                                  {productBatches.length} Batch Induk
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* Batch Rows under this Parent Product */}
-                          {productBatches.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="px-8 py-4 text-slate-450 italic text-center bg-slate-50/20 font-medium">
-                                Belum ada batch lot fisik untuk varian produk ini. Klik "+ Tambah Batch" di samping nama produk untuk mendaftarkan stok.
+                            {/* Product Header Row */}
+                            <tr className="bg-slate-100/70 border-t-2 border-slate-250">
+                              <td colSpan={7} className="px-6 py-2.5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-slate-800 text-white font-bold text-[9px] uppercase px-2 py-0.5 rounded">
+                                      {prod.fragrance_family || 'Industry'}
+                                    </span>
+                                    <span className="font-black text-slate-900 text-sm">{prod.name}</span>
+                                    <span className="text-slate-400 font-mono text-[11px]">({prod.sku})</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenAddBatch(prod.id)}
+                                      className="ml-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[10px] px-2.5 py-1 rounded-md flex items-center gap-1 shadow-2xs transition-colors"
+                                    >
+                                      <Plus className="w-3 h-3" /> Tambah Batch
+                                    </button>
+                                  </div>
+                                  <span className="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                                    {prodBatches.length} Batch Induk
+                                  </span>
+                                </div>
                               </td>
                             </tr>
-                          ) : (
-                            productBatches.map((b) => {
-                              const currentVal = b.current_qty_kg ?? 0;
-                              const physicalInput = physicalQtys[b.id] ?? '';
-                              const physicalVal = parseFloat(physicalInput) || 0;
-                              const diff = physicalVal - currentVal;
-                              const isChanged = Math.abs(diff) > 0.001;
 
-                              return (
-                                <tr
-                                  key={b.id}
-                                  className={`hover:bg-slate-50/50 transition-colors ${
-                                    isChanged ? 'bg-amber-50/20 font-medium' : ''
-                                  }`}
-                                >
-                                  {/* Variant SKU & Packing Size */}
-                                  <td className="px-8 py-3">
-                                    <div className="font-bold text-slate-750 text-xs">
-                                      Kemasan {b.pack_size_kg} Kg
-                                    </div>
-                                    <span className="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
-                                      {b.variant_sku || `${prod.sku}-${b.pack_size_kg}K`}
-                                    </span>
-                                  </td>
+                            {/* Batch Rows for this product */}
+                            {prodBatches.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="px-6 py-4 text-center text-slate-400 italic bg-white">
+                                  Belum ada batch stok untuk produk ini. Klik "+ Tambah Batch" untuk mendaftarkan.
+                                </td>
+                              </tr>
+                            ) : (
+                              prodBatches.map((b) => {
+                                const inputStr = physicalQtys[b.id] ?? '0';
+                                const inputVal = parseFloat(inputStr) || 0;
+                                const currentVal = b.current_qty_kg ?? 0;
+                                const diff = inputVal - currentVal;
+                                const isChanged = Math.abs(diff) > 0.001;
 
-                                  {/* Batch Number */}
-                                  <td className="px-6 py-3">
-                                    <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-250 px-2 py-0.5 rounded text-[10px]">
-                                      {b.batch_number}
-                                    </span>
-                                  </td>
+                                return (
+                                  <tr
+                                    key={b.id}
+                                    className={`transition-colors ${
+                                      isChanged ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'bg-white hover:bg-slate-50/70'
+                                    }`}
+                                  >
+                                    {/* Kemasan & Varian */}
+                                    <td className="px-6 py-3">
+                                      <div className="font-bold text-slate-800">
+                                        Kemasan {b.pack_size_kg ? `${b.pack_size_kg} Kg` : '-'}
+                                      </div>
+                                      <span className="font-mono text-[10px] text-amber-700 font-semibold bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                                        {b.variant_sku || `${prod.sku}-${b.pack_size_kg}K`}
+                                      </span>
+                                    </td>
 
-                                  {/* Dates */}
-                                  <td className="px-6 py-3 text-slate-500 font-medium text-[11px] space-y-0.5">
-                                    <div>Prod: {b.production_date ? formatDate(b.production_date) : '-'}</div>
-                                    <div className="font-semibold text-slate-700">Exp: {formatDate(b.expiry_date)}</div>
-                                  </td>
+                                    {/* Batch Number */}
+                                    <td className="px-6 py-3">
+                                      <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-250 px-2 py-0.5 rounded text-[11px]">
+                                        {b.batch_number}
+                                      </span>
+                                    </td>
 
-                                  {/* Application Qty */}
-                                  <td className="px-6 py-3 text-right font-mono font-bold text-slate-750 text-xs">
-                                    {formatKg(currentVal)}
-                                  </td>
+                                    {/* Production & Expiry */}
+                                    <td className="px-6 py-3 font-mono text-[11px] text-slate-500">
+                                      <div>Prod: {b.production_date ? formatDate(b.production_date) : '-'}</div>
+                                      <div className="text-slate-700 font-semibold">
+                                        Exp: {b.expiry_date ? formatDate(b.expiry_date) : '-'}
+                                      </div>
+                                    </td>
 
-                                  {/* Physical Qty Input */}
-                                  <td className="px-6 py-3 text-center">
-                                    <div className="relative inline-block">
+                                    {/* System Quantity */}
+                                    <td className="px-6 py-3 text-right font-mono font-bold text-slate-700 text-xs">
+                                      {formatKg(b.current_qty_kg ?? 0)}
+                                    </td>
+
+                                    {/* Physical Input */}
+                                    <td className="px-6 py-3 text-center">
+                                      <div className="relative inline-block">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          value={physicalQtys[b.id] ?? '0'}
+                                          onChange={(e) => {
+                                            setPhysicalQtys({
+                                              ...physicalQtys,
+                                              [b.id]: e.target.value,
+                                            });
+                                          }}
+                                          className={`w-28 bg-white border rounded-lg px-2 py-1.5 font-bold font-mono text-slate-800 focus:outline-none focus:ring-1 text-right pr-6 ${
+                                            isChanged
+                                              ? 'border-amber-450 focus:ring-amber-300 focus:border-amber-500 bg-amber-50/10'
+                                              : 'border-slate-300 focus:ring-blue-300 focus:border-blue-500'
+                                          }`}
+                                        />
+                                        <span className="absolute right-2 top-2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                          Kg
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    {/* Difference display */}
+                                    <td className="px-6 py-3 text-right font-mono text-xs">
+                                      {isChanged ? (
+                                        <span
+                                          className={`font-bold px-2 py-0.5 rounded-md ${
+                                            diff > 0
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                              : 'bg-red-50 text-red-650 border border-red-200'
+                                          }`}
+                                        >
+                                          {diff > 0 ? '+' : ''}
+                                          {diff.toFixed(3)} kg
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400 font-bold">0.000 kg</span>
+                                      )}
+                                    </td>
+
+                                    {/* Adjustment notes */}
+                                    <td className="px-6 py-3">
                                       <input
-                                        type="number"
-                                        step="1"
-                                        min="0"
-                                        value={physicalInput}
+                                        type="text"
+                                        placeholder="Catatan selisih..."
+                                        value={opnameNotes[b.id] ?? ''}
                                         onChange={(e) => {
-                                          setPhysicalQtys({
-                                            ...physicalQtys,
+                                          setOpnameNotes({
+                                            ...opnameNotes,
                                             [b.id]: e.target.value,
                                           });
                                         }}
-                                        className={`w-28 bg-white border rounded-lg px-2 py-1.5 font-bold font-mono text-slate-800 focus:outline-none focus:ring-1 text-right pr-6 ${
+                                        disabled={!isChanged}
+                                        className={`w-full bg-slate-50 border rounded-lg px-2.5 py-1.5 focus:outline-none text-[11px] font-medium ${
                                           isChanged
-                                            ? 'border-amber-450 focus:ring-amber-300 focus:border-amber-500 bg-amber-50/10'
-                                            : 'border-slate-300 focus:ring-blue-300 focus:border-blue-500'
+                                            ? 'bg-white border-slate-300 focus:border-blue-400'
+                                            : 'border-slate-150 text-slate-300 cursor-not-allowed'
                                         }`}
                                       />
-                                      <span className="absolute right-2 top-2 text-[10px] font-bold text-slate-400 pointer-events-none">
-                                        Kg
-                                      </span>
-                                    </div>
-                                  </td>
-
-                                  {/* Difference display */}
-                                  <td className="px-6 py-3 text-right font-mono text-xs">
-                                    {isChanged ? (
-                                      <span
-                                        className={`font-bold px-2 py-0.5 rounded-md ${
-                                          diff > 0
-                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                            : 'bg-red-50 text-red-650 border border-red-200'
-                                        }`}
-                                      >
-                                        {diff > 0 ? '+' : ''}
-                                        {diff.toFixed(3)} kg
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400 font-bold">0.000 kg</span>
-                                    )}
-                                  </td>
-
-                                  {/* Adjustment notes */}
-                                  <td className="px-6 py-3">
-                                    <input
-                                      type="text"
-                                      placeholder="Catatan selisih..."
-                                      value={opnameNotes[b.id] ?? ''}
-                                      onChange={(e) => {
-                                        setOpnameNotes({
-                                          ...opnameNotes,
-                                          [b.id]: e.target.value,
-                                        });
-                                      }}
-                                      disabled={!isChanged}
-                                      className={`w-full bg-slate-50 border rounded-lg px-2.5 py-1.5 focus:outline-none text-[11px] font-medium ${
-                                        isChanged
-                                          ? 'bg-white border-slate-300 focus:border-blue-400'
-                                          : 'border-slate-150 text-slate-300 cursor-not-allowed'
-                                      }`}
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            }) ) }
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
                           </React.Fragment>
                         );
                       })
@@ -748,7 +950,7 @@ export default function StockOpnamePage() {
                   ) : (
                     <span className="flex items-center gap-1.5 text-amber-700 font-bold">
                       <AlertTriangle className="w-4 h-4 text-amber-500" />
-                      {modifiedBatches.length} batch telah dimodifikasi dan perlu diselaraskan dengan database.
+                      {modifiedBatches.length} batch telah diisi stok fisik dan siap diajukan sebagai draft opname.
                     </span>
                   )}
                 </div>
@@ -767,9 +969,11 @@ export default function StockOpnamePage() {
                     className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-extrabold px-6 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isSaving ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan Audit...</>
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan Draft...</>
+                    ) : isSuperAdmin ? (
+                      <><Save className="w-4 h-4" /> Simpan &amp; Sahkan Stok Opname</>
                     ) : (
-                      <><Save className="w-4 h-4" /> Simpan Audit Stok Opname</>
+                      <><Send className="w-4 h-4" /> Simpan &amp; Ajukan Draft Opname</>
                     )}
                   </button>
                 </div>
@@ -778,7 +982,194 @@ export default function StockOpnamePage() {
           </div>
         )}
 
-        {/* TAB 2: RIWAYAT PENYESUAIAN STOK OPNAME */}
+        {/* TAB 2: DRAFT STOK OPNAME */}
+        {subTab === 'drafts' && (
+          <div className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-slate-50 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                <div className="space-y-0.5">
+                  <h3 className="font-bold text-slate-800 text-sm">Daftar Pengajuan Draft Stok Opname</h3>
+                  <p className="text-[10px] text-slate-400">
+                    Hasil audit fisik yang diinput staf disimpan sebagai draft sampai disetujui secara resmi oleh Super Admin.
+                  </p>
+                </div>
+                <button
+                  onClick={fetchDrafts}
+                  disabled={draftsLoading}
+                  className="text-xs text-blue-600 hover:underline font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${draftsLoading ? 'animate-spin' : ''}`} /> Refresh Draft
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-gray-150 text-slate-500 uppercase font-bold text-[10px] tracking-wider">
+                      <th className="px-6 py-3">No. Draft</th>
+                      <th className="px-6 py-3">Waktu Pengajuan</th>
+                      <th className="px-6 py-3">Petugas (Staf)</th>
+                      <th className="px-6 py-3 text-center">Jumlah Batch</th>
+                      <th className="px-6 py-3 text-right">Total Fisik (Kg)</th>
+                      <th className="px-6 py-3 text-right">Total Selisih Netto</th>
+                      <th className="px-6 py-3 text-center">Status Approval</th>
+                      <th className="px-6 py-3 text-center">Aksi / Otorisasi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {draftsLoading ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-16 text-center text-slate-400">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                            <span className="font-medium">Memuat daftar draft opname...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : drafts.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400 italic">
+                          Belum ada pengajuan draft stok opname. Silakan lakukan audit pada tab "Lakukan Audit Opname".
+                        </td>
+                      </tr>
+                    ) : (
+                      drafts.map((d) => {
+                        const isPending = d.status === 'PENDING_APPROVAL';
+                        const isApproved = d.status === 'APPROVED';
+                        const isRejected = d.status === 'REJECTED';
+
+                        return (
+                          <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
+                            {/* No. Draft */}
+                            <td className="px-6 py-3.5">
+                              <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[11px]">
+                                {d.draft_number}
+                              </span>
+                            </td>
+
+                            {/* Waktu */}
+                            <td className="px-6 py-3.5 text-slate-500 font-mono text-[11px]">
+                              {formatDateTime(d.created_at)}
+                            </td>
+
+                            {/* Petugas */}
+                            <td className="px-6 py-3.5">
+                              <div className="font-bold text-slate-800 text-xs">{d.created_by}</div>
+                              {d.approved_by && (
+                                <div className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3" /> Disetujui: {d.approved_by}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Jumlah Batch */}
+                            <td className="px-6 py-3.5 text-center">
+                              <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                                {d.total_items} Batch
+                              </span>
+                            </td>
+
+                            {/* Total Fisik */}
+                            <td className="px-6 py-3.5 text-right font-mono font-bold text-blue-700">
+                              {Number(d.total_physical_kg).toFixed(3)} kg
+                            </td>
+
+                            {/* Total Selisih */}
+                            <td className="px-6 py-3.5 text-right">
+                              <span
+                                className={`font-mono font-extrabold px-2 py-0.5 rounded text-[11px] ${
+                                  Number(d.total_difference_kg) > 0
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : Number(d.total_difference_kg) < 0
+                                    ? 'bg-red-100 text-red-800 border border-red-300'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                {Number(d.total_difference_kg) > 0 ? '+' : ''}
+                                {Number(d.total_difference_kg).toFixed(3)} kg
+                              </span>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-6 py-3.5 text-center">
+                              {isPending && (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-extrabold px-2.5 py-1 rounded-full animate-pulse">
+                                  <Hourglass className="w-3 h-3" /> Menunggu Super Admin
+                                </span>
+                              )}
+                              {isApproved && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
+                                  <CheckCircle className="w-3 h-3 text-emerald-600" /> Disetujui ✓
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 border border-red-300 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
+                                  <XCircle className="w-3 h-3 text-red-600" /> Ditolak
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Aksi */}
+                            <td className="px-6 py-3.5 text-center">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDraft(d);
+                                    setIsDraftDetailOpen(true);
+                                  }}
+                                  className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                  title="Lihat Rincian Item"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-slate-500" /> Rincian
+                                </button>
+
+                                {isSuperAdmin && isPending && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isApprovingDraft}
+                                      onClick={() => handleApproveDraft(d.id)}
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                      title="Setujui dan Selaraskan Stok ke Database MySQL"
+                                    >
+                                      <Check className="w-3.5 h-3.5" /> Setujui
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRejectModal(d.id)}
+                                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                                      title="Tolak Draft"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+
+                                {isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDraft(d.id)}
+                                    className="text-slate-400 hover:text-red-600 p-1 transition-colors cursor-pointer"
+                                    title="Hapus Draft"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: RIWAYAT PENYESUAIAN STOK OPNAME */}
         {subTab === 'history' && (
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-gray-100 flex items-center justify-between">
@@ -1130,15 +1521,15 @@ export default function StockOpnamePage() {
                 );
               })()}
 
-              {/* Super Admin Authorization & Approval Card */}
+              {/* Information & Confirmation Card */}
               {isSuperAdmin ? (
                 <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs">
                     <ShieldCheck className="w-5 h-5 text-indigo-600" />
-                    <span>Konfirmasi Otorisasi Super Admin (Akun Aktif)</span>
+                    <span>Opsi Otorisasi Super Admin (Akun Aktif: {currentUser?.name || 'Super Admin'})</span>
                   </div>
                   <p className="text-[11px] text-indigo-800 leading-relaxed">
-                    Anda sedang masuk sebagai <strong>{currentUser?.name || currentUser?.username || 'Super Admin HQ'}</strong> ({currentUser?.role || 'SUPER_ADMIN'}). Seluruh selisih kuantitas di atas akan langsung diselaraskan ke database MySQL atas persetujuan Anda.
+                    Sebagai Super Admin, Anda dapat memilih untuk <strong>mengesahkan langsung</strong> penyesuaian stok ini ke database MySQL, atau <strong>menyimpannya sebagai Draft</strong> terlebih dahulu.
                   </p>
                   <label className="flex items-start gap-2.5 bg-white p-3 rounded-lg border border-indigo-200 cursor-pointer hover:bg-indigo-50/30 transition-colors">
                     <input
@@ -1148,65 +1539,36 @@ export default function StockOpnamePage() {
                       className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
                     />
                     <span className="text-xs font-bold text-slate-800 leading-tight">
-                      Saya selaku Super Admin telah memverifikasi seluruh data fisik di gudang dan mengesahkan penyesuaian stok ini secara permanen.
+                      Saya telah memverifikasi data fisik di gudang dan mengizinkan pembaruan stok ini.
                     </span>
                   </label>
                 </div>
               ) : (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <ShieldAlert className="w-5 h-5 text-amber-600" />
-                    <span>Konfirmasi &amp; Otorisasi Super Admin Diperlukan</span>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center gap-2 text-blue-900 font-bold text-xs">
+                    <Send className="w-4 h-4 text-blue-600" />
+                    <span>Pengajuan Draft Opname ke Super Admin</span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    Penyesuaian stok opname mengubah catatan inventaris dan nilai buku HPP gudang. Diperlukan konfirmasi dari <strong>Super Admin</strong> untuk menyetujui audit ini.
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Hasil perhitungan stok fisik yang Anda masukkan akan disimpan sebagai <strong>DRAFT</strong> dan diteruskan ke <strong>Super Admin</strong>. Stok di gudang baru akan diselaraskan ke database setelah disetujui secara resmi oleh Super Admin.
                   </p>
-                  <div className="bg-white p-3.5 rounded-lg border border-amber-200 space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Nama / Akun Super Admin Penyetujui:</label>
-                      <input
-                        type="text"
-                        value={superAdminNameInput}
-                        onChange={(e) => setSuperAdminNameInput(e.target.value)}
-                        placeholder="Masukkan nama Super Admin (misal: Super Admin HQ)"
-                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Kata Sandi / PIN Otorisasi Super Admin:</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={superAdminPassword}
-                        onChange={(e) => {
-                          setSuperAdminPassword(e.target.value);
-                          setAuthError('');
-                        }}
-                        placeholder="Masukkan kata sandi atau PIN Super Admin..."
-                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                      {authError && <p className="text-red-600 text-[11px] mt-1 font-bold">{authError}</p>}
-                    </div>
-                    <label className="flex items-start gap-2 pt-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={superAdminApproved}
-                        onChange={(e) => setSuperAdminApproved(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 cursor-pointer"
-                      />
-                      <span className="text-[11px] font-bold text-slate-700">
-                        Hasil audit fisik telah diperiksa &amp; disetujui bersama Super Admin.
-                      </span>
-                    </label>
-                  </div>
+                  <label className="flex items-start gap-2.5 bg-white p-3 rounded-lg border border-blue-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={superAdminApproved}
+                      onChange={(e) => setSuperAdminApproved(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800 leading-tight">
+                      Saya menyatakan telah menghitung fisik barang di gudang dengan teliti dan benar.
+                    </span>
+                  </label>
                 </div>
               )}
             </div>
 
             {/* Modal Footer Controls */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-gray-200 flex items-center justify-end gap-3 shrink-0">
+            <div className="px-6 py-4 bg-slate-50 border-t border-gray-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
               <button
                 type="button"
                 disabled={isSaving}
@@ -1215,17 +1577,273 @@ export default function StockOpnamePage() {
               >
                 Batal / Tinjau Ulang
               </button>
+
+              <div className="flex items-center gap-2.5">
+                {isSuperAdmin ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSaving || !superAdminApproved}
+                      onClick={handleSaveAsDraft}
+                      className="bg-slate-700 hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FileText className="w-4 h-4" /> Simpan sebagai Draft
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSaving || !superAdminApproved}
+                      onClick={handleExecuteSaveOpname}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      {isSaving ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Mengesahkan...</>
+                      ) : (
+                        <><Check className="w-4 h-4" /> Sahkan &amp; Langsung Selaraskan</>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isSaving || !superAdminApproved}
+                    onClick={handleSaveAsDraft}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isSaving ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan &amp; Mengajukan...</>
+                    ) : (
+                      <><Send className="w-4 h-4" /> Simpan &amp; Ajukan ke Super Admin</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RINCIAN DRAFT OPNAME */}
+      {isDraftDetailOpen && selectedDraft && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 px-6 py-4 flex items-center justify-between text-white shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-5 h-5 text-blue-300" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold">Rincian Draft Opname: {selectedDraft.draft_number}</h3>
+                    {selectedDraft.status === 'PENDING_APPROVAL' && (
+                      <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full">
+                        Menunggu Super Admin
+                      </span>
+                    )}
+                    {selectedDraft.status === 'APPROVED' && (
+                      <span className="bg-emerald-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">
+                        Disetujui ✓
+                      </span>
+                    )}
+                    {selectedDraft.status === 'REJECTED' && (
+                      <span className="bg-red-500 text-white font-bold text-[9px] px-2 py-0.5 rounded-full">
+                        Ditolak
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-blue-200 mt-0.5">
+                    Diajukan oleh: <strong>{selectedDraft.created_by}</strong> pada {formatDateTime(selectedDraft.created_at)}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                disabled={isSaving || !superAdminApproved}
-                onClick={handleExecuteSaveOpname}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer"
+                onClick={() => setIsDraftDetailOpen(false)}
+                className="text-blue-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
               >
-                {isSaving ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Mengesahkan &amp; Menyelaraskan...</>
-                ) : (
-                  <><Check className="w-4 h-4" /> Sahkan &amp; Selaraskan Stok</>
-                )}
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+              {selectedDraft.rejection_reason && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-2.5 text-red-900">
+                  <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-red-800">Alasan Penolakan dari Super Admin:</span>
+                    <p className="text-[11px] text-red-700 mt-0.5">{selectedDraft.rejection_reason}</p>
+                  </div>
+                </div>
+              )}
+
+              {selectedDraft.general_notes && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700">
+                  <span className="font-bold block text-slate-800 text-[11px]">Catatan Pengajuan:</span>
+                  <p className="text-[11px] text-slate-600 mt-0.5">{selectedDraft.general_notes}</p>
+                </div>
+              )}
+
+              {/* Items Table */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-gray-200 text-slate-500 uppercase font-bold text-[10px] tracking-wider">
+                      <th className="px-4 py-2.5">No</th>
+                      <th className="px-4 py-2.5">Produk &amp; SKU</th>
+                      <th className="px-4 py-2.5">No. Batch</th>
+                      <th className="px-4 py-2.5 text-center">Kemasan</th>
+                      <th className="px-4 py-2.5 text-right">Stok Sistem (A)</th>
+                      <th className="px-4 py-2.5 text-right">Stok Riil (B)</th>
+                      <th className="px-4 py-2.5 text-right">Selisih (B - A)</th>
+                      <th className="px-4 py-2.5">Catatan Item</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {selectedDraft.items?.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-800">{item.product_name || 'Produk'}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{item.variant_sku || '-'}</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-slate-700">
+                          {item.batch_number}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                            {item.pack_size_kg} Kg
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-600">
+                          {Number(item.system_qty_kg).toFixed(3)} kg
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-blue-700">
+                          {Number(item.physical_qty_kg).toFixed(3)} kg
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={`font-mono font-extrabold px-2 py-0.5 rounded text-[11px] ${
+                              Number(item.difference_qty_kg) > 0
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : Number(item.difference_qty_kg) < 0
+                                ? 'bg-red-100 text-red-800 border border-red-300'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {Number(item.difference_qty_kg) > 0 ? '+' : ''}
+                            {Number(item.difference_qty_kg).toFixed(3)} kg
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 italic max-w-xs truncate">
+                          {item.notes || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total summary */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Total Item Batch:</span>
+                  <span className="font-bold text-slate-800 text-sm">{selectedDraft.total_items} Batch</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Total Stok Sistem:</span>
+                  <span className="font-mono font-bold text-slate-800 text-sm">{Number(selectedDraft.total_system_kg).toFixed(3)} kg</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Total Stok Fisik:</span>
+                  <span className="font-mono font-bold text-blue-700 text-sm">{Number(selectedDraft.total_physical_kg).toFixed(3)} kg</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Total Selisih Netto:</span>
+                  <span
+                    className={`font-mono font-extrabold text-sm ${
+                      Number(selectedDraft.total_difference_kg) >= 0 ? 'text-emerald-700' : 'text-red-700'
+                    }`}
+                  >
+                    {Number(selectedDraft.total_difference_kg) >= 0 ? '+' : ''}
+                    {Number(selectedDraft.total_difference_kg).toFixed(3)} kg
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-gray-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsDraftDetailOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              {isSuperAdmin && selectedDraft.status === 'PENDING_APPROVAL' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenRejectModal(selectedDraft.id);
+                    }}
+                    className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <X className="w-4 h-4" /> Tolak Draft
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isApprovingDraft}
+                    onClick={() => handleApproveDraft(selectedDraft.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isApprovingDraft ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Mengesahkan...</>
+                    ) : (
+                      <><Check className="w-4 h-4" /> Setujui &amp; Selaraskan ke Database</>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TOLAK DRAFT */}
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-2 text-red-600 font-bold text-base">
+              <XCircle className="w-5 h-5" />
+              <span>Tolak Pengajuan Draft Opname</span>
+            </div>
+            <p className="text-xs text-slate-600">
+              Berikan alasan penolakan agar staf gudang dapat melakukan penghitungan fisik ulang:
+            </p>
+            <textarea
+              rows={3}
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Contoh: Terdapat selisih tidak wajar pada Batch B25, harap hitung ulang drum fisik di lorong A..."
+              className="w-full bg-slate-50 border border-gray-300 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-red-500"
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isRejectingDraft || !rejectionReason.trim()}
+                onClick={handleExecuteRejectDraft}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isRejectingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                Konfirmasi Tolak
               </button>
             </div>
           </div>
