@@ -1425,9 +1425,25 @@ export default function PODetailPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {po.items.map((item, idx) => {
-                  const shippedKg = item.qty_shipped_kg !== undefined ? item.qty_shipped_kg : (po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? item.qty_ordered_kg : 0);
                   const isDelivered = po.status === 'DITERIMA';
                   const isShipped = po.status === 'DIKIRIM' || isDelivered;
+                  const hasShipments = Boolean(po.shipments && po.shipments.length > 0);
+
+                  const rawShipped = hasShipments
+                    ? (shippedPerItem[item.id] ?? shippedPerItem[item.product_id] ?? item.qty_shipped_kg ?? item.qty_ordered_kg)
+                    : (isShipped ? item.qty_ordered_kg : 0);
+
+                  const receivedSum = hasShipments
+                    ? po.shipments!.filter(s => s.status === 'DITERIMA').reduce((sum, s) => {
+                        const match = s.items.find((si: any) => si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id);
+                        return sum + (match ? match.qty_shipped_kg : 0);
+                      }, 0)
+                    : (isDelivered ? item.qty_ordered_kg : 0);
+
+                  // If PO is completely DITERIMA, ensure shipped quantity is at least equal to received quantity
+                  const displayReceivedKg = isDelivered ? (receivedSum > 0 ? receivedSum : item.qty_ordered_kg) : 0;
+                  const displayShippedKg = isDelivered ? Math.max(rawShipped, displayReceivedKg) : rawShipped;
+
                   const batchCode = `BTC-2026-${String(88 + idx).padStart(2, '0')}`;
 
                   return (
@@ -1465,7 +1481,7 @@ export default function PODetailPage() {
                       {/* Dikirim */}
                       <td className="px-6 py-4 font-mono font-bold text-slate-800 text-center">
                         {isShipped ? (
-                          <span className="text-slate-800">{formatKg(shippedKg)}</span>
+                          <span className="text-slate-800">{formatKg(displayShippedKg)}</span>
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
@@ -1475,7 +1491,7 @@ export default function PODetailPage() {
                       <td className="px-6 py-4 font-mono font-bold text-center">
                         {isDelivered ? (
                           <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md inline-block">
-                            {formatKg(item.qty_ordered_kg)}
+                            {formatKg(displayReceivedKg)}
                           </span>
                         ) : (
                           <span className="text-slate-300">-</span>
