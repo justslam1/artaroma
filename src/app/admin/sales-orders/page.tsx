@@ -35,6 +35,7 @@ import {
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import { VerifyPaymentModal } from '@/components/admin/finance-modal';
+import DateRangePicker from '@/components/ui/date-range-picker';
 import {
   getStoredCashAccounts,
   getStoredCashTransactions,
@@ -60,7 +61,8 @@ export default function SalesOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
   const [customerFilter, setCustomerFilter] = useState<string>('ALL');
-  const [dateFilter, setDateFilter] = useState<string>('ALL');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [shippingTypeFilter, setShippingTypeFilter] = useState<string>('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
 
@@ -380,20 +382,11 @@ export default function SalesOrdersPage() {
       }
     }
 
-    // 5. Date Filter
-    if (dateFilter !== 'ALL' && so.order_date) {
-      const orderDate = new Date(so.order_date);
-      const now = new Date();
-      if (dateFilter === 'THIS_MONTH') {
-        if (orderDate.getFullYear() !== now.getFullYear() || orderDate.getMonth() !== now.getMonth()) {
-          return false;
-        }
-      } else if (dateFilter === 'LAST_MONTH') {
-        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        if (orderDate.getFullYear() !== lastMonth.getFullYear() || orderDate.getMonth() !== lastMonth.getMonth()) {
-          return false;
-        }
-      }
+    // 5. Date Range Filter
+    if (so.order_date) {
+      const orderDateStr = so.order_date.split('T')[0];
+      if (startDate && orderDateStr < startDate) return false;
+      if (endDate && orderDateStr > endDate) return false;
     }
 
     // 6. Shipping Type Filter
@@ -424,7 +417,8 @@ export default function SalesOrdersPage() {
     setStatusFilter('ALL');
     setPaymentFilter('ALL');
     setCustomerFilter('ALL');
-    setDateFilter('ALL');
+    setStartDate('');
+    setEndDate('');
     setShippingTypeFilter('ALL');
     setPaymentMethodFilter('ALL');
   };
@@ -434,7 +428,8 @@ export default function SalesOrdersPage() {
     statusFilter !== 'ALL' ||
     paymentFilter !== 'ALL' ||
     customerFilter !== 'ALL' ||
-    dateFilter !== 'ALL' ||
+    startDate ||
+    endDate ||
     shippingTypeFilter !== 'ALL' ||
     paymentMethodFilter !== 'ALL'
   );
@@ -609,18 +604,15 @@ export default function SalesOrdersPage() {
               {/* Tanggal */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tanggal</label>
-                <div className="relative">
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
-                  >
-                    <option value="ALL">Pilih periode tanggal</option>
-                    <option value="THIS_MONTH">Bulan Ini</option>
-                    <option value="LAST_MONTH">Bulan Lalu</option>
-                  </select>
-                  <Calendar className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={(start, end) => {
+                    setStartDate(start);
+                    setEndDate(end);
+                  }}
+                  placeholder="Pilih rentang tanggal"
+                />
               </div>
 
               {/* Nomor Pesanan / Search */}
@@ -874,13 +866,7 @@ export default function SalesOrdersPage() {
                           <div>Tidak ada Sales Order yang sesuai dengan kriteria filter &amp; pencarian.</div>
                           <button
                             type="button"
-                            onClick={() => {
-                              setSearchTerm('');
-                              setStatusFilter('ALL');
-                              setPaymentFilter('ALL');
-                              setCustomerFilter('ALL');
-                              setDateFilter('ALL');
-                            }}
+                            onClick={handleResetFilters}
                             className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-bold bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-all cursor-pointer"
                           >
                             <RotateCcw className="w-3.5 h-3.5" /> Reset Semua Filter
