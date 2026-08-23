@@ -38,6 +38,9 @@ import {
   RotateCcw,
   Undo2,
   Trash2,
+  Lock,
+  ShieldAlert,
+  KeyRound,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -88,6 +91,14 @@ export default function PODetailPage() {
   const [cancelNote, setCancelNote] = useState('');
   const [isCancelSubmitting, setIsCancelSubmitting] = useState(false);
 
+  // Super Admin Role & Revert Authorization States
+  const isSuperAdmin = Boolean(currentUser?.is_super_admin || currentUser?.role === 'SUPER_ADMIN');
+  const [superAdminEmail, setSuperAdminEmail] = useState('');
+  const [superAdminPassword, setSuperAdminPassword] = useState('');
+  const [isAuthorizingSuperAdmin, setIsAuthorizingSuperAdmin] = useState(false);
+  const [superAdminAuthError, setSuperAdminAuthError] = useState('');
+  const [isSuperAdminApprovedOnSpot, setIsSuperAdminApprovedOnSpot] = useState(false);
+
   // Revert / Rollback Status Modal state
   const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
   const [revertNote, setRevertNote] = useState('');
@@ -99,6 +110,37 @@ export default function PODetailPage() {
   // Payment Modal state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
+
+  // Helper: Authorize Super Admin credentials on the spot for staff
+  const handleAuthorizeSuperAdminOnSpot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!superAdminEmail.trim() || !superAdminPassword) {
+      setSuperAdminAuthError('Email/Username dan Password Super Admin wajib diisi.');
+      return;
+    }
+    setIsAuthorizingSuperAdmin(true);
+    setSuperAdminAuthError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: superAdminEmail.trim(), password: superAdminPassword }),
+      });
+      const json = await res.json();
+      if (json.success && (json.user?.is_super_admin || json.user?.role === 'SUPER_ADMIN')) {
+        setIsSuperAdminApprovedOnSpot(true);
+        setSuperAdminAuthError('');
+      } else if (json.success && !(json.user?.is_super_admin || json.user?.role === 'SUPER_ADMIN')) {
+        setSuperAdminAuthError('Akun yang dimasukkan bukan akun berlevel Super Admin.');
+      } else {
+        setSuperAdminAuthError(json.message || 'Kredensial Super Admin tidak valid.');
+      }
+    } catch (err: any) {
+      setSuperAdminAuthError('Gagal memverifikasi Super Admin: ' + err.message);
+    } finally {
+      setIsAuthorizingSuperAdmin(false);
+    }
+  };
 
   // Company / Warehouse Settings state
   const [companySettings, setCompanySettings] = useState<any>({
@@ -225,6 +267,13 @@ export default function PODetailPage() {
 
   const handleRevertStatus = async () => {
     if (!po) return;
+
+    // Super Admin authorization check for reverting DITERIMA -> DIKIRIM
+    if (po.status === 'DITERIMA' && !isSuperAdmin && !isSuperAdminApprovedOnSpot) {
+      alert('⛔ AKSES DITOLAK: Mengembalikan status PO dari Diterima ke Dikirim memerlukan otorisasi dan persetujuan Super Admin.');
+      return;
+    }
+
     setIsRevertSubmitting(true);
     try {
       let newStatus: PurchaseOrder['status'] = 'BUAT_EMAIL';
@@ -957,11 +1006,15 @@ export default function PODetailPage() {
                   type="button"
                   onClick={() => setIsRevertModalOpen(true)}
                   className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-extrabold px-3 py-1 rounded-full transition-all cursor-pointer shadow-2xs hover:border-amber-400"
-                  title="Kembali ke tahap sebelumnya untuk mengoreksi salah input"
+                  title={po.status === 'DITERIMA' && !isSuperAdmin ? 'Kembali ke tahap Dikirim (Memerlukan persetujuan Super Admin)' : 'Kembali ke tahap sebelumnya untuk mengoreksi salah input'}
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
                   <span>
-                    {po.status === 'DIKIRIM' ? '↩️ Kembali ke Tahap Diajukan (Koreksi)' : '↩️ Kembali ke Tahap Dikirim (Koreksi)'}
+                    {po.status === 'DIKIRIM'
+                      ? '↩️ Kembali ke Tahap Diajukan (Koreksi)'
+                      : isSuperAdmin
+                      ? '↩️ Kembali ke Tahap Dikirim (Koreksi)'
+                      : '🔒 ↩️ Kembali ke Tahap Dikirim (Persetujuan Super Admin)'}
                   </span>
                 </button>
               )}
@@ -1249,11 +1302,15 @@ export default function PODetailPage() {
               type="button"
               onClick={() => setIsRevertModalOpen(true)}
               className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:border-amber-400"
-              title="Kembali ke tahap sebelumnya untuk mengoreksi salah input"
+              title={po.status === 'DITERIMA' && !isSuperAdmin ? 'Kembali ke tahap Dikirim (Memerlukan persetujuan Super Admin)' : 'Kembali ke tahap sebelumnya untuk mengoreksi salah input'}
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
               <span>
-                {po.status === 'DIKIRIM' ? '↩️ Kembali ke Tahap Diajukan (Koreksi Input)' : '↩️ Kembali ke Tahap Dikirim (Koreksi Penerimaan)'}
+                {po.status === 'DIKIRIM'
+                  ? '↩️ Kembali ke Tahap Diajukan (Koreksi Input)'
+                  : isSuperAdmin
+                  ? '↩️ Kembali ke Tahap Dikirim (Koreksi Penerimaan)'
+                  : '🔒 ↩️ Kembali ke Tahap Dikirim (Persetujuan Super Admin)'}
               </span>
             </button>
           )}
@@ -2302,6 +2359,16 @@ export default function PODetailPage() {
         });
 
         const isStockBlocked = po.status === 'DITERIMA' && usedBatches.length > 0;
+        const isAuthorizedForRollback = po.status !== 'DITERIMA' || isSuperAdmin || isSuperAdminApprovedOnSpot;
+
+        const handleCloseRevertModal = () => {
+          setIsRevertModalOpen(false);
+          setRevertNote('');
+          setSuperAdminEmail('');
+          setSuperAdminPassword('');
+          setSuperAdminAuthError('');
+          setIsSuperAdminApprovedOnSpot(false);
+        };
 
         return (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2310,25 +2377,121 @@ export default function PODetailPage() {
               <div className={`px-6 py-4 flex items-center justify-between text-white ${
                 isStockBlocked
                   ? 'bg-gradient-to-r from-red-600 to-rose-700'
+                  : po.status === 'DITERIMA'
+                  ? 'bg-gradient-to-r from-indigo-700 via-blue-700 to-amber-700'
                   : 'bg-gradient-to-r from-amber-600 to-amber-700'
               }`}>
                 <div className="flex items-center gap-2.5">
                   <RotateCcw className="w-5 h-5 text-amber-200" />
                   <div>
-                    <h3 className="font-bold text-base">Kembali ke Tahap Sebelumnya</h3>
+                    <h3 className="font-bold text-base">
+                      {po.status === 'DITERIMA'
+                        ? 'Rollback Status DITERIMA → DIKIRIM'
+                        : 'Kembali ke Tahap Sebelumnya'}
+                    </h3>
                     <p className="text-xs text-amber-100">{po.po_number} — {po.distributor_name}</p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsRevertModalOpen(false)}
+                  onClick={handleCloseRevertModal}
                   className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+                {/* Super Admin Authorization Card for DITERIMA -> DIKIRIM */}
+                {po.status === 'DITERIMA' && !isStockBlocked && (
+                  !isAuthorizedForRollback ? (
+                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4 space-y-3 text-indigo-950 shadow-2xs">
+                      <div className="flex items-start gap-2.5">
+                        <Lock className="w-5 h-5 text-indigo-700 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="font-extrabold text-xs text-indigo-900">
+                            Persetujuan & Otorisasi Super Admin Diperlukan
+                          </h4>
+                          <p className="text-[11px] text-indigo-700 leading-tight mt-0.5">
+                            Status &apos;DITERIMA&apos; menandakan barang fisik telah dicatat ke inventaris gudang FEFO. Pengembalian status ini memerlukan otorisasi resmi dari Super Admin untuk mereset batch secara aman.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* On-the-spot Super Admin Login Form */}
+                      <form onSubmit={handleAuthorizeSuperAdminOnSpot} className="space-y-2.5 pt-2 border-t border-indigo-200/80">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-800">
+                          Masukkan Kredensial Super Admin untuk Otorisasi:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-700 block mb-0.5">
+                              Email / Username
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="superadmin@artaroma.com"
+                              value={superAdminEmail}
+                              onChange={(e) => setSuperAdminEmail(e.target.value)}
+                              className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-700 block mb-0.5">
+                              Password Super Admin
+                            </label>
+                            <input
+                              type="password"
+                              required
+                              placeholder="••••••••"
+                              value={superAdminPassword}
+                              onChange={(e) => setSuperAdminPassword(e.target.value)}
+                              className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600"
+                            />
+                          </div>
+                        </div>
+
+                        {superAdminAuthError && (
+                          <div className="text-[11px] text-red-700 font-semibold bg-red-50 p-2 rounded-lg border border-red-200">
+                            {superAdminAuthError}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={isAuthorizingSuperAdmin}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {isAuthorizingSuperAdmin ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Memverifikasi Otorisasi Super Admin...</span>
+                            </>
+                          ) : (
+                            <>
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>Verifikasi & Buka Kunci Persetujuan Super Admin</span>
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center gap-2 text-emerald-900 text-xs shadow-2xs">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <strong className="block font-bold text-emerald-950">Otorisasi Super Admin Disetujui ✓</strong>
+                        <span className="text-[11px] text-emerald-700">
+                          {isSuperAdminApprovedOnSpot
+                            ? `Disetujui via otorisasi kredensial (${superAdminEmail})`
+                            : `Akun aktif terverifikasi sebagai Super Admin (${currentUser?.name || 'Super Admin HQ'})`}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                )}
+
                 {/* Blocked Alert if stock is used */}
                 {isStockBlocked ? (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3 text-red-900">
@@ -2406,7 +2569,7 @@ export default function PODetailPage() {
                 )}
 
                 {/* Catatan Alasan */}
-                {!isStockBlocked && (
+                {!isStockBlocked && isAuthorizedForRollback && (
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
                       Catatan Alasan Koreksi (Opsional)
@@ -2425,7 +2588,7 @@ export default function PODetailPage() {
                 <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => { setIsRevertModalOpen(false); setRevertNote(''); }}
+                    onClick={handleCloseRevertModal}
                     className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
                   >
                     {isStockBlocked ? 'Tutup' : 'Batal'}
@@ -2434,13 +2597,22 @@ export default function PODetailPage() {
                     <button
                       type="button"
                       onClick={handleRevertStatus}
-                      disabled={isRevertSubmitting}
-                      className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      disabled={isRevertSubmitting || !isAuthorizedForRollback}
+                      className={`px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 shadow-sm transition-all ${
+                        !isAuthorizedForRollback
+                          ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
+                      } disabled:opacity-60`}
                     >
                       {isRevertSubmitting ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           <span>Memproses...</span>
+                        </>
+                      ) : !isAuthorizedForRollback ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Butuh Persetujuan Super Admin</span>
                         </>
                       ) : (
                         <>
