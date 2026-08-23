@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const dbUsers = await executeQuery<any[]>(
-      "SELECT id, name, email, role, linked_entity_name, allowed_modules, is_active, is_hidden, created_at FROM users WHERE (is_hidden = 0 OR is_hidden IS NULL) AND LOWER(email) != 'boss@artaroma.com' AND LOWER(name) != 'bossanova' ORDER BY created_at ASC"
+      "SELECT id, name, email, role, linked_entity_name, allowed_modules, is_active, is_hidden, last_login, created_at FROM users WHERE (is_hidden = 0 OR is_hidden IS NULL) AND LOWER(email) != 'boss@artaroma.com' AND LOWER(name) != 'bossanova' ORDER BY created_at ASC"
     );
     
     if (dbUsers && dbUsers.length > 0) {
@@ -20,6 +20,22 @@ export async function GET() {
             modules = String(u.allowed_modules).split(',').map((s) => s.trim()).filter(Boolean);
           }
         }
+
+        let lastLoginFormatted: string | null = null;
+        if (u.last_login) {
+          try {
+            const d = new Date(u.last_login);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            const hours = String(d.getHours()).padStart(2, '0');
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+            lastLoginFormatted = `${day}/${month}/${year} ${hours}:${minutes}`;
+          } catch {
+            lastLoginFormatted = String(u.last_login);
+          }
+        }
+
         return {
           id: u.id,
           name: u.name,
@@ -29,6 +45,7 @@ export async function GET() {
           allowed_modules: modules,
           is_active: Boolean(u.is_active),
           is_hidden: Boolean(u.is_hidden),
+          last_login: lastLoginFormatted,
           created_at: String(u.created_at).split('T')[0],
         };
       });

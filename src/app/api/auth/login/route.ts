@@ -173,6 +173,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Update last_login timestamp in MySQL database
+    try {
+      if (authenticatedUser.id && !authenticatedUser.id.startsWith('usr-cust-')) {
+        await executeQuery('UPDATE users SET last_login = NOW() WHERE id = ?', [authenticatedUser.id]);
+      }
+    } catch (updateErr: any) {
+      console.warn('Failed updating users.last_login:', updateErr.message);
+    }
+
     // Generate JWT Token
     const token = await signJWT(authenticatedUser, '7d');
     const redirectUrl = getRedirectPath(authenticatedUser);

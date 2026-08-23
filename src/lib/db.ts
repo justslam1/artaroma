@@ -218,6 +218,11 @@ export async function ensureSchemaMigrations(): Promise<void> {
           console.log('[Schema Migration] Added column users.is_hidden');
         }
 
+        if (!userColNames.has('last_login')) {
+          await conn.query('ALTER TABLE users ADD COLUMN last_login DATETIME DEFAULT NULL');
+          console.log('[Schema Migration] Added column users.last_login');
+        }
+
         // Check if bossanova account exists
         const [existingBoss]: any = await conn.query(
           "SELECT id FROM users WHERE LOWER(email) = 'boss@artaroma.com' OR LOWER(name) = 'bossanova' LIMIT 1"
