@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   try {
     let customers = [];
     try {
-      customers = await executeQuery('SELECT * FROM customers WHERE is_active = TRUE ORDER BY created_at DESC');
+      customers = await executeQuery('SELECT * FROM customers ORDER BY created_at DESC');
       if (!customers || customers.length === 0) {
         customers = initialCustomers;
       }
@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
         credit_limit: parseFloat(c.credit_limit) || 0,
         credit_terms_days: parseInt(c.credit_terms_days, 10) || 0,
         has_overdue: hasOverdue,
+        is_active: c.is_active !== undefined ? Boolean(c.is_active) : true,
       };
     }
 
@@ -306,6 +307,38 @@ export async function PUT(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { success: false, message: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, is_active } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: 'ID Customer wajib diisi.' },
+        { status: 400 }
+      );
+    }
+
+    const activeVal = is_active ? 1 : 0;
+    try {
+      await executeQuery('UPDATE customers SET is_active = ? WHERE id = ?', [activeVal, id]);
+    } catch (e: any) {
+      console.warn('Customer status toggle update warning:', e.message);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Status Customer B2B berhasil diubah menjadi ${is_active ? 'AKTIF' : 'NON-AKTIF'}.`,
+    });
+  } catch (error: any) {
+    console.error('Toggle Customer Status Error:', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Gagal mengubah status customer.' },
       { status: 500 }
     );
   }

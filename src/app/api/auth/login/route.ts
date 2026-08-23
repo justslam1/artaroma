@@ -101,6 +101,13 @@ export async function POST(req: NextRequest) {
           const storedPass = c.password || 'Artaroma2026!';
           const isMatch = await comparePassword(password, storedPass);
           if (isMatch) {
+            if (c.is_active === 0 || c.is_active === false) {
+              return NextResponse.json(
+                { success: false, message: 'Akun Customer B2B Anda berstatus non-aktif. Silakan hubungi admin / sales Artaroma.' },
+                { status: 403 }
+              );
+            }
+
             authenticatedUser = {
               id: `usr-cust-${c.id}`,
               customer_id: c.id,

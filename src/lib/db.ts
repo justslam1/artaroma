@@ -100,6 +100,7 @@ export async function ensureSchemaMigrations(): Promise<void> {
           { col: 'default_shipping_cost', sql: "ALTER TABLE customers ADD COLUMN default_shipping_cost DECIMAL(15,2) DEFAULT 0.00" },
           { col: 'default_shipping_type', sql: "ALTER TABLE customers ADD COLUMN default_shipping_type VARCHAR(20) DEFAULT 'FRANCO'" },
           { col: 'delivery_notes', sql: "ALTER TABLE customers ADD COLUMN delivery_notes TEXT DEFAULT NULL" },
+          { col: 'is_active', sql: "ALTER TABLE customers ADD COLUMN is_active TINYINT(1) DEFAULT 1" },
         ];
 
         for (const m of custMigrations) {

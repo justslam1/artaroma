@@ -786,6 +786,34 @@ export default function MasterDataPage() {
     }
   };
 
+  const handleToggleCustomerStatus = async (customerId: string, newStatus: boolean, customerName: string) => {
+    try {
+      // Optimistic UI update
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === customerId ? { ...c, is_active: newStatus } : c))
+      );
+
+      const res = await fetch('/api/customers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: customerId, is_active: newStatus }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        // Revert if error
+        setCustomers((prev) =>
+          prev.map((c) => (c.id === customerId ? { ...c, is_active: !newStatus } : c))
+        );
+        alert(json.message || 'Gagal mengubah status customer.');
+      }
+    } catch (err: any) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === customerId ? { ...c, is_active: !newStatus } : c))
+      );
+      alert('Terjadi kesalahan saat mengubah status customer.');
+    }
+  };
+
   // --- PRICELIST MODAL HANDLERS ---
   const openPricelistModal = (prod: Product) => {
     setSelectedProductForPricelist(prod);
@@ -2594,6 +2622,7 @@ export default function MasterDataPage() {
                     <th className="px-6 py-3">Kode / Perusahaan</th>
                     <th className="px-6 py-3">PIC & Akun Login B2B (Username)</th>
                     <th className="px-6 py-3">Plafon Kredit B2B</th>
+                    <th className="px-6 py-3">Status Akun</th>
                     <th className="px-6 py-3">Status Tempo</th>
                     <th className="px-6 py-3">Kurir & Ongkir Default</th>
                     <th className="px-6 py-3">Tampilan Katalog Produk</th>
@@ -2654,6 +2683,35 @@ export default function MasterDataPage() {
                                 CASH / LUNAS TRANSFER
                               </span>
                             )}
+                          </td>
+
+                          <td className="px-6 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCustomerStatus(c.id, !c.is_active, c.company_name)}
+                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                                  c.is_active ? 'bg-emerald-600' : 'bg-slate-300'
+                                }`}
+                                title={c.is_active ? 'Klik untuk Menonaktifkan Customer' : 'Klik untuk Mengaktifkan Customer'}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    c.is_active ? 'translate-x-4' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                              <span
+                                className={`text-[11px] px-2 py-0.5 rounded-full font-bold border transition-colors ${
+                                  c.is_active
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                              >
+                                {c.is_active ? 'AKTIF' : 'NON-AKTIF'}
+                              </span>
+                            </div>
                           </td>
 
                           <td className="px-6 py-3.5">
