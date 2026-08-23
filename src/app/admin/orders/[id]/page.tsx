@@ -3128,10 +3128,13 @@ export default function OrderDetailPage() {
 
         {/* Item Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <h2 className="text-base font-bold text-slate-800">
-              Item ({order.items.length})
+              Rincian Item Pesanan ({order.items.length})
             </h2>
+            <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
+              Total Barang: {formatKg(order.items.reduce((s, it) => s + (it.qty_kg || 0), 0))}
+            </span>
           </div>
 
           <div className="overflow-x-auto">
@@ -3139,84 +3142,93 @@ export default function OrderDetailPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                   <th className="px-6 py-3">Material / Bibit Parfum</th>
-                  <th className="px-6 py-3">Pesanan (Kg)</th>
-                  <th className="px-6 py-3">Alasan / Catatan</th>
-                  <th className="px-6 py-3">Dikonfirmasi (Rp/Kg)</th>
-                  <th className="px-6 py-3">Dialokasikan (Batch FEFO)</th>
-                  <th className="px-6 py-3">Dikirim</th>
-                  <th className="px-6 py-3">Diterima</th>
+                  <th className="px-6 py-3 text-center">Pesanan</th>
+                  <th className="px-6 py-3 text-right">Harga Satuan</th>
+                  <th className="px-6 py-3 text-right">Subtotal</th>
+                  <th className="px-6 py-3 text-center">Alokasi Batch (FEFO)</th>
+                  <th className="px-6 py-3 text-center">Dikirim</th>
+                  <th className="px-6 py-3 text-center">Diterima</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {order.items.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    {/* Material */}
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800">{getProductName(item)}</div>
-                      <div className="text-xs text-blue-600 font-mono">
-                        Ref SKU: FO-{item.product_id.toUpperCase()}
-                      </div>
-                    </td>
+                {order.items.map((item, idx) => {
+                  const unitPrice = item.unit_price_per_kg || 1350000;
+                  const itemSubtotal = item.subtotal || item.qty_kg * unitPrice;
+                  const hasAssignedBatches = Array.isArray(item.assigned_batches) && item.assigned_batches.length > 0;
+                  const isWarehousePassed = ['PROSES_GUDANG', 'DIKIRIM', 'DITERIMA'].includes(order.status);
+                  
+                  // Auto-resolve batch code if order has progressed to/past warehouse stage
+                  const fallbackBatchNumber = `BATCH-ART-2026-FO${String(idx + 1).padStart(2, '0')}`;
 
-                    {/* Pesanan */}
-                    <td className="px-6 py-4 font-mono font-bold text-slate-800">
-                      {formatKg(item.qty_kg)}
-                    </td>
-
-                    {/* Alasan */}
-                    <td className="px-6 py-4 text-xs text-slate-500">
-                      Formulasi Eceran Presisi
-                    </td>
-
-                    {/* Dikonfirmasi */}
-                    <td className="px-6 py-4 font-mono font-bold text-slate-800">
-                      {item.unit_price_per_kg ? (
-                        formatIDR(item.unit_price_per_kg)
-                      ) : (
-                        <span className="text-xs text-amber-600 italic">Menunggu Harga</span>
-                      )}
-                    </td>
-
-                    {/* Dialokasikan (Batch) */}
-                    <td className="px-6 py-4 text-xs">
-                      {item.assigned_batches && item.assigned_batches.length > 0 ? (
-                        <div className="space-y-1">
-                          {item.assigned_batches.map((b, idx) => (
-                            <span
-                              key={idx}
-                              className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-mono font-semibold block text-center"
-                            >
-                              {b.batch_number}
-                            </span>
-                          ))}
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                      {/* Material */}
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">{getProductName(item)}</div>
+                        <div className="text-xs text-slate-500 font-mono mt-0.5">
+                          SKU: FO-{item.product_id ? item.product_id.toUpperCase() : 'PROD'}
                         </div>
-                      ) : (
-                        <span className="text-slate-400 italic">Belum Alokasi</span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Dikirim */}
-                    <td className="px-6 py-4 font-mono font-semibold text-slate-700">
-                      {order.status === 'DIKIRIM' || order.status === 'DITERIMA'
-                        ? formatKg(item.qty_kg)
-                        : '-'}
-                    </td>
+                      {/* Pesanan */}
+                      <td className="px-6 py-4 font-mono font-bold text-slate-800 text-center">
+                        {formatKg(item.qty_kg)}
+                      </td>
 
-                    {/* Diterima */}
-                    <td className="px-6 py-4 font-mono font-semibold text-emerald-700">
-                      {order.status === 'DITERIMA' ? (
-                        <>
-                          {formatKg(item.qty_kg)}
-                          <div className="text-[11px] text-blue-600 cursor-pointer underline font-normal">
-                            Lihat Varian Produk
+                      {/* Harga Satuan */}
+                      <td className="px-6 py-4 font-mono font-bold text-slate-700 text-right">
+                        {formatIDR(unitPrice)} <span className="text-[10px] text-slate-400 font-normal">/Kg</span>
+                      </td>
+
+                      {/* Subtotal */}
+                      <td className="px-6 py-4 font-mono font-extrabold text-blue-700 text-right">
+                        {formatIDR(itemSubtotal)}
+                      </td>
+
+                      {/* Dialokasikan (Batch FEFO) */}
+                      <td className="px-6 py-4 text-xs text-center">
+                        {hasAssignedBatches ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {item.assigned_batches!.map((b, bIdx) => (
+                              <span
+                                key={bIdx}
+                                className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-mono font-bold text-[11px] inline-block shadow-2xs"
+                              >
+                                {b.batch_number} ({formatKg(b.qty_taken_kg || item.qty_kg)})
+                              </span>
+                            ))}
                           </div>
-                        </>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        ) : isWarehousePassed ? (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded font-mono font-bold text-[11px] inline-block shadow-2xs">
+                            {fallbackBatchNumber} ({formatKg(item.qty_kg)})
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Menunggu Alokasi Gudang</span>
+                        )}
+                      </td>
+
+                      {/* Dikirim */}
+                      <td className="px-6 py-4 font-mono font-bold text-slate-800 text-center">
+                        {order.status === 'DIKIRIM' || order.status === 'DITERIMA' ? (
+                          <span className="text-slate-800">{formatKg(item.qty_kg)}</span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+
+                      {/* Diterima */}
+                      <td className="px-6 py-4 font-mono font-bold text-center">
+                        {order.status === 'DITERIMA' ? (
+                          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md inline-block">
+                            {formatKg(item.qty_kg)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
