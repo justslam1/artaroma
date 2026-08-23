@@ -497,11 +497,11 @@ export default function PODetailPage() {
   };
   // ────────────────────────────────────────────────────────────────────────
 
-  // Tahapan PO: Buat Email -> Pesanan Dikirim -> Pesanan Diterima
+  // Tahapan PO: Diajukan -> Pesanan Dikirim -> Pesanan Diterima
   const steps = [
     {
       key: 'BUAT_EMAIL',
-      title: 'Buat Email',
+      title: 'Diajukan',
       time: stepBuatEmailTime,
       actor: 'Oleh ADMIN PROCUREMENT',
     },

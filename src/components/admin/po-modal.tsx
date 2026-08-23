@@ -905,7 +905,7 @@ export function CreatePOModal({
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tanggal Diterbitkan</span>
                 <div className="font-bold text-slate-200 font-mono">{new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                <div className="text-slate-400 text-[11px]">Status Awal: BUAT EMAIL / PO</div>
+                <div className="text-slate-400 text-[11px]">Status Awal: DIAJUKAN / PO</div>
               </div>
             </div>
 

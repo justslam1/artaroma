@@ -356,7 +356,7 @@ export default function ProcurementPage() {
 
     switch (po.status) {
       case 'BUAT_EMAIL':
-        return <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-bold">BUAT EMAIL</span>;
+        return <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-bold">DIAJUKAN</span>;
       case 'DITERIMA':
         return <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold">PESANAN DITERIMA</span>;
       case 'DIBATALKAN':
@@ -384,7 +384,7 @@ export default function ProcurementPage() {
               Purchase Order
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Kelola Alur Kerja PO 3 Tahap (Buat Email &rarr; Pesanan Dikirim &rarr; Pesanan Diterima)
+              Kelola Alur Kerja PO 3 Tahap (Diajukan &rarr; Pesanan Dikirim &rarr; Pesanan Diterima)
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
