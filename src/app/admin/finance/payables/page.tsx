@@ -19,10 +19,19 @@ import {
   DollarSign,
   ExternalLink,
   FileSpreadsheet,
+  Calendar,
+  AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { exportPayablesToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
-import { getStoredCashAccounts, recordCashTransaction } from '@/lib/cash-store';
+import {
+  getStoredCashAccounts,
+  getStoredCashTransactions,
+  recordCashTransaction,
+  calculatePODueDateInfo,
+  getPOPaymentStatusFromCash,
+} from '@/lib/cash-store';
 
 export default function FinancePayablesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -43,9 +52,21 @@ export default function FinancePayablesPage() {
 
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [selectedSourceBankId, setSelectedSourceBankId] = useState<string>('acc-bca');
+  const [cashTxs, setCashTxs] = useState<any[]>([]);
   const [transferRef, setTransferRef] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setCashTxs(getStoredCashTransactions());
+    const handleCashUpdate = () => {
+      setCashTxs(getStoredCashTransactions());
+    };
+    window.addEventListener('artaroma_cash_updated', handleCashUpdate);
+    return () => {
+      window.removeEventListener('artaroma_cash_updated', handleCashUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     fetch('/api/company-settings', { cache: 'no-store' })
@@ -270,6 +291,9 @@ export default function FinancePayablesPage() {
                   <th className="px-6 py-3">Distributor / Vendor</th>
                   <th className="px-6 py-3">Rincian Item Dipesan</th>
                   <th className="px-6 py-3">Total Tagihan Suplier</th>
+                  <th className="px-6 py-3">Jatuh Tempo</th>
+                  <th className="px-6 py-3">Sisa Hari</th>
+                  <th className="px-6 py-3">Status Bayar (Kas)</th>
                   <th className="px-6 py-3">Status Alur PO</th>
                   <th className="px-6 py-3 text-right">Aksi Pembayaran Vendor</th>
                 </tr>
@@ -277,7 +301,7 @@ export default function FinancePayablesPage() {
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
                         Memuat data Purchase Order...
@@ -286,69 +310,150 @@ export default function FinancePayablesPage() {
                   </tr>
                 ) : purchaseOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm">
                       Belum ada Purchase Order yang tercatat.
                     </td>
                   </tr>
-                ) : purchaseOrders.map((po) => (
-                  <tr key={po.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3.5">
-                      <Link
-                        href={`/admin/procurement/${po.id}`}
-                        className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-sm"
-                      >
-                        {po.po_number} <ExternalLink className="w-3 h-3" />
-                      </Link>
-                      <div className="text-[11px] text-slate-400">{formatDate(po.order_date)}</div>
-                    </td>
+                ) : purchaseOrders.map((po) => {
+                  const dueInfo = calculatePODueDateInfo(po);
+                  const payStatus = getPOPaymentStatusFromCash(po, cashTxs);
 
-                    <td className="px-6 py-3.5 font-semibold text-slate-800">{po.distributor_name}</td>
-
-                    <td className="px-6 py-3.5 text-xs text-slate-600">
-                      {(Array.isArray(po.items) ? po.items : []).map((item, idx) => (
-                        <div key={idx}>
-                          &bull; {item.product_name} (<span className="font-mono text-emerald-700 font-bold">{formatKg(item.qty_ordered_kg)}</span>)
-                        </div>
-                      ))}
-                      {(!Array.isArray(po.items) || po.items.length === 0) && (
-                        <span className="text-slate-400 italic">Tidak ada item</span>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-3.5 font-mono font-bold text-slate-900">{formatIDR(po.total_amount)}</td>
-
-                    <td className="px-6 py-3.5">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
-                        po.status === 'DIBATALKAN' || po.status === 'CANCELLED'
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : po.status === 'DIKIRIM' || po.status === 'DITERIMA'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-purple-50 text-purple-700 border-purple-200'
-                      }`}>
-                        {po.status}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-3.5 text-right">
-                      {po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
-                        <span className="text-xs text-slate-500 font-semibold flex items-center justify-end gap-1">
-                          <span className="w-2 h-2 rounded-full bg-rose-500"></span> PO Dibatalkan (Void)
-                        </span>
-                      ) : po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? (
-                        <span className="text-xs text-emerald-600 font-semibold flex items-center justify-end gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Pembayaran Lunas
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => setSelectedPOForPayment(po)}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-sm transition-all"
+                  return (
+                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-3.5">
+                        <Link
+                          href={`/admin/procurement/${po.id}`}
+                          className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-sm"
                         >
-                          <CreditCard className="w-3.5 h-3.5" /> Bayar Vendor PO
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {po.po_number} <ExternalLink className="w-3 h-3" />
+                        </Link>
+                        <div className="text-[11px] text-slate-400">{formatDate(po.order_date)}</div>
+                      </td>
+
+                      <td className="px-6 py-3.5 font-semibold text-slate-800">{po.distributor_name}</td>
+
+                      <td className="px-6 py-3.5 text-xs text-slate-600">
+                        {(Array.isArray(po.items) ? po.items : []).map((item, idx) => (
+                          <div key={idx}>
+                            &bull; {item.product_name} (<span className="font-mono text-emerald-700 font-bold">{formatKg(item.qty_ordered_kg)}</span>)
+                          </div>
+                        ))}
+                        {(!Array.isArray(po.items) || po.items.length === 0) && (
+                          <span className="text-slate-400 italic">Tidak ada item</span>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-3.5 font-mono font-bold text-slate-900">{formatIDR(po.total_amount)}</td>
+
+                      {/* Kolom Jatuh Tempo */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{formatDate(dueInfo.dueDateStr)}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          TOP: {po.payment_terms_days || 30} Hari
+                        </div>
+                      </td>
+
+                      {/* Kolom Sisa Hari */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lunas Selesai
+                          </span>
+                        ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
+                          <span className="text-slate-400 text-xs">-</span>
+                        ) : dueInfo.isOverdue ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}
+                          </span>
+                        ) : dueInfo.isDueToday ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" /> Hari Ini
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                            dueInfo.diffDays <= 7
+                              ? 'text-amber-800 bg-amber-50 border-amber-200'
+                              : 'text-blue-700 bg-blue-50 border-blue-200'
+                          }`}>
+                            <Clock className="w-3 h-3" /> {dueInfo.displayText}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Kolom Status Bayar (dari Manajemen Kas) */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
+                            </span>
+                            {payStatus.bankName && (
+                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
+                              </div>
+                            )}
+                          </div>
+                        ) : payStatus.status === 'PARTIAL' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
+                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                            </span>
+                            <div className="text-[10px] text-amber-900 font-mono mt-0.5">
+                              {formatIDR(payStatus.totalPaid)} / {formatIDR(po.total_amount)}
+                            </div>
+                          </div>
+                        ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                            <XCircle className="w-3 h-3" /> BATAL
+                          </span>
+                        ) : (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR
+                            </span>
+                            <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                              Sisa: {formatIDR(po.total_amount)}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-3.5">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
+                          po.status === 'DIBATALKAN' || po.status === 'CANCELLED'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : po.status === 'DIKIRIM' || po.status === 'DITERIMA'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}>
+                          {po.status}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-3.5 text-right">
+                        {po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
+                          <span className="text-xs text-slate-500 font-semibold flex items-center justify-end gap-1">
+                            <span className="w-2 h-2 rounded-full bg-rose-500"></span> PO Dibatalkan (Void)
+                          </span>
+                        ) : po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? (
+                          <span className="text-xs text-emerald-600 font-semibold flex items-center justify-end gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Pembayaran Selesai
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-sm transition-all"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" /> Bayar Vendor PO
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

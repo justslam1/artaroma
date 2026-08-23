@@ -6,11 +6,33 @@ import { AdminTopNav } from '@/components/navigation/admin-topnav';
 import { CreatePOModal, GoodsReceiptModal } from '@/components/admin/po-modal';
 import { POPDFModal } from '@/components/common/po-pdf-modal';
 import { initialPurchaseOrders, initialBatches, initialDistributors, initialProducts } from '@/lib/mock-data';
-import { PurchaseOrder, StockBatch, Product, Distributor } from '@/lib/types';
+import { PurchaseOrder, StockBatch, Product, Distributor, CashTransaction } from '@/lib/types';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
-import { ShoppingBag, Plus, FileText, PackageCheck, CheckCircle2, Eye, EyeOff, Lock, ExternalLink, XCircle, FileSpreadsheet } from 'lucide-react';
+import {
+  ShoppingBag,
+  Plus,
+  FileText,
+  PackageCheck,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Lock,
+  ExternalLink,
+  XCircle,
+  FileSpreadsheet,
+  Clock,
+  AlertTriangle,
+  CreditCard,
+  Building2,
+  Calendar,
+} from 'lucide-react';
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import {
+  getStoredCashTransactions,
+  calculatePODueDateInfo,
+  getPOPaymentStatusFromCash,
+} from '@/lib/cash-store';
 
 export default function ProcurementPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(initialPurchaseOrders);
@@ -33,6 +55,18 @@ export default function ProcurementPage() {
   });
 
   const [readPOIds, setReadPOIds] = useState<string[]>([]);
+  const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
+
+  useEffect(() => {
+    setCashTxs(getStoredCashTransactions());
+    const handleCashUpdate = () => {
+      setCashTxs(getStoredCashTransactions());
+    };
+    window.addEventListener('artaroma_cash_updated', handleCashUpdate);
+    return () => {
+      window.removeEventListener('artaroma_cash_updated', handleCashUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -312,13 +346,19 @@ export default function ProcurementPage() {
                   <th className="px-6 py-3">Suplier</th>
                   <th className="px-6 py-3">Item Pesanan</th>
                   {showFinancialColumn && <th className="px-6 py-3">Total Nilai</th>}
-                  <th className="px-6 py-3">STATUS PO</th>
+                  <th className="px-6 py-3">Jatuh Tempo</th>
+                  <th className="px-6 py-3">Sisa Hari</th>
+                  <th className="px-6 py-3">Status Bayar (Kas)</th>
+                  <th className="px-6 py-3">STATUS ALUR PO</th>
                   <th className="px-6 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {purchaseOrders.map((po) => {
                   const isRead = readPOIds.includes(po.id);
+                  const dueInfo = calculatePODueDateInfo(po);
+                  const payStatus = getPOPaymentStatusFromCash(po, cashTxs);
+
                   return (
                     <tr
                       key={po.id}
@@ -381,6 +421,82 @@ export default function ProcurementPage() {
                           )}
                         </td>
                       )}
+
+                      {/* Kolom Jatuh Tempo */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{formatDate(dueInfo.dueDateStr)}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          TOP: {po.payment_terms_days || 30} Hari
+                        </div>
+                      </td>
+
+                      {/* Kolom Sisa Hari */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lunas Selesai
+                          </span>
+                        ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
+                          <span className="text-slate-400 text-xs">-</span>
+                        ) : dueInfo.isOverdue ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}
+                          </span>
+                        ) : dueInfo.isDueToday ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" /> Hari Ini
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                            dueInfo.diffDays <= 7
+                              ? 'text-amber-800 bg-amber-50 border-amber-200'
+                              : 'text-blue-700 bg-blue-50 border-blue-200'
+                          }`}>
+                            <Clock className="w-3 h-3" /> {dueInfo.displayText}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Kolom Status Bayar (dari Manajemen Kas) */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
+                            </span>
+                            {payStatus.bankName && (
+                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
+                              </div>
+                            )}
+                          </div>
+                        ) : payStatus.status === 'PARTIAL' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
+                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                            </span>
+                            <div className="text-[10px] text-amber-900 font-mono mt-0.5">
+                              {formatIDR(payStatus.totalPaid)} / {formatIDR(po.total_amount)}
+                            </div>
+                          </div>
+                        ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                            <XCircle className="w-3 h-3" /> BATAL
+                          </span>
+                        ) : (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR
+                            </span>
+                            <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                              Sisa: {formatIDR(po.total_amount)}
+                            </div>
+                          </div>
+                        )}
+                      </td>
 
                       <td className="px-6 py-3.5">
                         {getPOStatusBadge(po)}

@@ -480,3 +480,103 @@ export function deleteCashTransaction(txId: string): void {
   saveStoredCashTransactions(updatedTxs);
   saveStoredCashAccounts(updatedAccs);
 }
+
+export interface PODueDateInfo {
+  dueDateStr: string;
+  diffDays: number;
+  isOverdue: boolean;
+  isDueToday: boolean;
+  displayText: string;
+}
+
+export interface POPaymentCashStatus {
+  status: 'PAID' | 'PARTIAL' | 'UNPAID' | 'CANCELLED';
+  totalPaid: number;
+  remaining: number;
+  bankName?: string;
+  lastPayDate?: string;
+  txNumbers: string[];
+}
+
+export function calculatePODueDateInfo(po: PurchaseOrder): PODueDateInfo {
+  let dueDateStr = po.due_date;
+  if (!dueDateStr) {
+    const orderD = po.order_date ? new Date(po.order_date) : new Date();
+    const terms = Number(po.payment_terms_days) || 30;
+    const d = new Date(orderD);
+    d.setDate(d.getDate() + terms);
+    dueDateStr = d.toISOString().split('T')[0];
+  }
+
+  const dueD = new Date(dueDateStr);
+  const now = new Date();
+  const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d2 = new Date(dueD.getFullYear(), dueD.getMonth(), dueD.getDate());
+  const diffTime = d2.getTime() - d1.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let displayText = '';
+  if (diffDays > 0) {
+    displayText = `${diffDays} hari lagi`;
+  } else if (diffDays === 0) {
+    displayText = 'Hari ini';
+  } else {
+    displayText = `Overdue ${Math.abs(diffDays)} hari`;
+  }
+
+  return {
+    dueDateStr,
+    diffDays,
+    isOverdue: diffDays < 0,
+    isDueToday: diffDays === 0,
+    displayText,
+  };
+}
+
+export function getPOPaymentStatusFromCash(
+  po: PurchaseOrder,
+  cashTxs?: CashTransaction[]
+): POPaymentCashStatus {
+  if (po.status === 'DIBATALKAN' || po.status === 'CANCELLED') {
+    return {
+      status: 'CANCELLED',
+      totalPaid: 0,
+      remaining: 0,
+      txNumbers: [],
+    };
+  }
+
+  const txs = cashTxs || getStoredCashTransactions();
+  const poNumClean = (po.po_number || '').trim().toLowerCase();
+
+  // Find all OUT / PEMBELIAN_PO transactions matching this PO
+  const matchingTxs = txs.filter((tx) => {
+    if (tx.status !== 'VERIFIED') return false;
+    if (tx.tx_type !== 'OUT' && tx.category !== 'PEMBELIAN_PO') return false;
+    const ref = (tx.reference_number || '').toLowerCase();
+    const notes = (tx.notes || '').toLowerCase();
+    return poNumClean ? ref.includes(poNumClean) || notes.includes(poNumClean) : false;
+  });
+
+  const totalPaid = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const poTotal = Number(po.total_amount) || 0;
+
+  // Fallback: If PO status itself is DIKIRIM / DITERIMA, it is marked paid
+  const isPaidByStatus = po.status === 'DIKIRIM' || po.status === 'DITERIMA';
+  const isFullyPaid = (totalPaid >= poTotal && poTotal > 0) || (totalPaid === 0 && isPaidByStatus);
+  const isPartial = totalPaid > 0 && totalPaid < poTotal;
+
+  const sortedTxs = [...matchingTxs].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  const latestTx = sortedTxs[0];
+
+  return {
+    status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
+    totalPaid: totalPaid > 0 ? totalPaid : isPaidByStatus ? poTotal : 0,
+    remaining: isFullyPaid ? 0 : Math.max(0, poTotal - totalPaid),
+    bankName: latestTx?.account_name,
+    lastPayDate: latestTx?.date,
+    txNumbers: matchingTxs.map((t) => t.tx_number),
+  };
+}

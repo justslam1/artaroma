@@ -208,6 +208,7 @@ export interface PurchaseOrder {
   status: POStatus;
   payment_method?: 'TUNAI' | 'KREDIT';
   payment_terms_days?: number;
+  due_date?: string;
   currency?: string;
   exchange_rate?: number;
   foreign_total_amount?: number;
