@@ -23,6 +23,7 @@ import {
   CreditCard,
   Building2,
   XCircle,
+  DollarSign,
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -283,6 +284,24 @@ export default function SalesOrdersPage() {
 
   const showFinancialColumn = canViewFinancials && !isFinancialHidden;
 
+  // Calculate summary figures for Sales Orders financial cards
+  const totalSemuaSO = salesOrders.reduce(
+    (sum, so: any) => sum + Number(so.grand_total || so.total_goods_amount || so.total_amount || 0),
+    0
+  );
+  const totalSudahDibayar = salesOrders.reduce((sum, so: any) => {
+    const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
+    return sum + paid;
+  }, 0);
+  const totalSisaPiutang = Math.max(0, totalSemuaSO - totalSudahDibayar);
+  const countSOWithPiutang = salesOrders.filter((so: any) => {
+    const soTotal = Number(so.grand_total || so.total_goods_amount || so.total_amount || 0);
+    const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
+    return Math.max(0, soTotal - paid) > 0;
+  }).length;
+
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
@@ -374,6 +393,56 @@ export default function SalesOrdersPage() {
             </button>
           )}
         </div>
+
+        {/* 3 Summary Cards */}
+        {canViewFinancials && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Sisa Piutang Customer Perlu Ditagih</div>
+                <div className="text-xl font-bold font-mono text-purple-700 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSisaPiutang)}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {countSOWithPiutang} SO memiliki sisa piutang
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Pembayaran Diterima (Kas Masuk)</div>
+                <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSudahDibayar)}
+                </div>
+                <div className="text-[10px] text-emerald-600 mt-0.5 font-medium">
+                  Tercatat otomatis di Buku Kas Besar (BKM)
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Nilai Penjualan (Omset SO)</div>
+                <div className="text-xl font-bold font-mono text-slate-800 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSemuaSO)}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {salesOrders.length} Total Pesanan Sales Order
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sales Orders List Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
