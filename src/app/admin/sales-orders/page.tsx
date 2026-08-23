@@ -495,9 +495,9 @@ export default function SalesOrdersPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                   <th className="px-6 py-3">No. SO / Tanggal</th>
-                  <th className="px-6 py-3">Customer B2B</th>
-                  <th className="px-6 py-3">Rincian Item Dipesan</th>
-                  {showFinancialColumn && <th className="px-6 py-3">Total Nilai Tagihan</th>}
+                  <th className="px-6 py-3">Customer</th>
+                  <th className="px-6 py-3">Item Dipesan</th>
+                  {showFinancialColumn && <th className="px-6 py-3">Total Nilai</th>}
                   <th className="px-6 py-3">Jatuh Tempo</th>
                   <th className="px-6 py-3">Sisa Hari</th>
                   <th className="px-6 py-3">Status Bayar (Kas)</th>
