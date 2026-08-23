@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { batch_updates } = body; // Array of { id, current_qty_kg, notes }
+    const { batch_updates, adjusted_by, approved_by } = body; // Array of { id, current_qty_kg, notes }
 
     if (!batch_updates || !Array.isArray(batch_updates) || batch_updates.length === 0) {
       return NextResponse.json(
@@ -188,6 +188,10 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const auditorName = approved_by
+      ? `${adjusted_by || 'Staff Gudang'} (Disetujui: ${approved_by})`
+      : (adjusted_by || 'SUPER ADMIN HQ');
 
     try {
       for (const update of batch_updates) {
@@ -217,7 +221,7 @@ export async function PUT(req: NextRequest) {
             await executeQuery(
               `INSERT INTO stock_opname_history 
               (id, batch_id, product_id, variant_sku, batch_number, system_qty_kg, physical_qty_kg, difference_qty_kg, notes, created_at, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'ADMIN GUDANG')`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
               [
                 historyId,
                 id,
@@ -227,7 +231,8 @@ export async function PUT(req: NextRequest) {
                 oldQty,
                 qty,
                 diff,
-                notes || 'Penyelarasan stok opname'
+                notes || 'Penyelarasan stok opname',
+                auditorName,
               ]
             );
 
