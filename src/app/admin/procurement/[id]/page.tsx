@@ -1903,9 +1903,17 @@ export default function PODetailPage() {
         {/* Item Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
-            <h2 className="text-base font-bold text-slate-800">
-              Rincian Item Pesanan Purchase Order ({po.items.length})
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-base font-bold text-slate-800">
+                Rincian Item Pesanan Purchase Order ({po.items.length})
+              </h2>
+              {po.shipments && po.shipments.length > 1 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300 px-2.5 py-0.5 rounded-full shadow-2xs animate-in fade-in">
+                  <Truck className="w-3.5 h-3.5 text-blue-600" />
+                  Pengiriman Multi-Trip ({po.shipments.length} Trip)
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
                 Total Barang: {formatKg(po.items.reduce((s, it) => s + (it.qty_ordered_kg || 0), 0))}
@@ -1977,14 +1985,21 @@ export default function PODetailPage() {
                       {/* Material */}
                       <td className="px-6 py-4">
                         <div className="font-bold text-slate-800">{item.product_name}</div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">
-                          {item.qty_ordered_kg % 25 === 0
-                            ? `Kemasan 25 Kg × ${item.qty_ordered_kg / 25} unit`
-                            : item.qty_ordered_kg % 5 === 0
-                            ? `Kemasan 5 Kg × ${item.qty_ordered_kg / 5} unit`
-                            : item.qty_ordered_kg % 1 === 0
-                            ? `Kemasan 1 Kg × ${item.qty_ordered_kg} unit`
-                            : `${formatKg(item.qty_ordered_kg)} total`}
+                        <div className="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>
+                            {item.qty_ordered_kg % 25 === 0
+                              ? `Kemasan 25 Kg × ${item.qty_ordered_kg / 25} unit`
+                              : item.qty_ordered_kg % 5 === 0
+                              ? `Kemasan 5 Kg × ${item.qty_ordered_kg / 5} unit`
+                              : item.qty_ordered_kg % 1 === 0
+                              ? `Kemasan 1 Kg × ${item.qty_ordered_kg} unit`
+                              : `${formatKg(item.qty_ordered_kg)} total`}
+                          </span>
+                          {po.shipments && po.shipments.length > 1 && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded">
+                              <Truck className="w-2.5 h-2.5 text-blue-600" /> Multi-Trip ({po.shipments.length} Trip)
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -1996,9 +2011,14 @@ export default function PODetailPage() {
                       {/* Batch Number FEFO */}
                       <td className="px-6 py-4 text-xs text-center">
                         {displayReceivedKg > 0 ? (
-                          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-mono font-bold text-[11px] inline-block shadow-2xs">
-                            {itemBatchCode}
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-mono font-bold text-[11px] inline-block shadow-2xs">
+                              {itemBatchCode}
+                            </span>
+                            {po.shipments && po.shipments.length > 1 && (
+                              <span className="text-[9px] text-indigo-600 font-semibold">Multi-Trip Batch</span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-400 italic">Menunggu Penerimaan</span>
                         )}
@@ -2007,25 +2027,36 @@ export default function PODetailPage() {
                       {/* Dikirim */}
                       <td className="px-6 py-4 text-center">
                         {displayShippedKg > 0 ? (
-                          displayShippedKg < item.qty_ordered_kg ? (
-                            <div className="flex flex-col items-center">
-                              <span className="text-blue-800 font-mono font-bold text-sm">
-                                {formatKg(displayShippedKg)}
-                              </span>
+                          <div className="flex flex-col items-center">
+                            <span className="text-slate-800 font-mono font-bold">
+                              {formatKg(displayShippedKg)}
+                            </span>
+                            {displayShippedKg < item.qty_ordered_kg ? (
                               <span className="text-[10px] text-blue-600 font-semibold mt-0.5">
                                 Parsial (Sisa {formatKg(item.qty_ordered_kg - displayShippedKg)})
                               </span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center">
-                              <span className="text-slate-800 font-mono font-bold">
-                                {formatKg(displayShippedKg)}
-                              </span>
+                            ) : (
                               <span className="text-[10px] text-slate-400 mt-0.5">
                                 Lengkap ✓
                               </span>
-                            </div>
-                          )
+                            )}
+
+                            {/* Multi-trip breakdown per trip */}
+                            {po.shipments && po.shipments.length > 1 && (
+                              <div className="flex flex-wrap items-center justify-center gap-1 mt-1.5 pt-1 border-t border-slate-100 text-[10px]">
+                                {po.shipments.map((s, sIdx) => {
+                                  const itemInTrip = s.items.find((si: any) => si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id);
+                                  const tripQty = itemInTrip ? itemInTrip.qty_shipped_kg : 0;
+                                  if (tripQty <= 0) return null;
+                                  return (
+                                    <span key={s.id || sIdx} className="bg-slate-100 text-slate-700 font-mono px-1.5 py-0.5 rounded border border-slate-200 text-[9px]" title={`Trip ${s.trip_number || sIdx + 1}: ${s.surat_jalan_number || ''}`}>
+                                      Trip {s.trip_number || sIdx + 1}: {formatKg(tripQty)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
@@ -2034,25 +2065,47 @@ export default function PODetailPage() {
                       {/* Diterima */}
                       <td className="px-6 py-4 text-center">
                         {displayReceivedKg > 0 ? (
-                          displayReceivedKg < item.qty_ordered_kg ? (
-                            <div className="flex flex-col items-center">
-                              <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs">
-                                {formatKg(displayReceivedKg)}
-                              </span>
-                              <span className="text-[10px] text-amber-600 font-semibold mt-0.5">
-                                Parsial (Sisa {formatKg(item.qty_ordered_kg - displayReceivedKg)})
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center">
-                              <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs">
-                                {formatKg(displayReceivedKg)}
-                              </span>
-                              <span className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                                Lengkap ✓
-                              </span>
-                            </div>
-                          )
+                          <div className="flex flex-col items-center">
+                            <span className={`px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs ${
+                              displayReceivedKg < item.qty_ordered_kg
+                                ? 'text-amber-700 bg-amber-50 border border-amber-200'
+                                : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                            }`}>
+                              {formatKg(displayReceivedKg)}
+                            </span>
+                            <span className={`text-[10px] font-semibold mt-0.5 ${
+                              displayReceivedKg < item.qty_ordered_kg ? 'text-amber-600' : 'text-emerald-600'
+                            }`}>
+                              {displayReceivedKg < item.qty_ordered_kg
+                                ? `Parsial (Sisa ${formatKg(item.qty_ordered_kg - displayReceivedKg)})`
+                                : 'Lengkap ✓'}
+                            </span>
+
+                            {/* Multi-trip received breakdown */}
+                            {po.shipments && po.shipments.length > 1 && (
+                              <div className="flex flex-wrap items-center justify-center gap-1 mt-1.5 pt-1 border-t border-slate-100 text-[10px]">
+                                {po.shipments.map((s, sIdx) => {
+                                  const itemInTrip = s.items.find((si: any) => si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id);
+                                  const tripQty = itemInTrip ? itemInTrip.qty_shipped_kg : 0;
+                                  if (tripQty <= 0) return null;
+                                  const isTripReceived = s.status === 'DITERIMA';
+                                  return (
+                                    <span
+                                      key={s.id || sIdx}
+                                      className={`font-mono px-1.5 py-0.5 rounded border text-[9px] ${
+                                        isTripReceived
+                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold'
+                                          : 'bg-amber-50 text-amber-800 border-amber-200 italic'
+                                      }`}
+                                      title={`Trip ${s.trip_number || sIdx + 1}: ${isTripReceived ? 'Diterima' : 'Belum Diterima'}`}
+                                    >
+                                      Trip {s.trip_number || sIdx + 1}: {formatKg(tripQty)} {isTripReceived ? '✓' : '⏳'}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
