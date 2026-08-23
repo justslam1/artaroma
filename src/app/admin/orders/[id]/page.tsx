@@ -18,7 +18,7 @@ import { SuratJalanPDFModal } from '@/components/common/surat-jalan-pdf-modal';
 import { PrintLabelModal } from '@/components/common/print-label-modal';
 import { PrintShippingAddressModal } from '@/components/common/print-shipping-address-modal';
 import { SalesOrder, Invoice, PurchaseOrder, Customer } from '@/lib/types';
-import { formatIDR, formatKg } from '@/lib/utils';
+import { formatIDR, formatKg, formatDate, formatDateTime } from '@/lib/utils';
 import {
   getStoredOrders,
   getStoredInvoices,
@@ -1305,7 +1305,7 @@ export default function OrderDetailPage() {
     {
       key: 'DIAJUKAN',
       title: 'Diajukan',
-      time: order.order_date,
+      time: order.order_date ? formatDateTime(order.order_date) : '-',
       actor: `Oleh ${soCreatorName.toUpperCase()}`,
     },
     {
