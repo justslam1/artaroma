@@ -32,6 +32,9 @@ import {
   Search,
   RotateCcw,
   Truck,
+  Upload,
+  SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -68,12 +71,14 @@ export default function ProcurementPage() {
   const [selectedPOForPayment, setSelectedPOForPayment] = useState<PurchaseOrder | null>(null);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
-  // Filter States
+  // Filter States (Enterprise Grid Theme)
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
   const [distributorFilter, setDistributorFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('ALL');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
   const [multiTripOnly, setMultiTripOnly] = useState(false);
 
   useEffect(() => {
@@ -321,7 +326,12 @@ export default function ProcurementPage() {
       }
     }
 
-    // 6. Multi-Trip Filter
+    // 6. Payment Method Filter
+    if (paymentMethodFilter !== 'ALL' && po.payment_method) {
+      if (po.payment_method !== paymentMethodFilter) return false;
+    }
+
+    // 7. Multi-Trip Filter
     if (multiTripOnly) {
       const isMulti = (po as any).is_multi_trip || (Array.isArray(po.shipments) && po.shipments.length > 1);
       if (!isMulti) return false;
@@ -336,6 +346,26 @@ export default function ProcurementPage() {
   const countDiterimaPO = purchaseOrders.filter((p) => p.status === 'DITERIMA').length;
   const countCancelledPO = purchaseOrders.filter((p) => p.status === 'CANCELLED' || p.status === 'DIBATALKAN').length;
   const countMultiTripPO = purchaseOrders.filter((p: any) => p.is_multi_trip || (Array.isArray(p.shipments) && p.shipments.length > 1)).length;
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('ALL');
+    setPaymentFilter('ALL');
+    setDistributorFilter('ALL');
+    setDateFilter('ALL');
+    setPaymentMethodFilter('ALL');
+    setMultiTripOnly(false);
+  };
+
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    statusFilter !== 'ALL' ||
+    paymentFilter !== 'ALL' ||
+    distributorFilter !== 'ALL' ||
+    dateFilter !== 'ALL' ||
+    paymentMethodFilter !== 'ALL' ||
+    multiTripOnly
+  );
 
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
@@ -586,190 +616,214 @@ export default function ProcurementPage() {
           </div>
         )}
 
-        {/* Filter Toolbar & Status Tab Pills */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3.5">
-          {/* Top Row: Search & Dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Search */}
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari No. PO, Suplier, Bibit..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all font-medium"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Suplier / Distributor Filter */}
-            <div className="relative">
-              <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <select
-                value={distributorFilter}
-                onChange={(e) => setDistributorFilter(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
-              >
-                <option value="ALL">🏢 Semua Suplier / Vendor</option>
-                {distributors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Payment / Debt Filter */}
-            <div className="relative">
-              <CreditCard className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <select
-                value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
-              >
-                <option value="ALL">💵 Semua Status Hutang</option>
-                <option value="HAS_DEBT">⚠️ Memiliki Sisa Hutang (Perlu Bayar)</option>
-                <option value="PAID">✅ Lunas Terbayar (BKK)</option>
-              </select>
-            </div>
-
-            {/* Date Filter & Multi-Trip & Reset */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
-                >
-                  <option value="ALL">📅 Semua Tanggal</option>
-                  <option value="THIS_MONTH">Bulan Ini</option>
-                  <option value="LAST_MONTH">Bulan Lalu</option>
-                </select>
+        {/* Enterprise Filter Panel (Theme matching reference) */}
+        {isFilterOpen ? (
+          <div className="bg-white border border-gray-200 rounded-xl shadow-xs p-5 space-y-4">
+            {/* Row 1 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Suplier / Vendor */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Suplier / Vendor</label>
+                <div className="relative">
+                  <select
+                    value={distributorFilter}
+                    onChange={(e) => setDistributorFilter(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih suplier</option>
+                    {distributors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
               </div>
 
+              {/* Tanggal */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tanggal</label>
+                <div className="relative">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih periode tanggal</option>
+                    <option value="THIS_MONTH">Bulan Ini</option>
+                    <option value="LAST_MONTH">Bulan Lalu</option>
+                  </select>
+                  <Calendar className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Nomor Pesanan / PO / Bibit */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nomor Pesanan</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Ketik nomor PO / bibit"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium pr-8"
+                  />
+                  {searchTerm ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <Search className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  )}
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+                <div className="relative">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih status</option>
+                    <option value="BUAT_EMAIL">✉️ 1. Diajukan ({countDiajukanPO})</option>
+                    <option value="DIKIRIM">🚚 2. Dikirim Vendor ({countDikirimPO})</option>
+                    <option value="DITERIMA">📦 3. Diterima Gudang ({countDiterimaPO})</option>
+                    <option value="CANCELLED">🔴 Dibatalkan ({countCancelledPO})</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Tipe Pengiriman Multi-Trip */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tipe Pengiriman</label>
+                <div className="relative">
+                  <select
+                    value={multiTripOnly ? 'MULTI_TRIP' : 'ALL'}
+                    onChange={(e) => setMultiTripOnly(e.target.value === 'MULTI_TRIP')}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih tipe pengiriman</option>
+                    <option value="MULTI_TRIP">🚛 Multi-Trip / Parsial ({countMultiTripPO})</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Status Hutang */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status Hutang</label>
+                <div className="relative">
+                  <select
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih status hutang</option>
+                    <option value="HAS_DEBT">⚠️ Ada Sisa Hutang (Perlu Bayar)</option>
+                    <option value="PAID">✅ Lunas Terbayar (BKK)</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Metode Pembayaran */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Metode Pembayaran</label>
+                <div className="relative">
+                  <select
+                    value={paymentMethodFilter}
+                    onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium pr-8"
+                  >
+                    <option value="ALL">Pilih metode pembayaran</option>
+                    <option value="TUNAI">TUNAI / CASH</option>
+                    <option value="TEMPO">TEMPO / TERMIN VENDOR</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Action Row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setMultiTripOnly((prev) => !prev)}
-                className={`px-2.5 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
-                  multiTripOnly
-                    ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
-                    : 'bg-gray-50 text-slate-600 hover:bg-gray-100 border-gray-200'
-                }`}
-                title="Filter Hanya PO yang Dikirim Multi-Trip / Parsial"
+                onClick={() => setIsFilterOpen(false)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Truck className="w-3.5 h-3.5" />
-                Multi-Trip ({countMultiTripPO})
+                <X className="w-3.5 h-3.5" /> Tutup Semua Filter
               </button>
 
-              {(searchTerm || statusFilter !== 'ALL' || paymentFilter !== 'ALL' || distributorFilter !== 'ALL' || dateFilter !== 'ALL' || multiTripOnly) && (
+              <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
+                {canUserExportXLSX(currentUser) && (
+                  <button
+                    type="button"
+                    onClick={() => exportPurchaseOrdersToXLSX(filteredPOs)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" /> Ekspor
+                  </button>
+                )}
+
+                <span className="text-gray-300">|</span>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setStatusFilter('ALL');
-                    setPaymentFilter('ALL');
-                    setDistributorFilter('ALL');
-                    setDateFilter('ALL');
-                    setMultiTripOnly(false);
-                  }}
-                  className="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-2xs"
-                  title="Reset Semua Filter"
+                  onClick={handleResetFilters}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => {}}
+                  className="text-xs font-bold text-blue-600 border border-blue-500 hover:bg-blue-50 hover:border-blue-600 px-8 py-2 rounded-lg transition-all shadow-2xs cursor-pointer"
+                >
+                  Cari
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* Bottom Row: Status Tab Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pt-2.5 border-t border-gray-100 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'ALL'
-                  ? 'bg-slate-800 text-white shadow-xs'
-                  : 'bg-gray-100 text-slate-600 hover:bg-gray-200'
-              }`}
-            >
-              Semua
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'ALL' ? 'bg-white/25 text-white' : 'bg-gray-200 text-slate-700'}`}>
-                {countAllPO}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter('BUAT_EMAIL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'BUAT_EMAIL'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
-              }`}
-            >
-              ✉️ 1. Diajukan
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'BUAT_EMAIL' ? 'bg-white/25 text-white' : 'bg-blue-200 text-blue-900'}`}>
-                {countDiajukanPO}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter('DIKIRIM')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'DIKIRIM'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-              }`}
-            >
-              🚚 2. Dikirim Vendor
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DIKIRIM' ? 'bg-white/25 text-white' : 'bg-amber-200 text-amber-900'}`}>
-                {countDikirimPO}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter('DITERIMA')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'DITERIMA'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-              }`}
-            >
-              📦 3. Diterima Gudang
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DITERIMA' ? 'bg-white/25 text-white' : 'bg-emerald-200 text-emerald-900'}`}>
-                {countDiterimaPO}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter('CANCELLED')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === 'CANCELLED'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
-              }`}
-            >
-              🔴 Dibatalkan
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'CANCELLED' ? 'bg-white/25 text-white' : 'bg-rose-200 text-rose-900'}`}>
-                {countCancelledPO}
-              </span>
-            </button>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-xl p-3.5 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(true)}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 cursor-pointer bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-all"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Buka Panel Filter
+              </button>
+              {hasActiveFilters && (
+                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
+                  Filter Aktif ({filteredPOs.length} dari {purchaseOrders.length} PO)
+                </span>
+              )}
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" /> Reset
+              </button>
+            )}
           </div>
-        </div>
+        )}
 
         {/* PO Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
