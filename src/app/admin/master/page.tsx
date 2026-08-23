@@ -84,8 +84,14 @@ import {
   saveThemeSettings,
   resetThemeSettings,
 } from '@/lib/theme-store';
+import {
+  getStoredDisposalReasons,
+  saveStoredDisposalReasons,
+  DisposalReason,
+  DEFAULT_DISPOSAL_REASONS,
+} from '@/lib/disposal-reason-store';
 
-type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config' | 'appearance';
+type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config' | 'appearance' | 'disposal';
 
 const TAB_LABELS: Record<string, string> = {
   products: 'PRODUK',
@@ -98,6 +104,7 @@ const TAB_LABELS: Record<string, string> = {
   pricelist: 'PRICELIST UMUM',
   config: 'PENGATURAN',
   appearance: 'TAMPILAN & TEMA',
+  disposal: 'PEMBUANGAN',
 };
 
 export default function MasterDataPage() {
@@ -286,6 +293,13 @@ export default function MasterDataPage() {
   const [appUsers, setAppUsers] = useState<AppUser[]>(initialAppUsers);
   const [batches, setBatches] = useState<any[]>([]);
 
+  // Disposal Reasons states
+  const [disposalReasons, setDisposalReasons] = useState<DisposalReason[]>([]);
+  const [isDisposalReasonModalOpen, setIsDisposalReasonModalOpen] = useState(false);
+  const [editingDisposalReason, setEditingDisposalReason] = useState<DisposalReason | null>(null);
+  const [disposalReasonForm, setDisposalReasonForm] = useState({ name: '', description: '' });
+  const [isDisposalReasonSubmitting, setIsDisposalReasonSubmitting] = useState(false);
+
   const tabs = [
     { key: 'products' as Tab, icon: Package, label: TAB_LABELS.products, count: products.length },
     { key: 'pricelist' as Tab, icon: Tag, label: TAB_LABELS.pricelist, count: products.length },
@@ -294,9 +308,25 @@ export default function MasterDataPage() {
     { key: 'couriers' as Tab, icon: Truck, label: TAB_LABELS.couriers, count: couriers.length },
     { key: 'users' as Tab, icon: ShieldCheck, label: TAB_LABELS.users, count: appUsers.length },
     { key: 'finance' as Tab, icon: Landmark, label: TAB_LABELS.finance, count: 0 },
+    { key: 'disposal' as Tab, icon: Trash2, label: TAB_LABELS.disposal, count: disposalReasons.length },
     { key: 'config' as Tab, icon: Settings, label: TAB_LABELS.config, count: 1 },
     { key: 'appearance' as Tab, icon: Palette, label: TAB_LABELS.appearance, count: 0 },
   ];
+
+  const fetchDisposalReasons = async () => {
+    try {
+      const res = await fetch('/api/disposal-reasons', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setDisposalReasons(json.data);
+        saveStoredDisposalReasons(json.data);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch disposal reasons from API, using store fallback:', err);
+    }
+    setDisposalReasons(getStoredDisposalReasons());
+  };
 
   const fetchPriceLogs = async () => {
     setPriceLogsLoading(true);
@@ -377,6 +407,7 @@ export default function MasterDataPage() {
     fetchCustomers();
     fetchDistributors();
     fetchCouriers();
+    fetchDisposalReasons();
 
     // Fetch company / warehouse settings
     fetch('/api/company-settings', { cache: 'no-store' })
@@ -388,6 +419,90 @@ export default function MasterDataPage() {
       })
       .catch((err) => console.warn('Failed to fetch settings in Master Data:', err));
   }, []);
+
+  const handleOpenAddDisposalReason = () => {
+    setEditingDisposalReason(null);
+    setDisposalReasonForm({ name: '', description: '' });
+    setIsDisposalReasonModalOpen(true);
+  };
+
+  const handleOpenEditDisposalReason = (reason: DisposalReason) => {
+    setEditingDisposalReason(reason);
+    setDisposalReasonForm({ name: reason.name, description: reason.description || '' });
+    setIsDisposalReasonModalOpen(true);
+  };
+
+  const handleSaveDisposalReason = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disposalReasonForm.name.trim()) {
+      alert('Nama alasan pembuangan wajib diisi.');
+      return;
+    }
+    setIsDisposalReasonSubmitting(true);
+    try {
+      if (editingDisposalReason) {
+        const res = await fetch('/api/disposal-reasons', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingDisposalReason.id,
+            name: disposalReasonForm.name,
+            description: disposalReasonForm.description,
+          }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          const updated = disposalReasons.map((r) =>
+            r.id === editingDisposalReason.id
+              ? { ...r, name: disposalReasonForm.name.trim(), description: disposalReasonForm.description.trim() }
+              : r
+          );
+          setDisposalReasons(updated);
+          saveStoredDisposalReasons(updated);
+        }
+      } else {
+        const res = await fetch('/api/disposal-reasons', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: disposalReasonForm.name,
+            description: disposalReasonForm.description,
+          }),
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          const updated = [...disposalReasons, json.data];
+          setDisposalReasons(updated);
+          saveStoredDisposalReasons(updated);
+        }
+      }
+      setIsDisposalReasonModalOpen(false);
+      fetchDisposalReasons();
+    } catch (err: any) {
+      alert('Gagal menyimpan alasan pembuangan: ' + err.message);
+    } finally {
+      setIsDisposalReasonSubmitting(false);
+    }
+  };
+
+  const handleDeleteDisposalReason = async (id: string, name: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus alasan pembuangan "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/disposal-reasons?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        const updated = disposalReasons.filter((r) => r.id !== id);
+        setDisposalReasons(updated);
+        saveStoredDisposalReasons(updated);
+      } else {
+        alert('Gagal menghapus: ' + (json.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Gagal menghapus: ' + err.message);
+    }
+  };
 
   React.useEffect(() => {
     if (selectedParentProductId && products.length > 0) {
@@ -3836,8 +3951,203 @@ export default function MasterDataPage() {
               </div>
             </div>
           )}
+
+          {/* TAB: Alasan Pembuangan Stok (Disposal Reasons) */}
+          {activeTab === 'disposal' && (
+            <div className="p-6 space-y-6">
+              {/* Header Info Banner */}
+              <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="p-3 bg-white/10 rounded-xl backdrop-blur-xs">
+                    <Trash2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-extrabold text-base tracking-tight">
+                      Master Data Alasan Pembuangan Stok (Barang Rusak / Expired / Sampel)
+                    </h2>
+                    <p className="text-white/80 text-xs mt-0.5">
+                      Kelola daftar alasan pembuangan yang digunakan saat menginput produk rusak, kadaluwarsa, tumpah, atau pengambilan sampel di gudang FEFO.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenAddDisposalReason}
+                  className="bg-white text-rose-700 hover:bg-rose-50 font-bold text-xs px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" /> Tambah Alasan Baru
+                </button>
+              </div>
+
+              {/* Search & Actions Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-2xs">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari alasan pembuangan..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-rose-500 transition-all"
+                  />
+                </div>
+                <div className="text-xs text-slate-500 font-medium">
+                  Total: <strong className="text-slate-800">{disposalReasons.length}</strong> Kategori Alasan
+                </div>
+              </div>
+
+              {/* Table of Reasons */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-gray-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                        <th className="px-4 py-3 w-12 text-center">No</th>
+                        <th className="px-4 py-3">Nama Alasan Pembuangan</th>
+                        <th className="px-4 py-3">Deskripsi / Indikasi Masalah</th>
+                        <th className="px-4 py-3 text-center w-28">Status</th>
+                        <th className="px-4 py-3 text-center w-28">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {disposalReasons
+                        .filter(
+                          (r) =>
+                            !searchTerm ||
+                            r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            (r.description && r.description.toLowerCase().includes(searchTerm.toLowerCase()))
+                        )
+                        .map((reason, idx) => (
+                          <tr key={reason.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-4 py-3.5 text-center text-slate-400 font-mono text-[11px]">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3.5 font-bold text-slate-900 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-rose-500" />
+                              {reason.name}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-600 leading-relaxed">
+                              {reason.description || <span className="text-slate-400 italic">Tidak ada deskripsi</span>}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3" /> Aktif
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditDisposalReason(reason)}
+                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+                                  title="Edit alasan pembuangan"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDisposalReason(reason.id, reason.name)}
+                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 transition-colors cursor-pointer"
+                                  title="Hapus alasan pembuangan"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      {disposalReasons.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs">
+                            Belum ada alasan pembuangan. Klik tombol &quot;Tambah Alasan Baru&quot; di atas.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
+
+      {/* MODAL: ADD / EDIT ALASAN PEMBUANGAN */}
+      {isDisposalReasonModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-rose-600 to-red-600 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-200" />
+                <h3 className="font-bold text-base">
+                  {editingDisposalReason ? 'Edit Alasan Pembuangan' : 'Tambah Alasan Pembuangan Baru'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDisposalReasonModalOpen(false)}
+                className="text-rose-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDisposalReason} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Alasan Pembuangan <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Rusak / Kontaminasi, Tumpah di Gudang, Sampel QC..."
+                  value={disposalReasonForm.name}
+                  onChange={(e) => setDisposalReasonForm({ ...disposalReasonForm, name: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-rose-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Deskripsi / Keterangan Indikasi Masalah (Opsional)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Jelaskan secara ringkas kapan alasan ini dipilih oleh staf gudang..."
+                  value={disposalReasonForm.description}
+                  onChange={(e) => setDisposalReasonForm({ ...disposalReasonForm, description: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDisposalReasonModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDisposalReasonSubmitting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isDisposalReasonSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" /> Simpan Alasan
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* DYNAMIC MODAL: ADD NEW DATA */}
       {isAddModalOpen && (

@@ -33,9 +33,15 @@ import {
   Database,
   AlertCircle,
   FileSpreadsheet,
+  Trash2,
 } from 'lucide-react';
 import { exportStockInventoryToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import {
+  getStoredDisposalReasons,
+  DisposalReason,
+  DEFAULT_DISPOSAL_REASONS,
+} from '@/lib/disposal-reason-store';
 
 export default function StockInventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -115,6 +121,21 @@ export default function StockInventoryPage() {
   });
   const [isRepackingSubmitting, setIsRepackingSubmitting] = useState(false);
 
+  // Stock Disposal Modal State
+  const [isDisposalOpen, setIsDisposalOpen] = useState(false);
+  const [disposalReasons, setDisposalReasons] = useState<DisposalReason[]>([]);
+  const [disposalForm, setDisposalForm] = useState({
+    batch_id: '',
+    qty_kg: 0.1,
+    reason_name: '',
+    notes: '',
+    disposed_at: new Date().toISOString().split('T')[0],
+  });
+  const [isDisposalSubmitting, setIsDisposalSubmitting] = useState(false);
+  const [isDisposalHistoryOpen, setIsDisposalHistoryOpen] = useState(false);
+  const [disposalHistory, setDisposalHistory] = useState<any[]>([]);
+  const [isLoadingDisposalHistory, setIsLoadingDisposalHistory] = useState(false);
+
   // Form State for Receiving New Stock Batch (Penerimaan Stok PO)
   const [newBatchForm, setNewBatchForm] = useState({
     product_id: '',
@@ -185,9 +206,117 @@ export default function StockInventoryPage() {
     }
   };
 
+  // Fetch disposal reasons
+  const fetchDisposalReasons = async () => {
+    try {
+      const res = await fetch('/api/disposal-reasons', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setDisposalReasons(json.data);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch disposal reasons in stock page:', err);
+    }
+    setDisposalReasons(getStoredDisposalReasons());
+  };
+
   useEffect(() => {
     fetchStockData();
+    fetchDisposalReasons();
+    const handleDisposalUpdate = () => setDisposalReasons(getStoredDisposalReasons());
+    window.addEventListener('artaroma_disposal_reasons_updated', handleDisposalUpdate);
+    return () => window.removeEventListener('artaroma_disposal_reasons_updated', handleDisposalUpdate);
   }, []);
+
+  const handleOpenDisposal = (batchId?: string) => {
+    const activeBatches = batches.filter((b) => Number(b.current_qty_kg || 0) > 0);
+    const targetBatchId = batchId || (activeBatches.length > 0 ? activeBatches[0].id : '');
+    const defaultReason = disposalReasons.length > 0 ? disposalReasons[0].name : 'Rusak / Kontaminasi';
+    setDisposalForm({
+      batch_id: targetBatchId,
+      qty_kg: 0.1,
+      reason_name: defaultReason,
+      notes: '',
+      disposed_at: new Date().toISOString().split('T')[0],
+    });
+    setIsDisposalOpen(true);
+  };
+
+  const handleConfirmDisposal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const selectedBatch = batches.find((b) => b.id === disposalForm.batch_id);
+    if (!selectedBatch) {
+      alert('Pilih batch stok yang akan dibuang.');
+      return;
+    }
+    const currentQty = Number(selectedBatch.current_qty_kg || 0);
+    const qtyToDispose = Number(disposalForm.qty_kg);
+
+    if (isNaN(qtyToDispose) || qtyToDispose <= 0) {
+      alert('Jumlah pembuangan harus lebih dari 0 kg.');
+      return;
+    }
+
+    if (qtyToDispose > currentQty) {
+      alert(`Jumlah pembuangan (${qtyToDispose} kg) melebihi stok yang tersedia (${currentQty} kg) pada batch ini.`);
+      return;
+    }
+
+    const prod = products.find((p) => p.id === selectedBatch.product_id);
+    setIsDisposalSubmitting(true);
+    try {
+      const res = await fetch('/api/stock-disposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_id: selectedBatch.id,
+          batch_number: selectedBatch.batch_number,
+          product_id: selectedBatch.product_id,
+          product_name: selectedBatch.product_name || prod?.name || 'Bibit Parfum',
+          qty_kg: qtyToDispose,
+          reason_name: disposalForm.reason_name,
+          notes: disposalForm.notes,
+          disposed_by: currentUser?.name || 'Staf Gudang FEFO',
+          disposed_at: disposalForm.disposed_at,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        const newQty = Math.max(0, currentQty - qtyToDispose);
+        setBatches((prev) =>
+          prev.map((b) => (b.id === selectedBatch.id ? { ...b, current_qty_kg: newQty } : b))
+        );
+        setIsDisposalOpen(false);
+        alert(
+          `✅ Pembuangan stok berhasil dicatat!\n\nProduk: ${selectedBatch.product_name || prod?.name}\nBatch: ${selectedBatch.batch_number}\nJumlah Dibuang: ${formatKg(qtyToDispose)}\nAlasan: ${disposalForm.reason_name}\nSisa Stok Batch: ${formatKg(newQty)}`
+        );
+        fetchStockData();
+      } else {
+        alert('Gagal memproses pembuangan stok: ' + (json.message || 'Error'));
+      }
+    } catch (err: any) {
+      alert('Gagal memproses pembuangan stok: ' + err.message);
+    } finally {
+      setIsDisposalSubmitting(false);
+    }
+  };
+
+  const fetchDisposalHistory = async () => {
+    setIsLoadingDisposalHistory(true);
+    try {
+      const res = await fetch('/api/stock-disposals', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setDisposalHistory(json.data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch disposal history:', err);
+    } finally {
+      setIsLoadingDisposalHistory(false);
+    }
+  };
 
   // --- RECEIVE NEW STOCK BATCH (PENERIMAAN STOK PO - POST TO MYSQL) ---
   const handleCreateNewBatch = async (e: React.FormEvent) => {
@@ -494,8 +623,27 @@ export default function StockInventoryPage() {
                 href="/admin/stock/opname"
                 className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
               >
-                <ClipboardList className="w-4 h-4" /> 3. Stok Opname (Audit)
+                <ClipboardList className="w-4 h-4" /> 4. Stok Opname (Audit)
               </Link>
+              <button
+                type="button"
+                onClick={() => handleOpenDisposal()}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all cursor-pointer"
+                title="Input pembuangan produk rusak, kadaluwarsa, tumpah, atau sampel"
+              >
+                <Trash2 className="w-4 h-4" /> 5. Pembuangan Stok (Rusak/Expired)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  fetchDisposalHistory();
+                  setIsDisposalHistoryOpen(true);
+                }}
+                className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl shadow flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Lihat riwayat pembuangan stok barang"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-rose-300" /> Riwayat Pembuangan
+              </button>
             </div>
           )}
         </div>
@@ -921,15 +1069,26 @@ export default function StockInventoryPage() {
                                             </td>
                                             {canEditBatch && (
                                               <td className="px-4 py-3 text-center">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleOpenEditBatch(b)}
-                                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
-                                                  title="Edit Nomor Batch & Tanggal Expired"
-                                                >
-                                                  <Edit3 className="w-3 h-3 text-blue-600" />
-                                                  Edit
-                                                </button>
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleOpenEditBatch(b)}
+                                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 px-2 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                    title="Edit Nomor Batch & Tanggal Expired"
+                                                  >
+                                                    <Edit3 className="w-3 h-3 text-blue-600" />
+                                                    Edit
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleOpenDisposal(b.id)}
+                                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 px-2 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                    title="Catat pembuangan produk rusak / kadaluwarsa / sampel dari batch ini"
+                                                  >
+                                                    <Trash2 className="w-3 h-3 text-rose-600" />
+                                                    Buang
+                                                  </button>
+                                                </div>
                                               </td>
                                             )}
                                           </tr>
@@ -1822,6 +1981,305 @@ export default function StockInventoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INPUT PEMBUANGAN STOK (BARANG RUSAK / EXPIRED / TUMPAH / SAMPEL) */}
+      {isDisposalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-rose-700 via-red-600 to-amber-600 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-xs">
+                  <Trash2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base">Input Pembuangan Stok</h3>
+                  <p className="text-white/80 text-[11px]">Produk Rusak, Kadaluwarsa, Tumpah, atau Diambil untuk Sampel</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDisposalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmDisposal} className="p-6 space-y-4 text-xs">
+              {/* 1. Pilih Batch Stok */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  1. Pilih Batch Stok yang Dibuang <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={disposalForm.batch_id}
+                  onChange={(e) => setDisposalForm({ ...disposalForm, batch_id: e.target.value })}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="" disabled>-- Pilih Batch Stok --</option>
+                  {batches
+                    .filter((b) => Number(b.current_qty_kg || 0) > 0)
+                    .map((b) => {
+                      const prod = products.find((p) => p.id === b.product_id);
+                      return (
+                        <option key={b.id} value={b.id}>
+                          {b.variant_sku || prod?.sku} — {prod?.name || b.product_name} (Batch #{b.batch_number}) — Sisa: {formatKg(Number(b.current_qty_kg || 0))}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+
+              {/* Info Card Selected Batch */}
+              {(() => {
+                const selectedBatch = batches.find((b) => b.id === disposalForm.batch_id);
+                if (!selectedBatch) return null;
+                const prod = products.find((p) => p.id === selectedBatch.product_id);
+                const currentQty = Number(selectedBatch.current_qty_kg || 0);
+                const qtyToDispose = Number(disposalForm.qty_kg || 0);
+                const remainingAfter = Math.max(0, currentQty - qtyToDispose);
+
+                return (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Varian Produk:</span>
+                      <strong className="text-slate-800 font-bold">{prod?.name || selectedBatch.product_name}</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Nomor Batch &amp; ED:</span>
+                      <span className="font-mono text-purple-700 font-bold">
+                        #{selectedBatch.batch_number} • ED: {formatDate(selectedBatch.expiry_date)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-200">
+                      <span className="text-slate-500">Stok Saat Ini:</span>
+                      <span className="font-mono font-extrabold text-blue-700 text-xs">{formatKg(currentQty)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Sisa Stok Setelah Pembuangan:</span>
+                      <span className={`font-mono font-extrabold text-xs ${remainingAfter <= 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                        {formatKg(remainingAfter)} {remainingAfter <= 0 ? '(Habis / 0 Kg)' : ''}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 2. Jumlah Pembuangan (Kg) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    2. Jumlah Dibuang (Kg) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      required
+                      value={disposalForm.qty_kg}
+                      onChange={(e) => setDisposalForm({ ...disposalForm, qty_kg: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-3 pr-10 font-mono font-bold text-xs text-rose-700 focus:outline-none focus:border-rose-500"
+                    />
+                    <span className="absolute right-3 top-2 font-bold text-slate-400 text-xs">Kg</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Satuan terkecil: 0.1 Kg</span>
+                </div>
+
+                {/* 3. Alasan Pembuangan */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-800">
+                      3. Alasan Pembuangan <span className="text-red-500">*</span>
+                    </label>
+                    <Link
+                      href="/admin/master"
+                      target="_blank"
+                      className="text-[10px] text-blue-600 hover:underline font-semibold"
+                      title="Kelola alasan di Master Data"
+                    >
+                      + Master
+                    </Link>
+                  </div>
+                  <select
+                    required
+                    value={disposalForm.reason_name}
+                    onChange={(e) => setDisposalForm({ ...disposalForm, reason_name: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-rose-500"
+                  >
+                    {disposalReasons.map((r) => (
+                      <option key={r.id} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                    {disposalReasons.length === 0 && (
+                      <option value="Rusak / Kontaminasi">Rusak / Kontaminasi</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* 4. Tanggal & PIC */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    4. Tanggal Pembuangan <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={disposalForm.disposed_at}
+                    onChange={(e) => setDisposalForm({ ...disposalForm, disposed_at: e.target.value })}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 font-mono text-xs font-semibold text-slate-800 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Petugas / PIC</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={currentUser?.name || 'Staf Gudang FEFO'}
+                    className="w-full bg-slate-100 border border-gray-200 rounded-lg p-2 text-xs font-semibold text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              {/* 5. Catatan / Keterangan */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  5. Catatan / Rincian Penyebab (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Drum terjatuh saat proses picking di lorong 3 / Sampel 100gr untuk QC pelanggan PT ABC..."
+                  value={disposalForm.notes}
+                  onChange={(e) => setDisposalForm({ ...disposalForm, notes: e.target.value })}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs text-slate-700 focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDisposalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDisposalSubmitting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isDisposalSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Memproses Pembuangan...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Konfirmasi Pembuangan Stok
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RIWAYAT PEMBUANGAN STOK */}
+      {isDisposalHistoryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <Trash2 className="w-5 h-5 text-rose-400" />
+                <div>
+                  <h3 className="font-extrabold text-base">Riwayat Pembuangan Stok (Audit Log)</h3>
+                  <p className="text-slate-300 text-[11px]">Daftar pencatatan produk rusak, expired, tumpah, dan sampel uji coba</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDisposalHistoryOpen(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 text-xs space-y-4">
+              {isLoadingDisposalHistory ? (
+                <div className="text-center py-12 text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
+                  <span>Memuat riwayat pembuangan...</span>
+                </div>
+              ) : disposalHistory.length > 0 ? (
+                <div className="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-gray-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                        <th className="px-4 py-3">Waktu &amp; Tanggal</th>
+                        <th className="px-4 py-3">Produk &amp; Batch</th>
+                        <th className="px-4 py-3 text-right">Jumlah Dibuang</th>
+                        <th className="px-4 py-3">Alasan Pembuangan</th>
+                        <th className="px-4 py-3">Catatan / Keterangan</th>
+                        <th className="px-4 py-3">Petugas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {disposalHistory.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-4 py-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            {formatDate(item.created_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-900">{item.product_name}</div>
+                            <div className="font-mono text-purple-700 text-[10px]">Batch #{item.batch_number}</div>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
+                            -{formatKg(Number(item.qty_kg))}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center gap-1 bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                              {item.reason_name}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 max-w-xs truncate" title={item.notes}>
+                            {item.notes || <span className="text-slate-400 italic">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                            {item.disposed_by || 'Gudang'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400">
+                  Belum ada riwayat pembuangan stok yang dicatat.
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-3 bg-slate-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsDisposalHistoryOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}
