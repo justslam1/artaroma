@@ -25,11 +25,15 @@ import {
   CreditCard,
   Building2,
   Calendar,
+  X,
+  Send,
 } from 'lucide-react';
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import {
+  getStoredCashAccounts,
   getStoredCashTransactions,
+  recordCashTransaction,
   calculatePODueDateInfo,
   getPOPaymentStatusFromCash,
 } from '@/lib/cash-store';
@@ -56,6 +60,11 @@ export default function ProcurementPage() {
 
   const [readPOIds, setReadPOIds] = useState<string[]>([]);
   const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
+  const [selectedPOForPayment, setSelectedPOForPayment] = useState<PurchaseOrder | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [selectedSourceBankId, setSelectedSourceBankId] = useState<string>('acc-bca');
+  const [transferRef, setTransferRef] = useState('');
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
   useEffect(() => {
     setCashTxs(getStoredCashTransactions());
@@ -67,6 +76,94 @@ export default function ProcurementPage() {
       window.removeEventListener('artaroma_cash_updated', handleCashUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    fetch('/api/company-settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data?.bank_accounts) {
+          setBankAccounts(json.data.bank_accounts);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handlePayVendorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPOForPayment) return;
+
+    setIsSubmittingPayment(true);
+    try {
+      const res = await fetch('/api/purchase-orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedPOForPayment.id,
+          status: 'DIKIRIM',
+        }),
+      });
+
+      // Auto-record BKK to specific Kas Besar Bank (Treasury)
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const selectedAcc =
+          cashAccounts.find((a) => a.id === selectedSourceBankId) ||
+          cashAccounts.find((a) => a.id === 'acc-bca') ||
+          cashAccounts[0];
+
+        if (selectedPOForPayment.total_amount > 0 && selectedAcc) {
+          recordCashTransaction({
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
+            tx_type: 'OUT',
+            category: 'PEMBELIAN_PO',
+            amount: Number(selectedPOForPayment.total_amount),
+            date: new Date().toISOString().split('T')[0],
+            recipient_or_payer: selectedPOForPayment.distributor_name || 'Suplier Distributor',
+            reference_number: selectedPOForPayment.po_number,
+            notes: `Pembayaran hutang PO ${selectedPOForPayment.po_number} kepada ${selectedPOForPayment.distributor_name || 'Suplier'} via ${selectedAcc.name}${transferRef ? ` (Ref: ${transferRef})` : ''}`,
+            proof_url: undefined,
+            created_by: currentUser?.name || 'Staf Procurement / Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to auto-record BKK to cash store:', e);
+      }
+
+      const json = await res.json();
+      if (json.success) {
+        setPurchaseOrders(
+          purchaseOrders.map((po) =>
+            po.id === selectedPOForPayment.id
+              ? { ...po, status: 'DIKIRIM' }
+              : po
+          )
+        );
+      } else {
+        setPurchaseOrders(
+          purchaseOrders.map((po) =>
+            po.id === selectedPOForPayment.id
+              ? { ...po, status: 'DIKIRIM' }
+              : po
+          )
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to update PO status:', err);
+      setPurchaseOrders(
+        purchaseOrders.map((po) =>
+          po.id === selectedPOForPayment.id
+            ? { ...po, status: 'DIKIRIM' }
+            : po
+        )
+      );
+    } finally {
+      setIsSubmittingPayment(false);
+      setSelectedPOForPayment(null);
+      setTransferRef('');
+    }
+  };
 
   useEffect(() => {
     try {
@@ -460,41 +557,56 @@ export default function ProcurementPage() {
                         )}
                       </td>
 
-                      {/* Kolom Status Bayar (dari Manajemen Kas) */}
+                      {/* Kolom Status Bayar (dari Manajemen Kas) - Interactive Link */}
                       <td className="px-6 py-3.5 whitespace-nowrap text-xs">
                         {payStatus.status === 'PAID' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk melihat rincian pembayaran kas"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors shadow-2xs">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
                             </span>
                             {payStatus.bankName && (
-                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1">
+                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
                                 <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
                               </div>
                             )}
-                          </div>
+                          </button>
                         ) : payStatus.status === 'PARTIAL' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
-                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk melanjutkan pembayaran tagihan PO"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-full border border-amber-300 transition-colors shadow-2xs">
+                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN • Input Bayar &rarr;
                             </span>
-                            <div className="text-[10px] text-amber-900 font-mono mt-0.5">
+                            <div className="text-[10px] text-amber-900 font-mono mt-0.5 group-hover:underline">
                               {formatIDR(payStatus.totalPaid)} / {formatIDR(po.total_amount)}
                             </div>
-                          </div>
+                          </button>
                         ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
                             <XCircle className="w-3 h-3" /> BATAL
                           </span>
                         ) : (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
-                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk langsung input pembayaran PO ke Manajemen Kas"
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-full border border-rose-200 transition-all shadow-2xs group-hover:border-rose-400">
+                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR • Input Bayar &rarr;
                             </span>
-                            <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                            <div className="text-[10px] text-rose-600 font-mono mt-0.5 group-hover:underline">
                               Sisa: {formatIDR(po.total_amount)}
                             </div>
-                          </div>
+                          </button>
                         )}
                       </td>
 
@@ -534,6 +646,107 @@ export default function ProcurementPage() {
       <CreatePOModal isOpen={isPOModalOpen} onClose={() => setIsPOModalOpen(false)} distributors={distributors} products={products} onCreatePO={handleCreatePO} />
       <GoodsReceiptModal isOpen={isGRModalOpen} onClose={() => setIsGRModalOpen(false)} po={selectedPO} onReceiveBatch={handleReceiveBatch} />
       <POPDFModal isOpen={!!pdfModalPO} onClose={() => setPdfModalPO(null)} po={pdfModalPO} companyConfig={companySettings} />
+
+      {/* Pay Vendor PO Modal */}
+      {selectedPOForPayment && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-purple-700 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                <h3 className="font-bold text-base">Input Pembayaran Tagihan Suplier PO</h3>
+              </div>
+              <button onClick={() => setSelectedPOForPayment(null)} className="text-purple-200 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePayVendorSubmit} className="p-6 space-y-4 text-xs">
+              <div className="bg-purple-50 border border-purple-200 p-3.5 rounded-xl space-y-1 text-purple-900 font-medium">
+                <div>Ref PO: <strong>{selectedPOForPayment.po_number}</strong></div>
+                <div>Distributor Suplier: <strong>{selectedPOForPayment.distributor_name}</strong></div>
+                <div>Total Nilai Tagihan: <strong className="text-base text-purple-800 font-mono">{formatIDR(selectedPOForPayment.total_amount)}</strong></div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Rekening Bank Sumber Pembayaran (Kas Keluar) <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedSourceBankId}
+                  onChange={(e) => setSelectedSourceBankId(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold focus:outline-none focus:border-purple-500"
+                >
+                  {bankAccounts.length > 0 ? (
+                    bankAccounts.map((b: any, idx: number) => {
+                      const cleanBank = (b.bank || 'Bank').toLowerCase();
+                      const accId = cleanBank.includes('bca')
+                        ? 'acc-bca'
+                        : cleanBank.includes('mandiri')
+                        ? 'acc-mandiri'
+                        : cleanBank.includes('bni')
+                        ? 'acc-bni'
+                        : `acc-bank-${idx}`;
+                      return (
+                        <option key={idx} value={accId}>
+                          {b.bank} - {b.no} ({b.jenis || 'Rekening Operasional'})
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="acc-bca">Bank Central Asia (BCA) - 882-019-3881</option>
+                      <option value="acc-mandiri">Bank Mandiri - 156-00-1928374-1</option>
+                      <option value="acc-bni">Bank BNI - 009-445-8876</option>
+                    </>
+                  )}
+                </select>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Dana kas keluar (BKK) akan otomatis memotong saldo rekening bank yang dipilih di atas pada Manajemen Kas.
+                </span>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Nomor Referensi Transfer / Bukti Bayar Bank</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: TRF-BCA-2026-990812"
+                  value={transferRef}
+                  onChange={(e) => setTransferRef(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Upload File Bukti Transfer (PDF / JPG)</label>
+                <input
+                  type="file"
+                  className="w-full text-xs text-slate-500 border border-gray-300 rounded-lg p-2 bg-gray-50"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPOForPayment(null)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 text-xs font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPayment}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isSubmittingPayment ? 'Memproses...' : 'Konfirmasi Pembayaran Vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

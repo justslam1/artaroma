@@ -383,41 +383,56 @@ export default function FinancePayablesPage() {
                         )}
                       </td>
 
-                      {/* Kolom Status Bayar (dari Manajemen Kas) */}
+                      {/* Kolom Status Bayar (dari Manajemen Kas) - Interactive Link */}
                       <td className="px-6 py-3.5 whitespace-nowrap text-xs">
                         {payStatus.status === 'PAID' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk melihat detail pembayaran kas"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors shadow-2xs">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
                             </span>
                             {payStatus.bankName && (
-                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1">
+                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
                                 <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
                               </div>
                             )}
-                          </div>
+                          </button>
                         ) : payStatus.status === 'PARTIAL' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
-                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk melanjutkan input pembayaran PO"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-full border border-amber-300 transition-colors shadow-2xs">
+                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN • Input Bayar &rarr;
                             </span>
-                            <div className="text-[10px] text-amber-900 font-mono mt-0.5">
+                            <div className="text-[10px] text-amber-900 font-mono mt-0.5 group-hover:underline">
                               {formatIDR(payStatus.totalPaid)} / {formatIDR(po.total_amount)}
                             </div>
-                          </div>
+                          </button>
                         ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
                             <XCircle className="w-3 h-3" /> BATAL
                           </span>
                         ) : (
-                          <div>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
-                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPOForPayment(po)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk langsung input pembayaran PO ke Manajemen Kas"
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-full border border-rose-200 transition-all shadow-2xs group-hover:border-rose-400">
+                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR • Input Bayar &rarr;
                             </span>
-                            <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                            <div className="text-[10px] text-rose-600 font-mono mt-0.5 group-hover:underline">
                               Sisa: {formatIDR(po.total_amount)}
                             </div>
-                          </div>
+                          </button>
                         )}
                       </td>
 
