@@ -497,7 +497,7 @@ export default function PODetailPage() {
   };
   // ────────────────────────────────────────────────────────────────────────
 
-  // Tahapan PO: Diajukan -> Pesanan Dikirim -> Pesanan Diterima
+  // Tahapan PO: Diajukan -> Dikirim -> Diterima
   const steps = [
     {
       key: 'BUAT_EMAIL',
@@ -507,13 +507,13 @@ export default function PODetailPage() {
     },
     {
       key: 'DIKIRIM',
-      title: 'Pesanan Dikirim',
+      title: 'Dikirim',
       time: (po.status === 'DIKIRIM' || po.status === 'DITERIMA') ? stepDikirimTime : '-',
       actor: 'Oleh EKSPEDISI CARGO DISTRIBUTOR',
     },
     {
       key: 'DITERIMA',
-      title: 'Pesanan Diterima',
+      title: 'Diterima',
       time: stepDiterimaTime,
       actor: 'Oleh GUDANG FEFO ARTAROMA',
     },
