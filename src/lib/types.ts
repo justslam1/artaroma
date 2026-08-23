@@ -317,6 +317,8 @@ export interface InvoicePaymentRecord {
   payment_date: string;
   amount: number;
   remaining_after: number;
+  bank_account_id?: string;
+  bank_name?: string;
   payment_proof_url?: string;
   payment_notes?: string;
   verified_by?: string;

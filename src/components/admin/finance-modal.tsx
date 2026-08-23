@@ -21,6 +21,7 @@ import {
   Trash2,
   Receipt,
   UserCheck,
+  Building2,
 } from 'lucide-react';
 
 interface VerifyPaymentModalProps {
@@ -33,7 +34,9 @@ interface VerifyPaymentModalProps {
     paidAmount?: number,
     paymentNotes?: string,
     paymentDate?: string,
-    paymentProofUrl?: string
+    paymentProofUrl?: string,
+    targetAccountId?: string,
+    targetBankName?: string
   ) => void;
 }
 
@@ -47,7 +50,20 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
   const [paymentDate, setPaymentDate] = useState<string>('');
   const [financeProofUrl, setFinanceProofUrl] = useState<string>('');
   const [previewImageModal, setPreviewImageModal] = useState<string | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState<string>('acc-bca');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    fetch('/api/company-settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data?.bank_accounts) {
+          setBankAccounts(json.data.bank_accounts);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (invoice) {
@@ -105,7 +121,32 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       alert('Silakan pilih tanggal pembayaran.');
       return;
     }
-    onVerify(invoice.id, 'VERIFIED', parsedInput, paymentNotes, paymentDate, financeProofUrl);
+
+    const matchedBank = bankAccounts.find((b: any) => {
+      const cleanBank = (b.bank || '').toLowerCase();
+      if (selectedBankId === 'acc-bca' && cleanBank.includes('bca')) return true;
+      if (selectedBankId === 'acc-mandiri' && cleanBank.includes('mandiri')) return true;
+      if (selectedBankId === 'acc-bni' && cleanBank.includes('bni')) return true;
+      return false;
+    });
+    const bankName = matchedBank
+      ? `${matchedBank.bank} (${matchedBank.no})`
+      : selectedBankId === 'acc-mandiri'
+      ? 'Bank Mandiri (156-00-1928374-1)'
+      : selectedBankId === 'acc-bni'
+      ? 'Bank BNI (009-445-8876)'
+      : 'Bank Central Asia (BCA)';
+
+    onVerify(
+      invoice.id,
+      'VERIFIED',
+      parsedInput,
+      paymentNotes,
+      paymentDate,
+      financeProofUrl,
+      selectedBankId,
+      bankName
+    );
     onClose();
   };
 
@@ -230,6 +271,11 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
                           <span>📅 Tgl: <strong className="text-slate-700">{item.payment_date || '-'}</strong></span>
+                          {item.bank_name && (
+                            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-bold text-[9px]">
+                              🏦 {item.bank_name}
+                            </span>
+                          )}
                           {item.payment_notes && <span>• 📝 {item.payment_notes}</span>}
                           {item.verified_by && <span>• 👤 {item.verified_by}</span>}
                         </div>
@@ -257,6 +303,46 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
             {/* Input Form for unpaid balance (Only if remainingBill > 0) */}
             {!isAlreadyPaid && (
               <>
+                {/* Rekening Bank Penerima */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    Rekening Bank Penerima Dana <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedBankId}
+                    onChange={(e) => setSelectedBankId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none shadow-2xs"
+                  >
+                    {bankAccounts.length > 0 ? (
+                      bankAccounts.map((b: any, idx: number) => {
+                        const cleanBank = (b.bank || 'Bank').toLowerCase();
+                        const accId = cleanBank.includes('bca')
+                          ? 'acc-bca'
+                          : cleanBank.includes('mandiri')
+                          ? 'acc-mandiri'
+                          : cleanBank.includes('bni')
+                          ? 'acc-bni'
+                          : `acc-bank-${idx}`;
+                        return (
+                          <option key={idx} value={accId}>
+                            {b.bank} - {b.no} ({b.atas_nama || 'PT Artaroma Jayatama'})
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <option value="acc-bca">Bank Central Asia (BCA) - 882-019-3881</option>
+                        <option value="acc-mandiri">Bank Mandiri - 156-00-1928374-1</option>
+                        <option value="acc-bni">Bank BNI - 009-445-8876</option>
+                      </>
+                    )}
+                  </select>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Dana kas masuk (BKM) akan otomatis dicatat ke buku kas rekening bank yang dipilih di atas.
+                  </span>
+                </div>
+
                 {/* Input Tanggal & Nominal Pembayaran Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

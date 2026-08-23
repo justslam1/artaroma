@@ -157,7 +157,9 @@ export default function FinanceInvoicesPage() {
     newPaymentAmount?: number,
     paymentNotes?: string,
     paymentDate?: string,
-    paymentProofUrl?: string
+    paymentProofUrl?: string,
+    targetAccountId?: string,
+    targetBankName?: string
   ) => {
     const updated = invoices.map((inv) => {
       if (inv.id !== invoiceId) return inv;
@@ -181,6 +183,8 @@ export default function FinanceInvoicesPage() {
         payment_date: payDate,
         amount: incomingPayment,
         remaining_after: remainingAfter,
+        bank_account_id: targetAccountId,
+        bank_name: targetBankName,
         payment_proof_url: paymentProofUrl || inv.payment_proof_url,
         payment_notes: paymentNotes || inv.payment_notes,
         verified_by: currentUser?.name || currentUser?.username || 'Staf Finance',
@@ -189,20 +193,21 @@ export default function FinanceInvoicesPage() {
 
       const existingHistory = Array.isArray(inv.payment_history) ? inv.payment_history : [];
 
-      // Auto-record BKM to Kas Besar (Treasury)
+      // Auto-record BKM to specific selected Kas Besar Bank (Treasury)
       try {
         const cashAccounts = getStoredCashAccounts();
-        const bcaAcc = cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
-        if (incomingPayment > 0 && bcaAcc) {
+        const selectedAcc = cashAccounts.find((a) => a.id === targetAccountId) || cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
+        if (incomingPayment > 0 && selectedAcc) {
           recordCashTransaction({
-            account_id: bcaAcc.id,
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
             tx_type: 'IN',
             category: 'PENJUALAN_SO',
             amount: incomingPayment,
             date: payDate,
             recipient_or_payer: inv.customer_name || 'Customer B2B',
             reference_number: `${inv.invoice_number || 'INV'} / ${inv.so_number || 'SO'}`,
-            notes: paymentNotes || `Pelunasan piutang invoice ${inv.invoice_number || ''}`,
+            notes: paymentNotes || `Pelunasan piutang invoice ${inv.invoice_number || ''} via ${targetBankName || selectedAcc.name}`,
             proof_url: paymentProofUrl || inv.payment_proof_url,
             created_by: currentUser?.name || 'Staf Finance',
             status: 'VERIFIED',
