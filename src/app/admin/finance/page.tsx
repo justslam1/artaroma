@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { exportInvoicesToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import { getStoredCashAccounts, recordCashTransaction } from '@/lib/cash-store';
 
 export default function FinanceInvoicesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -187,6 +188,29 @@ export default function FinanceInvoicesPage() {
       };
 
       const existingHistory = Array.isArray(inv.payment_history) ? inv.payment_history : [];
+
+      // Auto-record BKM to Kas Besar (Treasury)
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const bcaAcc = cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
+        if (incomingPayment > 0 && bcaAcc) {
+          recordCashTransaction({
+            account_id: bcaAcc.id,
+            tx_type: 'IN',
+            category: 'PENJUALAN_SO',
+            amount: incomingPayment,
+            date: payDate,
+            recipient_or_payer: inv.customer_name || 'Customer B2B',
+            reference_number: `${inv.invoice_number || 'INV'} / ${inv.so_number || 'SO'}`,
+            notes: paymentNotes || `Pelunasan piutang invoice ${inv.invoice_number || ''}`,
+            proof_url: paymentProofUrl || inv.payment_proof_url,
+            created_by: currentUser?.name || 'Staf Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to auto-record BKM to cash store:', e);
+      }
 
       return {
         ...inv,

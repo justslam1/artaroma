@@ -288,7 +288,9 @@ export function recalculateBalances(
  * Record a single cash inflow or outflow transaction
  */
 export function recordCashTransaction(
-  txData: Omit<CashTransaction, 'id' | 'tx_number' | 'balance_after' | 'created_at'>
+  txData: Omit<CashTransaction, 'id' | 'tx_number' | 'account_name' | 'balance_after' | 'created_at'> & {
+    account_name?: string;
+  }
 ): CashTransaction {
   const accounts = getStoredCashAccounts();
   const txs = getStoredCashTransactions();

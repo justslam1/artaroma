@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { exportPayablesToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import { getStoredCashAccounts, recordCashTransaction } from '@/lib/cash-store';
 
 export default function FinancePayablesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -85,6 +86,29 @@ export default function FinancePayablesPage() {
           status: 'DIKIRIM',
         }),
       });
+
+      // Auto-record BKK to Kas Besar (Treasury)
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const bcaAcc = cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
+        if (selectedPOForPayment.total_amount > 0 && bcaAcc) {
+          recordCashTransaction({
+            account_id: bcaAcc.id,
+            tx_type: 'OUT',
+            category: 'PEMBELIAN_PO',
+            amount: Number(selectedPOForPayment.total_amount),
+            date: new Date().toISOString().split('T')[0],
+            recipient_or_payer: selectedPOForPayment.distributor_name || 'Suplier Distributor',
+            reference_number: selectedPOForPayment.po_number,
+            notes: `Pembayaran hutang PO ${selectedPOForPayment.po_number} kepada ${selectedPOForPayment.distributor_name || 'Suplier'}${transferRef ? ` (Ref: ${transferRef})` : ''}`,
+            proof_url: undefined,
+            created_by: currentUser?.name || 'Staf Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to auto-record BKK to cash store:', e);
+      }
 
       const json = await res.json();
       if (json.success) {
