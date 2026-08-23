@@ -28,6 +28,7 @@ import {
   Calendar,
   X,
   Send,
+  DollarSign,
 } from 'lucide-react';
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -235,6 +236,14 @@ export default function ProcurementPage() {
 
   const showFinancialColumn = canViewFinancials && !isFinancialHidden;
 
+  // Calculate summary figures for PO Financial cards
+  const totalSemuaPO = purchaseOrders.reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
+  const totalSudahDibayar = purchaseOrders.reduce((sum, po) => sum + Number(po.paid_amount || 0), 0);
+  const totalSisaHutang = Math.max(0, totalSemuaPO - totalSudahDibayar);
+  const countPOWithDebt = purchaseOrders.filter(
+    (po) => Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)) > 0
+  ).length;
+
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
     try {
@@ -433,6 +442,56 @@ export default function ProcurementPage() {
             </button>
           </div>
         </div>
+
+        {/* 3 Summary Cards */}
+        {canViewFinancials && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Sisa Hutang Vendor Perlu Dibayar</div>
+                <div className="text-xl font-bold font-mono text-purple-700 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSisaHutang)}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {countPOWithDebt} PO memiliki sisa hutang
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Pembayaran Terbayar (Kas Keluar)</div>
+                <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSudahDibayar)}
+                </div>
+                <div className="text-[10px] text-emerald-600 mt-0.5 font-medium">
+                  Tercatat otomatis di Buku Kas Besar (BKK)
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Komitmen Tagihan PO</div>
+                <div className="text-xl font-bold font-mono text-slate-800 mt-0.5">
+                  {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSemuaPO)}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {purchaseOrders.length} Total Tagihan PO
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <Building2 className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PO Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
