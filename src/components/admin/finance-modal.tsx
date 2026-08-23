@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Invoice, InvoicePaymentRecord } from '@/lib/types';
 import { formatIDR, formatDate } from '@/lib/utils';
 import {
   X,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   FileText,
   Upload,
@@ -22,6 +24,7 @@ import {
   Receipt,
   UserCheck,
   Building2,
+  ExternalLink,
 } from 'lucide-react';
 
 interface VerifyPaymentModalProps {
@@ -206,16 +209,30 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
           <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
             {/* Lunas Banner for Paid Invoices */}
             {isAlreadyPaid && (
-              <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3 rounded-xl flex items-center justify-between text-xs font-semibold shadow-2xs">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-                  <span>
-                    Tagihan ini telah terverifikasi <strong>LUNAS PENUH</strong>. Semua riwayat tanggal pembayaran dan bukti transfer dapat ditinjau di bawah.
+              <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3.5 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs font-semibold shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <div>Tagihan ini telah terverifikasi <strong>LUNAS PENUH</strong>.</div>
+                    <div className="text-[11px] text-emerald-700 font-normal mt-0.5">
+                      Penerimaan dana telah otomatis dibukukan sebagai <strong>Bukti Kas Masuk (BKM)</strong> di Manajemen Kas.
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href="/admin/finance/cash"
+                    target="_blank"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-colors"
+                    title="Buka Halaman Manajemen Kas"
+                  >
+                    <span>Buku Kas</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
+                  <span className="bg-emerald-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shrink-0">
+                    PAID
                   </span>
                 </div>
-                <span className="bg-emerald-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shrink-0 ml-2">
-                  PAID
-                </span>
               </div>
             )}
 
@@ -264,18 +281,19 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                 <div className="divide-y divide-purple-100 bg-white rounded-lg border border-purple-200/70 overflow-hidden shadow-2xs">
                   {paymentHistory.map((item, idx) => (
                     <div key={item.id || idx} className="p-2.5 flex items-center justify-between text-[11px] gap-2 hover:bg-purple-50/20 transition-colors">
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <div className="space-y-1">
+                        <div className="font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
                           <span className="text-purple-900">Bayar #{idx + 1}:</span>
                           <span className="font-mono text-emerald-700 font-extrabold">{formatIDR(item.amount)}</span>
+                          <span className="bg-emerald-100/90 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded font-bold text-[9px] inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> Tercatat di Kas Besar (BKM)
+                          </span>
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
                           <span>📅 Tgl: <strong className="text-slate-700">{item.payment_date || '-'}</strong></span>
-                          {item.bank_name && (
-                            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-bold text-[9px]">
-                              🏦 {item.bank_name}
-                            </span>
-                          )}
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-bold text-[9px]">
+                            🏦 {item.bank_name || 'Bank BCA Operasional (019-3881)'}
+                          </span>
                           {item.payment_notes && <span>• 📝 {item.payment_notes}</span>}
                           {item.verified_by && <span>• 👤 {item.verified_by}</span>}
                         </div>
