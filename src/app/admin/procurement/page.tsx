@@ -279,11 +279,15 @@ export default function ProcurementPage() {
   }, []);
 
   const handleCreatePO = async (newPOData: Omit<PurchaseOrder, 'id'>, autoOpenPDF?: boolean) => {
+    const payloadWithCreator = {
+      ...newPOData,
+      created_by: currentUser?.name || currentUser?.username || 'Admin Procurement',
+    };
     try {
       const res = await fetch('/api/purchase-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPOData),
+        body: JSON.stringify(payloadWithCreator),
       });
       const json = await res.json();
       if (json.success) {
@@ -292,7 +296,7 @@ export default function ProcurementPage() {
           setPdfModalPO(json.data);
         }
       } else {
-        const createdPO: PurchaseOrder = { ...newPOData, id: `po-${Date.now()}` };
+        const createdPO: PurchaseOrder = { ...payloadWithCreator, id: `po-${Date.now()}` };
         setPurchaseOrders([createdPO, ...purchaseOrders]);
         if (autoOpenPDF) {
           setPdfModalPO(createdPO);
@@ -300,7 +304,7 @@ export default function ProcurementPage() {
       }
     } catch (err) {
       console.warn('Failed to create purchase order:', err);
-      const createdPO: PurchaseOrder = { ...newPOData, id: `po-${Date.now()}` };
+      const createdPO: PurchaseOrder = { ...payloadWithCreator, id: `po-${Date.now()}` };
       setPurchaseOrders([createdPO, ...purchaseOrders]);
       if (autoOpenPDF) {
         setPdfModalPO(createdPO);

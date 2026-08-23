@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
                 return undefined;
               }
             })(),
+            created_by: po.created_by || undefined,
             cancellation_note: po.cancellation_note || undefined,
             cancelled_at: po.cancelled_at || undefined,
             cancelled_by: po.cancelled_by || undefined,
@@ -89,7 +90,8 @@ export async function POST(req: NextRequest) {
       currency,
       exchange_rate,
       foreign_total_amount,
-      items
+      items,
+      created_by,
     } = body;
 
     if (!distributor_id || !items || !Array.isArray(items) || items.length === 0) {
@@ -189,6 +191,7 @@ export async function POST(req: NextRequest) {
           order_date: orderDate,
           total_amount: totalAmount,
           items: processedItems,
+          created_by: created_by || undefined,
           pdf_url: `/dummy-po-${poNumber}.pdf`,
         },
       },

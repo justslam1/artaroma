@@ -498,12 +498,13 @@ export default function PODetailPage() {
   // ────────────────────────────────────────────────────────────────────────
 
   // Tahapan PO: Diajukan -> Dikirim -> Diterima
+  const poCreatorName = po.created_by || currentUser?.name || currentUser?.username || 'ADMIN PROCUREMENT';
   const steps = [
     {
       key: 'BUAT_EMAIL',
       title: 'Diajukan',
       time: stepBuatEmailTime,
-      actor: 'Oleh ADMIN PROCUREMENT',
+      actor: `Oleh ${poCreatorName.toUpperCase()}`,
     },
     {
       key: 'DIKIRIM',

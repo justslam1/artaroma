@@ -1295,12 +1295,13 @@ export default function OrderDetailPage() {
   }
 
   // 5 Simplified Stepper Statuses
+  const soCreatorName = order.created_by || (order.customer_name ? `${order.customer_name}${order.customer_company ? ` (${order.customer_company})` : ''}` : currentUser?.name || 'Customer B2B');
   const steps = [
     {
       key: 'DIAJUKAN',
       title: 'Diajukan',
       time: order.order_date,
-      actor: `Oleh ${order.customer_name.toUpperCase()} (${order.customer_company})`,
+      actor: `Oleh ${soCreatorName.toUpperCase()}`,
     },
     {
       key: 'DIKONFIRMASI',
