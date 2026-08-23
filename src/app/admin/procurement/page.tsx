@@ -447,7 +447,6 @@ export default function ProcurementPage() {
                   <th className="px-6 py-3">Sisa Hari</th>
                   <th className="px-6 py-3">Status Bayar (Kas)</th>
                   <th className="px-6 py-3">STATUS ALUR PO</th>
-                  <th className="px-6 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -612,27 +611,6 @@ export default function ProcurementPage() {
 
                       <td className="px-6 py-3.5">
                         {getPOStatusBadge(po)}
-                      </td>
-
-                      <td className="px-6 py-3.5 text-right space-x-2">
-                        <Link
-                          href={`/admin/procurement/${po.id}`}
-                          onClick={() => markAsRead(po.id)}
-                          className={`text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-colors ${
-                            isRead
-                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white font-bold'
-                          }`}
-                        >
-                          <Eye className="w-3.5 h-3.5" /> Detail PO
-                        </Link>
-
-                        <button
-                          onClick={() => setPdfModalPO(po)}
-                          className="bg-white hover:bg-gray-50 text-blue-700 border border-blue-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-blue-600" /> PDF PO
-                        </button>
                       </td>
                     </tr>
                   );
