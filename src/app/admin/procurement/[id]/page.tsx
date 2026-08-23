@@ -1962,11 +1962,15 @@ export default function PODetailPage() {
                       }, 0)
                     : (isDelivered ? item.qty_ordered_kg : 0);
 
-                  // If PO is completely DITERIMA, ensure shipped quantity is at least equal to received quantity
-                  const displayReceivedKg = isDelivered ? (receivedSum > 0 ? receivedSum : item.qty_ordered_kg) : 0;
+                  // Correctly reflect received quantity for partial receipts or full delivery
+                  const displayReceivedKg = isDelivered ? (receivedSum > 0 ? receivedSum : item.qty_ordered_kg) : receivedSum;
                   const displayShippedKg = isDelivered ? Math.max(rawShipped, displayReceivedKg) : rawShipped;
 
-                  const batchCode = `BTC-2026-${String(88 + idx).padStart(2, '0')}`;
+                  const matchingBatch = batches.find(
+                    (b) => (b.po_item_id && b.po_item_id === item.id) || (b.product_id === item.product_id && b.batch_number?.includes(po.po_number))
+                  );
+                  const fallbackBatchCode = `BTC-2026-${String(88 + idx).padStart(2, '0')}`;
+                  const itemBatchCode = matchingBatch ? matchingBatch.batch_number : fallbackBatchCode;
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -1991,9 +1995,9 @@ export default function PODetailPage() {
 
                       {/* Batch Number FEFO */}
                       <td className="px-6 py-4 text-xs text-center">
-                        {isDelivered ? (
+                        {displayReceivedKg > 0 ? (
                           <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded font-mono font-bold text-[11px] inline-block shadow-2xs">
-                            {batchCode}
+                            {itemBatchCode}
                           </span>
                         ) : (
                           <span className="text-slate-400 italic">Menunggu Penerimaan</span>
@@ -2029,14 +2033,14 @@ export default function PODetailPage() {
 
                       {/* Diterima */}
                       <td className="px-6 py-4 text-center">
-                        {receivedSum > 0 || isDelivered ? (
-                          receivedSum > 0 && receivedSum < item.qty_ordered_kg && !isDelivered ? (
+                        {displayReceivedKg > 0 ? (
+                          displayReceivedKg < item.qty_ordered_kg ? (
                             <div className="flex flex-col items-center">
                               <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md inline-block font-mono font-bold text-xs">
-                                {formatKg(receivedSum)}
+                                {formatKg(displayReceivedKg)}
                               </span>
                               <span className="text-[10px] text-amber-600 font-semibold mt-0.5">
-                                Parsial (Sisa {formatKg(item.qty_ordered_kg - receivedSum)})
+                                Parsial (Sisa {formatKg(item.qty_ordered_kg - displayReceivedKg)})
                               </span>
                             </div>
                           ) : (
