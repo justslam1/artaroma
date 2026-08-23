@@ -2622,8 +2622,8 @@ export default function MasterDataPage() {
                     <th className="px-6 py-3">Kode / Perusahaan</th>
                     <th className="px-6 py-3">PIC & Akun Login B2B (Username)</th>
                     <th className="px-6 py-3">Plafon Kredit B2B</th>
-                    <th className="px-6 py-3">Status Akun</th>
                     <th className="px-6 py-3">Status Tempo</th>
+                    <th className="px-6 py-3">Status Akun</th>
                     <th className="px-6 py-3">Kurir & Ongkir Default</th>
                     <th className="px-6 py-3">Tampilan Katalog Produk</th>
                     <th className="px-6 py-3 text-right">Aksi Super Admin</th>
@@ -2686,6 +2686,18 @@ export default function MasterDataPage() {
                           </td>
 
                           <td className="px-6 py-3.5">
+                            {c.has_overdue ? (
+                              <span className="bg-red-50 text-red-600 border border-red-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
+                                <ShieldAlert className="w-3 h-3" /> BLOCKED
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
+                                <CheckCircle2 className="w-3 h-3" /> AKTIF
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <button
                                 type="button"
@@ -2712,18 +2724,6 @@ export default function MasterDataPage() {
                                 {c.is_active ? 'AKTIF' : 'NON-AKTIF'}
                               </span>
                             </div>
-                          </td>
-
-                          <td className="px-6 py-3.5">
-                            {c.has_overdue ? (
-                              <span className="bg-red-50 text-red-600 border border-red-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
-                                <ShieldAlert className="w-3 h-3" /> BLOCKED
-                              </span>
-                            ) : (
-                              <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max">
-                                <CheckCircle2 className="w-3 h-3" /> AKTIF
-                              </span>
-                            )}
                           </td>
 
                           <td className="px-6 py-3.5 text-xs">
