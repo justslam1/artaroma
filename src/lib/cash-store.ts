@@ -1,4 +1,4 @@
-import { CashAccount, CashTransaction, Invoice, PurchaseOrder } from './types';
+import { CashAccount, CashTransaction, Invoice, PurchaseOrder, SalesOrder } from './types';
 
 export const INITIAL_CASH_ACCOUNTS: CashAccount[] = [
   {
@@ -575,6 +575,126 @@ export function getPOPaymentStatusFromCash(
     status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
     totalPaid: totalPaid > 0 ? totalPaid : isPaidByStatus ? poTotal : 0,
     remaining: isFullyPaid ? 0 : Math.max(0, poTotal - totalPaid),
+    bankName: latestTx?.account_name,
+    lastPayDate: latestTx?.date,
+    txNumbers: matchingTxs.map((t) => t.tx_number),
+  };
+}
+
+export interface SOPaymentCashStatus {
+  status: 'PAID' | 'PARTIAL' | 'UNPAID' | 'CANCELLED';
+  totalPaid: number;
+  remaining: number;
+  bankName?: string;
+  lastPayDate?: string;
+  txNumbers: string[];
+}
+
+export function calculateSODueDateInfo(so: SalesOrder, inv?: Invoice): PODueDateInfo {
+  let dueDateStr = inv?.due_date || (so as any).due_date;
+  if (!dueDateStr) {
+    const orderD = so.order_date ? new Date(so.order_date) : new Date();
+    const d = new Date(orderD);
+    d.setDate(d.getDate() + 30);
+    dueDateStr = d.toISOString().split('T')[0];
+  }
+
+  const dueD = new Date(dueDateStr);
+  const now = new Date();
+  const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d2 = new Date(dueD.getFullYear(), dueD.getMonth(), dueD.getDate());
+  const diffTime = d2.getTime() - d1.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let displayText = '';
+  if (diffDays > 0) {
+    displayText = `${diffDays} hari lagi`;
+  } else if (diffDays === 0) {
+    displayText = 'Hari ini';
+  } else {
+    displayText = `Overdue ${Math.abs(diffDays)} hari`;
+  }
+
+  return {
+    dueDateStr,
+    diffDays,
+    isOverdue: diffDays < 0,
+    isDueToday: diffDays === 0,
+    displayText,
+  };
+}
+
+export function getSOPaymentStatusFromCash(
+  so: SalesOrder,
+  inv?: Invoice,
+  cashTxs?: CashTransaction[]
+): SOPaymentCashStatus {
+  if (so.status === 'CANCELLED') {
+    return {
+      status: 'CANCELLED',
+      totalPaid: 0,
+      remaining: 0,
+      txNumbers: [],
+    };
+  }
+
+  const soTotal = Number(so.grand_total || (so as any).total_goods_amount || inv?.total_amount || 0);
+
+  // If invoice is already marked PAID
+  if (inv && (inv.status === 'PAID' || Number(inv.paid_amount || 0) >= Number(inv.total_amount || 0))) {
+    const latestHist = Array.isArray(inv.payment_history) && inv.payment_history.length > 0 ? inv.payment_history[inv.payment_history.length - 1] : undefined;
+    return {
+      status: 'PAID',
+      totalPaid: Number(inv.paid_amount || soTotal),
+      remaining: 0,
+      bankName: latestHist?.bank_name || 'Kas Besar (BCA / Mandiri)',
+      lastPayDate: inv.last_payment_date || inv.issue_date,
+      txNumbers: [],
+    };
+  }
+
+  // If invoice is PARTIALLY_PAID
+  if (inv && Number(inv.paid_amount || 0) > 0) {
+    const latestHist = Array.isArray(inv.payment_history) && inv.payment_history.length > 0 ? inv.payment_history[inv.payment_history.length - 1] : undefined;
+    return {
+      status: 'PARTIAL',
+      totalPaid: Number(inv.paid_amount),
+      remaining: Math.max(0, soTotal - Number(inv.paid_amount)),
+      bankName: latestHist?.bank_name,
+      lastPayDate: inv.last_payment_date,
+      txNumbers: [],
+    };
+  }
+
+  const txs = cashTxs || getStoredCashTransactions();
+  const soNumClean = (so.so_number || '').trim().toLowerCase();
+  const invNumClean = (inv?.invoice_number || '').trim().toLowerCase();
+
+  // Find all IN / PENJUALAN_SO transactions matching this SO or Invoice
+  const matchingTxs = txs.filter((tx) => {
+    if (tx.status !== 'VERIFIED') return false;
+    if (tx.tx_type !== 'IN' && tx.category !== 'PENJUALAN_SO') return false;
+    const ref = (tx.reference_number || '').toLowerCase();
+    const notes = (tx.notes || '').toLowerCase();
+    return (
+      (soNumClean && (ref.includes(soNumClean) || notes.includes(soNumClean))) ||
+      (invNumClean && (ref.includes(invNumClean) || notes.includes(invNumClean)))
+    );
+  });
+
+  const totalPaid = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const isFullyPaid = (totalPaid >= soTotal && soTotal > 0) || so.status === 'DIBAYAR';
+  const isPartial = totalPaid > 0 && totalPaid < soTotal;
+
+  const sortedTxs = [...matchingTxs].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  const latestTx = sortedTxs[0];
+
+  return {
+    status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
+    totalPaid: totalPaid > 0 ? totalPaid : (isFullyPaid ? soTotal : 0),
+    remaining: isFullyPaid ? 0 : Math.max(0, soTotal - totalPaid),
     bankName: latestTx?.account_name,
     lastPayDate: latestTx?.date,
     txNumbers: matchingTxs.map((t) => t.tx_number),

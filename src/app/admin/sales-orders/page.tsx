@@ -3,13 +3,37 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
-import { getStoredOrders, saveStoredOrders } from '@/lib/order-store';
-import { SalesOrder, Customer } from '@/lib/types';
+import { getStoredOrders, saveStoredOrders, getStoredInvoices, saveStoredInvoices } from '@/lib/order-store';
+import { SalesOrder, Customer, Invoice, InvoicePaymentRecord, CashTransaction } from '@/lib/types';
 import { initialCustomers } from '@/lib/mock-data';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
-import { FileText, Eye, EyeOff, Lock, ExternalLink, ShoppingCart, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import {
+  FileText,
+  Eye,
+  EyeOff,
+  Lock,
+  ExternalLink,
+  ShoppingCart,
+  RefreshCw,
+  FileSpreadsheet,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  CreditCard,
+  Building2,
+  XCircle,
+} from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import { VerifyPaymentModal } from '@/components/admin/finance-modal';
+import {
+  getStoredCashAccounts,
+  getStoredCashTransactions,
+  recordCashTransaction,
+  calculateSODueDateInfo,
+  getSOPaymentStatusFromCash,
+} from '@/lib/cash-store';
 
 export default function SalesOrdersPage() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
@@ -18,6 +42,190 @@ export default function SalesOrdersPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isFinancialHidden, setIsFinancialHidden] = useState(false);
   const [readOrderIds, setReadOrderIds] = useState<string[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
+  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
+
+  const syncFinanceData = () => {
+    setInvoices(getStoredInvoices());
+    setCashTxs(getStoredCashTransactions());
+  };
+
+  useEffect(() => {
+    syncFinanceData();
+    const handleFinanceUpdate = () => syncFinanceData();
+    window.addEventListener('artaroma_invoices_updated', handleFinanceUpdate);
+    window.addEventListener('artaroma_cash_updated', handleFinanceUpdate);
+    return () => {
+      window.removeEventListener('artaroma_invoices_updated', handleFinanceUpdate);
+      window.removeEventListener('artaroma_cash_updated', handleFinanceUpdate);
+    };
+  }, []);
+
+  const handleOpenPaymentForSO = (so: SalesOrder) => {
+    const currentInvs = getStoredInvoices();
+    let targetInv = currentInvs.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    if (!targetInv) {
+      const cleanNum = so.so_number.replace(/[^0-9]/g, '') || Math.floor(1000 + Math.random() * 9000);
+      targetInv = {
+        id: `inv-${so.id}`,
+        invoice_number: `INV-2026-${cleanNum}`,
+        so_id: so.id,
+        so_number: so.so_number,
+        customer_id: so.customer_id,
+        customer_name: (so as any).customer_company || so.customer_name || 'Customer B2B',
+        status: 'UNPAID',
+        issue_date: so.order_date || new Date().toISOString().split('T')[0],
+        due_date: (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split('T')[0];
+        })(),
+        total_amount: Number((so as any).grand_total || (so as any).total_goods_amount || 0),
+        paid_amount: 0,
+        payment_verification_status: 'PENDING',
+      };
+    }
+    setSelectedInvoiceForPayment(targetInv);
+  };
+
+  const handleVerifyPayment = (
+    invoiceId: string,
+    status: 'VERIFIED' | 'REJECTED',
+    newPaymentAmount?: number,
+    paymentNotes?: string,
+    paymentDate?: string,
+    paymentProofUrl?: string,
+    targetAccountId?: string,
+    targetBankName?: string
+  ) => {
+    const currentInvs = getStoredInvoices();
+    const updatedInvoices = currentInvs.map((inv) => {
+      if (inv.id !== invoiceId && inv.invoice_number !== selectedInvoiceForPayment?.invoice_number) return inv;
+
+      if (status === 'REJECTED') {
+        return {
+          ...inv,
+          payment_verification_status: 'REJECTED' as const,
+        };
+      }
+
+      const prevPaid = Number(inv.paid_amount || 0);
+      const incomingPayment = newPaymentAmount !== undefined ? Number(newPaymentAmount) : Number(inv.total_amount) - prevPaid;
+      const totalAccumulatedPaid = Math.min(Number(inv.total_amount), prevPaid + incomingPayment);
+      const isFullyPaid = totalAccumulatedPaid >= Number(inv.total_amount);
+      const payDate = paymentDate || new Date().toISOString().split('T')[0];
+      const remainingAfter = Math.max(0, Number(inv.total_amount) - totalAccumulatedPaid);
+
+      const newHistoryItem: InvoicePaymentRecord = {
+        id: `pay-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        payment_date: payDate,
+        amount: incomingPayment,
+        remaining_after: remainingAfter,
+        bank_account_id: targetAccountId,
+        bank_name: targetBankName,
+        payment_proof_url: paymentProofUrl || inv.payment_proof_url,
+        payment_notes: paymentNotes || inv.payment_notes,
+        verified_by: currentUser?.name || currentUser?.username || 'Staf Finance',
+        created_at: new Date().toISOString(),
+      };
+
+      const existingHistory = Array.isArray(inv.payment_history) ? inv.payment_history : [];
+
+      // Auto-record BKM to Kas Besar (Treasury)
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const selectedAcc = cashAccounts.find((a) => a.id === targetAccountId) || cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
+        if (incomingPayment > 0 && selectedAcc) {
+          recordCashTransaction({
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
+            tx_type: 'IN',
+            category: 'PENJUALAN_SO',
+            amount: incomingPayment,
+            date: payDate,
+            recipient_or_payer: inv.customer_name || 'Customer B2B',
+            reference_number: `${inv.invoice_number || 'INV'} / ${inv.so_number || 'SO'}`,
+            notes: paymentNotes || `Pelunasan piutang invoice ${inv.invoice_number || ''} via ${targetBankName || selectedAcc.name}`,
+            proof_url: paymentProofUrl || inv.payment_proof_url,
+            created_by: currentUser?.name || 'Staf Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to auto-record BKM to cash store:', e);
+      }
+
+      return {
+        ...inv,
+        paid_amount: totalAccumulatedPaid,
+        status: (isFullyPaid ? 'PAID' : 'PARTIALLY_PAID') as any,
+        payment_verification_status: 'VERIFIED' as const,
+        payment_notes: paymentNotes || inv.payment_notes,
+        last_payment_date: payDate,
+        payment_proof_url: paymentProofUrl || inv.payment_proof_url,
+        payment_history: [...existingHistory, newHistoryItem],
+      };
+    });
+
+    // If it was a new invoice not in store yet
+    if (!currentInvs.some((i) => i.id === invoiceId || i.invoice_number === selectedInvoiceForPayment?.invoice_number) && selectedInvoiceForPayment) {
+      const incomingPayment = newPaymentAmount !== undefined ? Number(newPaymentAmount) : Number(selectedInvoiceForPayment.total_amount);
+      const isFullyPaid = incomingPayment >= Number(selectedInvoiceForPayment.total_amount);
+      const payDate = paymentDate || new Date().toISOString().split('T')[0];
+
+      const newInvRecord: Invoice = {
+        ...selectedInvoiceForPayment,
+        paid_amount: incomingPayment,
+        status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+        payment_verification_status: 'VERIFIED',
+        last_payment_date: payDate,
+        payment_history: [
+          {
+            id: `pay-${Date.now()}`,
+            payment_date: payDate,
+            amount: incomingPayment,
+            remaining_after: Math.max(0, Number(selectedInvoiceForPayment.total_amount) - incomingPayment),
+            bank_account_id: targetAccountId,
+            bank_name: targetBankName,
+            payment_proof_url: paymentProofUrl,
+            payment_notes: paymentNotes,
+            verified_by: currentUser?.name || 'Staf Finance',
+            created_at: new Date().toISOString(),
+          },
+        ],
+      };
+      updatedInvoices.unshift(newInvRecord);
+
+      // Record BKM
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const selectedAcc = cashAccounts.find((a) => a.id === targetAccountId) || cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
+        if (incomingPayment > 0 && selectedAcc) {
+          recordCashTransaction({
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
+            tx_type: 'IN',
+            category: 'PENJUALAN_SO',
+            amount: incomingPayment,
+            date: payDate,
+            recipient_or_payer: newInvRecord.customer_name || 'Customer B2B',
+            reference_number: `${newInvRecord.invoice_number || 'INV'} / ${newInvRecord.so_number || 'SO'}`,
+            notes: paymentNotes || `Pelunasan piutang invoice ${newInvRecord.invoice_number} via ${targetBankName || selectedAcc.name}`,
+            proof_url: paymentProofUrl,
+            created_by: currentUser?.name || 'Staf Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {}
+    }
+
+    setInvoices(updatedInvoices);
+    saveStoredInvoices(updatedInvoices);
+    syncFinanceData();
+    fetchOrders();
+    setSelectedInvoiceForPayment(null);
+  };
 
   useEffect(() => {
     try {
@@ -221,26 +429,33 @@ export default function SalesOrdersPage() {
                   <th className="px-6 py-3">Customer B2B</th>
                   <th className="px-6 py-3">Rincian Item Dipesan</th>
                   {showFinancialColumn && <th className="px-6 py-3">Total Nilai Tagihan</th>}
-                  <th className="px-6 py-3">STATUS SO</th>
+                  <th className="px-6 py-3">Jatuh Tempo</th>
+                  <th className="px-6 py-3">Sisa Hari</th>
+                  <th className="px-6 py-3">Status Bayar (Kas)</th>
+                  <th className="px-6 py-3">STATUS ALUR SO</th>
                   <th className="px-6 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 6 : 5} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-400" />
                       Memuat data pesanan dari database...
                     </td>
                   </tr>
                 ) : salesOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 6 : 5} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
                       Belum ada Sales Order masuk. Pesanan dari Customer B2B akan muncul di sini.
                     </td>
                   </tr>
                 ) : salesOrders.map((so) => {
                   const isRead = readOrderIds.includes(so.id);
+                  const matchingInv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+                  const dueInfo = calculateSODueDateInfo(so, matchingInv);
+                  const payStatus = getSOPaymentStatusFromCash(so, matchingInv, cashTxs);
+
                   return (
                     <tr
                       key={so.id}
@@ -307,6 +522,97 @@ export default function SalesOrdersPage() {
                         </td>
                       )}
 
+                      {/* Kolom Jatuh Tempo */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{formatDate(dueInfo.dueDateStr)}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : 'TOP: 30 Hari'}
+                        </div>
+                      </td>
+
+                      {/* Kolom Sisa Hari */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lunas Selesai
+                          </span>
+                        ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
+                          <span className="text-slate-400 text-xs">-</span>
+                        ) : dueInfo.isOverdue ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}
+                          </span>
+                        ) : dueInfo.isDueToday ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" /> Hari Ini
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                            dueInfo.diffDays <= 7
+                              ? 'text-amber-800 bg-amber-50 border-amber-200'
+                              : 'text-blue-700 bg-blue-50 border-blue-200'
+                          }`}>
+                            <Clock className="w-3 h-3" /> {dueInfo.displayText}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Kolom Status Bayar (dari Manajemen Kas) - Interactive Link */}
+                      <td className="px-6 py-3.5 whitespace-nowrap text-xs">
+                        {payStatus.status === 'PAID' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPaymentForSO(so)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk melihat riwayat penerimaan kas"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
+                            </span>
+                            {payStatus.bankName && (
+                              <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+                                <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
+                              </div>
+                            )}
+                          </button>
+                        ) : payStatus.status === 'PARTIAL' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPaymentForSO(so)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk input cicilan / sisa pelunasan invoice"
+                          >
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-full border border-amber-300 transition-colors shadow-2xs">
+                              <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN • Input Bayar &rarr;
+                            </span>
+                            <div className="text-[10px] text-amber-900 font-mono mt-0.5 group-hover:underline">
+                              {formatIDR(payStatus.totalPaid)} / {formatIDR(so.grand_total || (so as any).total_goods_amount || 0)}
+                            </div>
+                          </button>
+                        ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                            <XCircle className="w-3 h-3" /> BATAL
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPaymentForSO(so)}
+                            className="text-left group cursor-pointer"
+                            title="Klik untuk langsung input verifikasi pembayaran masuk ke Manajemen Kas"
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-full border border-rose-200 transition-all shadow-2xs group-hover:border-rose-400">
+                              <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR • Input Bayar &rarr;
+                            </span>
+                            <div className="text-[10px] text-rose-600 font-mono mt-0.5 group-hover:underline">
+                              Sisa: {formatIDR(so.grand_total || (so as any).total_goods_amount || 0)}
+                            </div>
+                          </button>
+                        )}
+                      </td>
+
                       <td className="px-6 py-3.5">
                         {(() => {
                           const soCustomer = customers.find((c) => c.id === so.customer_id) ||
@@ -369,6 +675,14 @@ export default function SalesOrdersPage() {
           </div>
         </div>
       </main>
+
+      {/* Verify Payment Modal for 1-Click SO Payment */}
+      <VerifyPaymentModal
+        isOpen={!!selectedInvoiceForPayment}
+        onClose={() => setSelectedInvoiceForPayment(null)}
+        invoice={selectedInvoiceForPayment}
+        onVerify={handleVerifyPayment}
+      />
     </div>
   );
 }
