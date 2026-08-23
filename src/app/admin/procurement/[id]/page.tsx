@@ -376,7 +376,11 @@ export default function PODetailPage() {
     ? receivedShipments.sort((a, b) => new Date(b.shipment_date).getTime() - new Date(a.shipment_date).getTime())[0]
     : null;
   const stepDiterimaTime = po.status === 'DITERIMA'
-    ? (lastReceivedShipment ? formatDateTime(lastReceivedShipment.shipment_date) : formatDate(new Date().toISOString()))
+    ? (lastReceivedShipment ? formatDateTime(lastReceivedShipment.shipment_date) : (po.order_date ? formatDateTime(po.order_date) : formatDate(new Date().toISOString())))
+    : po.status === 'DIKIRIM'
+    ? 'Menunggu Kedatangan Barang'
+    : po.status === 'BUAT_EMAIL'
+    ? 'Menunggu Pengiriman Suplier'
     : '-';
   // ────────────────────────────────────────────────────────────────────────
 
@@ -664,11 +668,40 @@ export default function PODetailPage() {
                     {isPartialStep ? `Dikirim Sebagian (${shipmentPct}%)` : step.title}
                   </div>
                   <div className="text-[11px] text-slate-500 pt-1">
-                    <div className="font-semibold text-slate-600">{step.time}</div>
+                    <div className={`font-semibold ${step.key === 'DITERIMA' && po.status === 'DIKIRIM' ? 'text-amber-700 font-bold' : 'text-slate-600'}`}>
+                      {step.time}
+                    </div>
                     <div className="text-[10px] text-slate-400 uppercase leading-tight font-medium">
                       {step.actor}
                     </div>
                   </div>
+
+                  {/* Tombol Cepat Aksi Penerimaan Barang untuk Tahap 3 */}
+                  {step.key === 'DITERIMA' && po.status === 'DIKIRIM' && (
+                    <div className="pt-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pendingShipment = po.shipments?.find((s) => s.status === 'DIKIRIM') || (po.shipments && po.shipments[0]) || null;
+                          setActiveShipmentForGR(pendingShipment);
+                          setIsGRModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3.5 py-1.5 rounded-lg shadow-sm hover:shadow transition-all cursor-pointer hover:scale-105 active:scale-95 animate-pulse hover:animate-none"
+                        title="Klik untuk langsung konfirmasi penerimaan fisik barang di gudang"
+                      >
+                        <PackageCheck className="w-3.5 h-3.5" />
+                        <span>Terima Barang (Gudang) &rarr;</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {step.key === 'DITERIMA' && po.status === 'DITERIMA' && (
+                    <div className="pt-1.5 flex justify-center">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Barang Masuk Gudang FEFO
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
