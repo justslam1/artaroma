@@ -24,6 +24,10 @@ import {
   Building2,
   XCircle,
   DollarSign,
+  Search,
+  Users,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -46,6 +50,13 @@ export default function SalesOrdersPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
+
+  // Filter States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
+  const [customerFilter, setCustomerFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState<string>('ALL');
 
   const syncFinanceData = () => {
     setInvoices(getStoredInvoices());
@@ -302,6 +313,94 @@ export default function SalesOrdersPage() {
     return Math.max(0, soTotal - paid) > 0;
   }).length;
 
+  // Filtered Sales Orders
+  const filteredOrders = salesOrders.filter((so) => {
+    // 1. Search term
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      const matchSoNumber = (so.so_number || '').toLowerCase().includes(term);
+      const matchCustomer =
+        ((so as any).customer_company || '').toLowerCase().includes(term) ||
+        (so.customer_name || '').toLowerCase().includes(term);
+      const matchSuratJalan = (so.surat_jalan_number || '').toLowerCase().includes(term);
+      const matchItems = (so.items || []).some(
+        (item: any) =>
+          (item.product_name || '').toLowerCase().includes(term) ||
+          (item.product_sku || '').toLowerCase().includes(term)
+      );
+
+      if (!matchSoNumber && !matchCustomer && !matchSuratJalan && !matchItems) {
+        return false;
+      }
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== 'ALL') {
+      if (statusFilter === 'DIAJUKAN') {
+        if (so.status !== 'DIAJUKAN' && so.status !== 'PENDING_APPROVAL') return false;
+      } else if (statusFilter === 'DIKONFIRMASI') {
+        if (so.status !== 'DIKONFIRMASI') return false;
+      } else if (statusFilter === 'PROSES_GUDANG') {
+        if (so.status !== 'PROSES_GUDANG') return false;
+      } else if (statusFilter === 'DIKIRIM') {
+        if (so.status !== 'DIKIRIM') return false;
+      } else if (statusFilter === 'DITERIMA') {
+        if (so.status !== 'DITERIMA') return false;
+      } else if (statusFilter === 'CANCELLED') {
+        if (so.status !== 'CANCELLED' && (so.status as any) !== 'DIBATALKAN') return false;
+      }
+    }
+
+    // 3. Payment Filter
+    const soTotal = Number((so as any).grand_total || (so as any).total_goods_amount || (so as any).total_amount || 0);
+    const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    const paid = inv ? Number(inv.paid_amount || 0) : Number((so as any).paid_amount || 0);
+    const remaining = Math.max(0, soTotal - paid);
+    const isLunas = soTotal > 0 && remaining === 0;
+    const isOverdue = inv?.due_date && new Date(inv.due_date).getTime() < new Date().setHours(0, 0, 0, 0) && remaining > 0;
+
+    if (paymentFilter === 'UNPAID_OR_PARTIAL' && isLunas) return false;
+    if (paymentFilter === 'PAID' && !isLunas) return false;
+    if (paymentFilter === 'OVERDUE' && !isOverdue) return false;
+
+    // 4. Customer Filter
+    if (customerFilter !== 'ALL') {
+      if (
+        so.customer_id !== customerFilter &&
+        so.customer_name !== customerFilter &&
+        (so as any).customer_company !== customerFilter
+      ) {
+        return false;
+      }
+    }
+
+    // 5. Date Filter
+    if (dateFilter !== 'ALL' && so.order_date) {
+      const orderDate = new Date(so.order_date);
+      const now = new Date();
+      if (dateFilter === 'THIS_MONTH') {
+        if (orderDate.getFullYear() !== now.getFullYear() || orderDate.getMonth() !== now.getMonth()) {
+          return false;
+        }
+      } else if (dateFilter === 'LAST_MONTH') {
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        if (orderDate.getFullYear() !== lastMonth.getFullYear() || orderDate.getMonth() !== lastMonth.getMonth()) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
+
+  const countAll = salesOrders.length;
+  const countDiajukan = salesOrders.filter((s) => s.status === 'DIAJUKAN' || s.status === 'PENDING_APPROVAL').length;
+  const countDikonfirmasi = salesOrders.filter((s) => s.status === 'DIKONFIRMASI').length;
+  const countProsesGudang = salesOrders.filter((s) => s.status === 'PROSES_GUDANG').length;
+  const countDikirim = salesOrders.filter((s) => s.status === 'DIKIRIM').length;
+  const countDiterima = salesOrders.filter((s) => s.status === 'DITERIMA').length;
+  const countCancelled = salesOrders.filter((s) => s.status === 'CANCELLED' || (s.status as any) === 'DIBATALKAN').length;
+
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
@@ -444,6 +543,207 @@ export default function SalesOrdersPage() {
           </div>
         )}
 
+        {/* Filter Toolbar & Status Tab Pills */}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3.5">
+          {/* Top Row: Search & Dropdowns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Search */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari No. SO, Customer, Aroma..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all font-medium"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Customer Filter */}
+            <div className="relative">
+              <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <select
+                value={customerFilter}
+                onChange={(e) => setCustomerFilter(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
+              >
+                <option value="ALL">👥 Semua Customer</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name || (c as any).name || (c as any).pic_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Payment Filter */}
+            <div className="relative">
+              <CreditCard className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
+              >
+                <option value="ALL">💳 Semua Status Kas</option>
+                <option value="UNPAID_OR_PARTIAL">⚠️ Belum Lunas (Ada Sisa Piutang)</option>
+                <option value="PAID">✅ Lunas (Kas Masuk BKM)</option>
+                <option value="OVERDUE">🚨 Lewat Jatuh Tempo (Overdue)</option>
+              </select>
+            </div>
+
+            {/* Date Filter & Reset */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white text-slate-700 font-medium"
+                >
+                  <option value="ALL">📅 Semua Tanggal</option>
+                  <option value="THIS_MONTH">Bulan Ini</option>
+                  <option value="LAST_MONTH">Bulan Lalu</option>
+                </select>
+              </div>
+
+              {(searchTerm || statusFilter !== 'ALL' || paymentFilter !== 'ALL' || customerFilter !== 'ALL' || dateFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('ALL');
+                    setPaymentFilter('ALL');
+                    setCustomerFilter('ALL');
+                    setDateFilter('ALL');
+                  }}
+                  className="px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-2xs"
+                  title="Reset Semua Filter"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Row: Status Tab Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pt-2.5 border-t border-gray-100 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'ALL'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'bg-gray-100 text-slate-600 hover:bg-gray-200'
+              }`}
+            >
+              Semua
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'ALL' ? 'bg-white/25 text-white' : 'bg-gray-200 text-slate-700'}`}>
+                {countAll}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('DIAJUKAN')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'DIAJUKAN'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              🟡 Diajukan
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DIAJUKAN' ? 'bg-white/25 text-white' : 'bg-amber-200 text-amber-900'}`}>
+                {countDiajukan}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('DIKONFIRMASI')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'DIKONFIRMASI'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
+              }`}
+            >
+              🔵 Dikonfirmasi
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DIKONFIRMASI' ? 'bg-white/25 text-white' : 'bg-blue-200 text-blue-900'}`}>
+                {countDikonfirmasi}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('PROSES_GUDANG')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'PROSES_GUDANG'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+              }`}
+            >
+              📦 Proses Gudang
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'PROSES_GUDANG' ? 'bg-white/25 text-white' : 'bg-purple-200 text-purple-900'}`}>
+                {countProsesGudang}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('DIKIRIM')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'DIKIRIM'
+                  ? 'bg-teal-600 text-white shadow-xs'
+                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+              }`}
+            >
+              🚚 Dikirim
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DIKIRIM' ? 'bg-white/25 text-white' : 'bg-teal-200 text-teal-900'}`}>
+                {countDikirim}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('DITERIMA')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'DITERIMA'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+              }`}
+            >
+              🟢 Selesai / Diterima
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'DITERIMA' ? 'bg-white/25 text-white' : 'bg-emerald-200 text-emerald-900'}`}>
+                {countDiterima}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStatusFilter('CANCELLED')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'CANCELLED'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+              }`}
+            >
+              🔴 Dibatalkan
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === 'CANCELLED' ? 'bg-white/25 text-white' : 'bg-rose-200 text-rose-900'}`}>
+                {countCancelled}
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* Sales Orders List Table */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -454,7 +754,7 @@ export default function SalesOrdersPage() {
             <div className="flex items-center gap-3">
               {canUserExportXLSX(currentUser) && (
                 <button
-                  onClick={() => exportSalesOrdersToXLSX(salesOrders)}
+                  onClick={() => exportSalesOrdersToXLSX(filteredOrders)}
                   className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold border border-emerald-300 hover:border-emerald-400 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs"
                   title="Ekspor ke Excel (.xlsx)"
                 >
@@ -479,7 +779,9 @@ export default function SalesOrdersPage() {
                   )}
                 </button>
               )}
-              <span className="text-xs text-slate-400 font-medium">{isLoading ? 'Memuat...' : `${salesOrders.length} Pesanan`}</span>
+              <span className="text-xs text-slate-400 font-medium">
+                {isLoading ? 'Memuat...' : `${filteredOrders.length} dari ${salesOrders.length} Pesanan`}
+              </span>
               <button
                 onClick={fetchOrders}
                 className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold border border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
@@ -512,13 +814,32 @@ export default function SalesOrdersPage() {
                       Memuat data pesanan dari database...
                     </td>
                   </tr>
-                ) : salesOrders.length === 0 ? (
+                ) : filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={showFinancialColumn ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">
-                      Belum ada Sales Order masuk. Pesanan dari Customer B2B akan muncul di sini.
+                      {salesOrders.length === 0 ? (
+                        'Belum ada Sales Order masuk. Pesanan dari Customer akan muncul di sini.'
+                      ) : (
+                        <div className="space-y-2">
+                          <div>Tidak ada Sales Order yang sesuai dengan kriteria filter &amp; pencarian.</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchTerm('');
+                              setStatusFilter('ALL');
+                              setPaymentFilter('ALL');
+                              setCustomerFilter('ALL');
+                              setDateFilter('ALL');
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-bold bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-all cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Reset Semua Filter
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ) : salesOrders.map((so) => {
+                ) : filteredOrders.map((so) => {
                   const isRead = readOrderIds.includes(so.id);
                   const matchingInv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
                   const dueInfo = calculateSODueDateInfo(so, matchingInv);
