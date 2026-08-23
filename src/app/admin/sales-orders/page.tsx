@@ -433,20 +433,19 @@ export default function SalesOrdersPage() {
                   <th className="px-6 py-3">Sisa Hari</th>
                   <th className="px-6 py-3">Status Bayar (Kas)</th>
                   <th className="px-6 py-3">STATUS ALUR SO</th>
-                  <th className="px-6 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-400" />
                       Memuat data pesanan dari database...
                     </td>
                   </tr>
                 ) : salesOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">
                       Belum ada Sales Order masuk. Pesanan dari Customer B2B akan muncul di sini.
                     </td>
                   </tr>
@@ -652,20 +651,6 @@ export default function SalesOrdersPage() {
                             </div>
                           );
                         })()}
-                      </td>
-
-                      <td className="px-6 py-3.5 text-right">
-                        <Link
-                          href={`/admin/orders/${so.id}`}
-                          onClick={() => markAsRead(so.id)}
-                          className={`text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1 shadow-sm transition-colors ${
-                            isRead
-                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white font-bold'
-                          }`}
-                        >
-                          <Eye className="w-3.5 h-3.5" /> Detail SO
-                        </Link>
                       </td>
                     </tr>
                   );
