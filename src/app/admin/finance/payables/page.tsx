@@ -41,9 +41,22 @@ export default function FinancePayablesPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [selectedPOForPayment, setSelectedPOForPayment] = useState<PurchaseOrder | null>(null);
 
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [selectedSourceBankId, setSelectedSourceBankId] = useState<string>('acc-bca');
   const [transferRef, setTransferRef] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/company-settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data?.bank_accounts) {
+          setBankAccounts(json.data.bank_accounts);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
@@ -87,20 +100,25 @@ export default function FinancePayablesPage() {
         }),
       });
 
-      // Auto-record BKK to Kas Besar (Treasury)
+      // Auto-record BKK to specific Kas Besar Bank (Treasury)
       try {
         const cashAccounts = getStoredCashAccounts();
-        const bcaAcc = cashAccounts.find((a) => a.id === 'acc-bca') || cashAccounts[0];
-        if (selectedPOForPayment.total_amount > 0 && bcaAcc) {
+        const selectedAcc =
+          cashAccounts.find((a) => a.id === selectedSourceBankId) ||
+          cashAccounts.find((a) => a.id === 'acc-bca') ||
+          cashAccounts[0];
+
+        if (selectedPOForPayment.total_amount > 0 && selectedAcc) {
           recordCashTransaction({
-            account_id: bcaAcc.id,
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
             tx_type: 'OUT',
             category: 'PEMBELIAN_PO',
             amount: Number(selectedPOForPayment.total_amount),
             date: new Date().toISOString().split('T')[0],
             recipient_or_payer: selectedPOForPayment.distributor_name || 'Suplier Distributor',
             reference_number: selectedPOForPayment.po_number,
-            notes: `Pembayaran hutang PO ${selectedPOForPayment.po_number} kepada ${selectedPOForPayment.distributor_name || 'Suplier'}${transferRef ? ` (Ref: ${transferRef})` : ''}`,
+            notes: `Pembayaran hutang PO ${selectedPOForPayment.po_number} kepada ${selectedPOForPayment.distributor_name || 'Suplier'} via ${selectedAcc.name}${transferRef ? ` (Ref: ${transferRef})` : ''}`,
             proof_url: undefined,
             created_by: currentUser?.name || 'Staf Finance',
             status: 'VERIFIED',
@@ -356,6 +374,44 @@ export default function FinancePayablesPage() {
                 <div>Ref PO: <strong>{selectedPOForPayment.po_number}</strong></div>
                 <div>Distributor Suplier: <strong>{selectedPOForPayment.distributor_name}</strong></div>
                 <div>Total Nilai Tagihan: <strong className="text-base text-purple-800 font-mono">{formatIDR(selectedPOForPayment.total_amount)}</strong></div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Rekening Bank Sumber Pembayaran (Kas Keluar) <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedSourceBankId}
+                  onChange={(e) => setSelectedSourceBankId(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold focus:outline-none focus:border-purple-500"
+                >
+                  {bankAccounts.length > 0 ? (
+                    bankAccounts.map((b: any, idx: number) => {
+                      const cleanBank = (b.bank || 'Bank').toLowerCase();
+                      const accId = cleanBank.includes('bca')
+                        ? 'acc-bca'
+                        : cleanBank.includes('mandiri')
+                        ? 'acc-mandiri'
+                        : cleanBank.includes('bni')
+                        ? 'acc-bni'
+                        : `acc-bank-${idx}`;
+                      return (
+                        <option key={idx} value={accId}>
+                          {b.bank} - {b.no} ({b.jenis || 'Rekening Operasional'})
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="acc-bca">Bank Central Asia (BCA) - 882-019-3881</option>
+                      <option value="acc-mandiri">Bank Mandiri - 156-00-1928374-1</option>
+                      <option value="acc-bni">Bank BNI - 009-445-8876</option>
+                    </>
+                  )}
+                </select>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Dana kas keluar (BKK) akan otomatis memotong saldo rekening bank yang dipilih di atas.
+                </span>
               </div>
 
               <div>
