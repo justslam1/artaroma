@@ -256,6 +256,62 @@ export function saveStoredCashTransactions(txs: CashTransaction[]): void {
 }
 
 /**
+ * Sync bank accounts from Master Data (company_settings bank_accounts)
+ */
+export function syncBankAccountsFromMaster(masterBanks: any[]): CashAccount[] {
+  if (!Array.isArray(masterBanks) || masterBanks.length === 0) {
+    return getStoredCashAccounts();
+  }
+
+  const existingAccounts = getStoredCashAccounts();
+  const txs = getStoredCashTransactions();
+
+  // Keep non-bank accounts (Kas Tunai Pusat, Kas Kantor, Kas Kecil, Kas Sales)
+  const nonBankAccounts = existingAccounts.filter((a) => a.type !== 'KAS_BESAR_BANK');
+
+  // Convert master banks to CashAccount
+  const bankAccounts: CashAccount[] = masterBanks.map((mb, idx) => {
+    const cleanNo = (mb.no || '').replace(/[^0-9]/g, '');
+    const cleanBank = (mb.bank || 'Bank').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const id = cleanBank.includes('bca')
+      ? 'acc-bca'
+      : cleanBank.includes('mandiri')
+      ? 'acc-mandiri'
+      : cleanBank.includes('bni')
+      ? 'acc-bni'
+      : `acc-bank-${cleanBank}-${cleanNo.slice(-4) || idx}`;
+
+    // Find existing account to preserve initial_balance or id
+    const existing = existingAccounts.find(
+      (a) => a.id === id || a.account_number === mb.no || (a.bank_name && a.bank_name.toLowerCase().includes(cleanBank))
+    );
+
+    const initBal = existing ? Number(existing.initial_balance) || 0 : idx === 0 ? 150000000 : idx === 1 ? 80000000 : 50000000;
+
+    return {
+      id: existing ? existing.id : id,
+      name: `${mb.bank} (${mb.no})`,
+      type: 'KAS_BESAR_BANK' as const,
+      account_number: mb.no,
+      bank_name: mb.bank,
+      holder_name: mb.atas_nama || 'PT Artaroma Jayatama',
+      initial_balance: initBal,
+      current_balance: initBal,
+      pic_name: 'Finance Treasury',
+      description: mb.jenis || 'Rekening Operasional Bank Master Data',
+      badge_color: cleanBank.includes('bca') ? 'bg-blue-600' : cleanBank.includes('mandiri') ? 'bg-amber-600' : cleanBank.includes('bni') ? 'bg-orange-600' : 'bg-emerald-600',
+      is_active: true,
+    };
+  });
+
+  const merged = [...bankAccounts, ...nonBankAccounts];
+  const recalculated = recalculateBalances(merged, txs);
+
+  saveStoredCashAccounts(recalculated);
+  return recalculated;
+}
+
+/**
  * Recalculates current_balance for all cash accounts based on transactions
  */
 export function recalculateBalances(

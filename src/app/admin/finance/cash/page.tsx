@@ -16,6 +16,7 @@ import {
   recordCashTransaction,
   transferCashBetweenAccounts,
   deleteCashTransaction,
+  syncBankAccountsFromMaster,
 } from '@/lib/cash-store';
 import { formatIDR, formatDate } from '@/lib/utils';
 import { exportCashLedgerToXLSX } from '@/lib/export-excel';
@@ -81,10 +82,21 @@ export default function CashManagementPage() {
     referenceNumber?: string;
   }>({ isOpen: false });
 
-  // Load Data
-  const loadData = () => {
+  // Load Data with Master Data Bank sync
+  const loadData = async () => {
     setIsLoading(true);
     try {
+      // 1. Fetch live bank accounts from MySQL / Master Data API
+      try {
+        const res = await fetch('/api/company-settings', { cache: 'no-store' });
+        const json = await res.json();
+        if (json.success && json.data?.bank_accounts) {
+          syncBankAccountsFromMaster(json.data.bank_accounts);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch bank accounts from Master Data API:', err);
+      }
+
       const accs = getStoredCashAccounts();
       const txs = getStoredCashTransactions();
       setAccounts(accs);
@@ -101,8 +113,10 @@ export default function CashManagementPage() {
       loadData();
     };
     window.addEventListener('artaroma_cash_updated', handleUpdate);
+    window.addEventListener('artaroma_company_settings_updated', handleUpdate);
     return () => {
       window.removeEventListener('artaroma_cash_updated', handleUpdate);
+      window.removeEventListener('artaroma_company_settings_updated', handleUpdate);
     };
   }, []);
 

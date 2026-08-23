@@ -1748,6 +1748,7 @@ export default function MasterDataPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newConfig),
       });
+      window.dispatchEvent(new Event('artaroma_company_settings_updated'));
       alert('Data rekening bank berhasil disimpan!');
     } catch (err: any) {
       alert('Gagal menyimpan: ' + err.message);
@@ -1767,6 +1768,7 @@ export default function MasterDataPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newConfig),
         });
+        window.dispatchEvent(new Event('artaroma_company_settings_updated'));
         alert('Data rekening bank berhasil dihapus!');
       } catch (err: any) {
         alert('Gagal menghapus: ' + err.message);
