@@ -623,15 +623,32 @@ export function exportPayablesToXLSX(payables: any[], customFileName?: string): 
     return false;
   }
 
-  const rows = payables.map((p, index) => ({
-    'No': index + 1,
-    'No PO': p.po_number || '-',
-    'Nama Suplier': p.distributor_name || '-',
-    'Tanggal Order': p.order_date || '-',
-    'Jatuh Tempo': p.due_date || '-',
-    'Total Hutang (IDR)': p.total_amount || 0,
-    'Status Hutang': p.payment_status || p.status || 'BELUM LUNAS',
-  }));
+  const rows = payables.map((p, index) => {
+    const total = Number(p.total_amount || 0);
+    const paid = Number(p.paid_amount || 0);
+    const remaining = Math.max(0, total - paid);
+    const statusText =
+      p.status === 'DIBATALKAN' || p.status === 'CANCELLED'
+        ? 'DIBATALKAN'
+        : remaining === 0 && total > 0
+        ? 'LUNAS'
+        : paid > 0
+        ? 'DIBAYAR SEBAGIAN'
+        : 'BELUM DIBAYAR';
+
+    return {
+      'No': index + 1,
+      'No PO': p.po_number || '-',
+      'Nama Suplier': p.distributor_name || '-',
+      'Tanggal Order': p.order_date || '-',
+      'Jatuh Tempo': p.due_date || '-',
+      'Total Tagihan (IDR)': total,
+      'Sudah Dibayar (IDR)': paid,
+      'Sisa Hutang (IDR)': remaining,
+      'Status Pembayaran': statusText,
+      'Status Alur PO': p.status || '-',
+    };
+  });
 
   const timestamp = new Date().toISOString().split('T')[0];
   return exportToXLSX(rows, {

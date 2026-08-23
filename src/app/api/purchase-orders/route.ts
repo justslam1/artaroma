@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
           const dist = await executeQuery('SELECT name FROM distributors WHERE id = ?', [po.distributor_id]);
           const distributor_name = dist && dist[0] ? dist[0].name : (po.distributor_name || 'Distributor Vendor');
 
-          pos.push({
+            pos.push({
             id: po.id,
             po_number: po.po_number,
             distributor_id: po.distributor_id,
@@ -26,11 +26,33 @@ export async function GET(req: NextRequest) {
             status: po.status,
             payment_method: po.payment_method || 'TUNAI',
             payment_terms_days: po.payment_terms_days || 0,
+            due_date: po.due_date || undefined,
             currency: po.currency || 'IDR',
             exchange_rate: parseFloat(po.exchange_rate) || 1.0,
             foreign_total_amount: po.foreign_total_amount !== null ? parseFloat(po.foreign_total_amount) : undefined,
             order_date: po.order_date,
             total_amount: parseFloat(po.total_amount) || 0,
+            paid_amount: po.paid_amount !== null && po.paid_amount !== undefined ? parseFloat(po.paid_amount) : (po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? parseFloat(po.total_amount) : 0),
+            payment_status: po.payment_status || (
+              parseFloat(po.paid_amount) >= parseFloat(po.total_amount) && parseFloat(po.total_amount) > 0
+                ? 'PAID'
+                : parseFloat(po.paid_amount) > 0
+                ? 'PARTIALLY_PAID'
+                : (po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? 'PAID' : 'UNPAID')
+            ),
+            payment_proof_url: po.payment_proof_url || undefined,
+            payment_reference_no: po.payment_reference_no || undefined,
+            payment_bank_id: po.payment_bank_id || undefined,
+            payment_bank_name: po.payment_bank_name || undefined,
+            last_payment_date: po.last_payment_date || undefined,
+            payment_history: (() => {
+              if (!po.payment_history) return undefined;
+              try {
+                return typeof po.payment_history === 'string' ? JSON.parse(po.payment_history) : po.payment_history;
+              } catch {
+                return undefined;
+              }
+            })(),
             items: items.map((item: any) => ({
               id: item.id,
               po_id: item.po_id,
@@ -212,7 +234,15 @@ export async function PUT(req: NextRequest) {
       id, 
       status, 
       payment_method, 
-      payment_terms_days, 
+      payment_terms_days,
+      paid_amount,
+      payment_status,
+      payment_proof_url,
+      payment_reference_no,
+      payment_bank_id,
+      payment_bank_name,
+      payment_history,
+      last_payment_date,
       items, 
       shipments,
       cancellation_note,
@@ -228,23 +258,92 @@ export async function PUT(req: NextRequest) {
     }
 
     try {
+      // Ensure columns exist safely in MySQL
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN paid_amount DECIMAL(15,2) DEFAULT 0`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_status VARCHAR(50) DEFAULT 'UNPAID'`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_proof_url LONGTEXT`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_reference_no VARCHAR(255)`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_bank_id VARCHAR(100)`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_bank_name VARCHAR(255)`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN payment_history JSON`);
+      } catch {}
+      try {
+        await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN last_payment_date VARCHAR(50)`);
+      } catch {}
+
       const shipmentsJson = shipments ? JSON.stringify(shipments) : null;
-      await executeQuery(
-        `UPDATE purchase_orders 
-         SET status = ?, payment_method = ?, payment_terms_days = ?, shipments = ?, 
-             cancellation_note = ?, cancelled_at = ?, cancelled_by = ?
-         WHERE id = ?`,
-        [
-          status || 'BUAT_EMAIL',
-          payment_method || 'TUNAI',
-          payment_terms_days || 0,
-          shipmentsJson,
-          cancellation_note || null,
-          cancelled_at || null,
-          cancelled_by || null,
-          id,
-        ]
-      );
+      const historyJson = payment_history ? JSON.stringify(payment_history) : null;
+
+      // Update with payment fields if provided
+      if (paid_amount !== undefined || payment_status !== undefined || payment_history !== undefined) {
+        await executeQuery(
+          `UPDATE purchase_orders 
+           SET status = COALESCE(?, status), 
+               payment_method = COALESCE(?, payment_method), 
+               payment_terms_days = COALESCE(?, payment_terms_days), 
+               shipments = COALESCE(?, shipments), 
+               paid_amount = ?, 
+               payment_status = ?, 
+               payment_proof_url = COALESCE(?, payment_proof_url), 
+               payment_reference_no = COALESCE(?, payment_reference_no), 
+               payment_bank_id = COALESCE(?, payment_bank_id), 
+               payment_bank_name = COALESCE(?, payment_bank_name), 
+               payment_history = ?, 
+               last_payment_date = COALESCE(?, last_payment_date),
+               cancellation_note = COALESCE(?, cancellation_note), 
+               cancelled_at = COALESCE(?, cancelled_at), 
+               cancelled_by = COALESCE(?, cancelled_by)
+           WHERE id = ?`,
+          [
+            status || null,
+            payment_method || null,
+            payment_terms_days !== undefined ? payment_terms_days : null,
+            shipmentsJson,
+            paid_amount !== undefined ? paid_amount : 0,
+            payment_status || 'UNPAID',
+            payment_proof_url || null,
+            payment_reference_no || null,
+            payment_bank_id || null,
+            payment_bank_name || null,
+            historyJson,
+            last_payment_date || null,
+            cancellation_note || null,
+            cancelled_at || null,
+            cancelled_by || null,
+            id,
+          ]
+        );
+      } else {
+        await executeQuery(
+          `UPDATE purchase_orders 
+           SET status = ?, payment_method = ?, payment_terms_days = ?, shipments = ?, 
+               cancellation_note = ?, cancelled_at = ?, cancelled_by = ?
+           WHERE id = ?`,
+          [
+            status || 'BUAT_EMAIL',
+            payment_method || 'TUNAI',
+            payment_terms_days || 0,
+            shipmentsJson,
+            cancellation_note || null,
+            cancelled_at || null,
+            cancelled_by || null,
+            id,
+          ]
+        );
+      }
 
       if (items && Array.isArray(items)) {
         for (const item of items) {

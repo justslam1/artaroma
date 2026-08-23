@@ -200,6 +200,20 @@ export interface POShipment {
   expiry_date?: string;
 }
 
+export interface POPaymentRecord {
+  id?: string;
+  payment_date: string;
+  amount: number;
+  remaining_after: number;
+  bank_account_id?: string;
+  bank_name?: string;
+  reference_no?: string;
+  payment_proof_url?: string;
+  payment_notes?: string;
+  created_by?: string;
+  created_at?: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   po_number: string;
@@ -214,6 +228,14 @@ export interface PurchaseOrder {
   foreign_total_amount?: number;
   order_date: string;
   total_amount: number;
+  paid_amount?: number;
+  payment_status?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+  payment_proof_url?: string;
+  payment_reference_no?: string;
+  payment_bank_id?: string;
+  payment_bank_name?: string;
+  payment_history?: POPaymentRecord[];
+  last_payment_date?: string;
   items: POItem[];
   shipments?: POShipment[];
   created_by?: string;

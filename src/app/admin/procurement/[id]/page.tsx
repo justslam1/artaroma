@@ -6,12 +6,14 @@ import { useParams } from 'next/navigation';
 import { AdminTopNav } from '@/components/navigation/admin-topnav';
 import { POPDFModal } from '@/components/common/po-pdf-modal';
 import { GoodsReceiptModal } from '@/components/admin/po-modal';
+import { POPaymentModal } from '@/components/admin/po-payment-modal';
 import {
   initialPurchaseOrders,
   initialBatches,
 } from '@/lib/mock-data';
-import { PurchaseOrder, StockBatch, Distributor } from '@/lib/types';
+import { PurchaseOrder, StockBatch, Distributor, POPaymentRecord } from '@/lib/types';
 import { formatIDR, formatKg, formatDate, formatDateTime } from '@/lib/utils';
+import { getStoredCashAccounts, recordCashTransaction } from '@/lib/cash-store';
 import {
   ArrowLeft,
   FileText,
@@ -83,6 +85,10 @@ export default function PODetailPage() {
   // Surat Jalan list modal state
   const [isSJModalOpen, setIsSJModalOpen] = useState(false);
 
+  // Payment Modal state
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
+
   // Company / Warehouse Settings state
   const [companySettings, setCompanySettings] = useState<any>({
     company_name: 'PT Artaroma Jayatama',
@@ -91,6 +97,120 @@ export default function PODetailPage() {
     logistics_pic: 'Tim Gudang FEFO Engine',
     delivery_schedule_rule: 'Max 7 Hari setelah PO diterbitkan',
   });
+
+  const handleConfirmPOPayment = async (
+    targetPoId: string,
+    paidAmount: number,
+    paymentDate: string,
+    bankAccountId: string,
+    bankName: string,
+    referenceNo?: string,
+    paymentNotes?: string,
+    proofUrl?: string
+  ) => {
+    const currentPO = purchaseOrders.find((p) => p.id === targetPoId);
+    if (!currentPO) return;
+
+    setIsPaymentSubmitting(true);
+    try {
+      const prevPaid = Number(currentPO.paid_amount || 0);
+      const newAccumulatedPaid = Math.min(Number(currentPO.total_amount || 0), prevPaid + paidAmount);
+      const remaining = Math.max(0, Number(currentPO.total_amount || 0) - newAccumulatedPaid);
+      const isLunas = remaining === 0;
+      const paymentStatus = isLunas ? 'PAID' : 'PARTIALLY_PAID';
+
+      const newPaymentRecord: POPaymentRecord = {
+        id: `po-pay-${Date.now()}`,
+        payment_date: paymentDate,
+        amount: paidAmount,
+        remaining_after: remaining,
+        bank_account_id: bankAccountId,
+        bank_name: bankName,
+        reference_no: referenceNo,
+        payment_proof_url: proofUrl,
+        payment_notes: paymentNotes || (isLunas ? 'Pelunasan Tagihan PO' : 'Pembayaran Termin PO'),
+        created_by: currentUser?.name || 'Staf Procurement / Finance',
+        created_at: new Date().toISOString(),
+      };
+
+      const existingHistory: POPaymentRecord[] = Array.isArray(currentPO.payment_history) ? currentPO.payment_history : [];
+      const updatedHistory = [...existingHistory, newPaymentRecord];
+
+      const newPoStatus = currentPO.status === 'BUAT_EMAIL' ? 'DIKIRIM' : currentPO.status;
+
+      await fetch('/api/purchase-orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentPO.id,
+          status: newPoStatus,
+          paid_amount: newAccumulatedPaid,
+          payment_status: paymentStatus,
+          payment_proof_url: proofUrl || currentPO.payment_proof_url,
+          payment_reference_no: referenceNo || currentPO.payment_reference_no,
+          payment_bank_id: bankAccountId,
+          payment_bank_name: bankName,
+          payment_history: updatedHistory,
+          last_payment_date: paymentDate,
+        }),
+      });
+
+      // Auto-record BKK to specific Kas Besar Bank (Treasury)
+      try {
+        const cashAccounts = getStoredCashAccounts();
+        const selectedAcc =
+          cashAccounts.find((a) => a.id === bankAccountId) ||
+          cashAccounts.find((a) => a.id === 'acc-bca') ||
+          cashAccounts[0];
+
+        if (paidAmount > 0 && selectedAcc) {
+          recordCashTransaction({
+            account_id: selectedAcc.id,
+            account_name: selectedAcc.name,
+            tx_type: 'OUT',
+            category: 'PEMBELIAN_PO',
+            amount: paidAmount,
+            date: paymentDate,
+            recipient_or_payer: currentPO.distributor_name || 'Suplier Distributor',
+            reference_number: currentPO.po_number,
+            notes: `Pembayaran ${isLunas ? 'Pelunasan' : 'Termin/Cicilan'} PO ${currentPO.po_number} kepada ${currentPO.distributor_name || 'Suplier'} via ${selectedAcc.name}${referenceNo ? ` (Ref: ${referenceNo})` : ''}`,
+            proof_url: proofUrl,
+            created_by: currentUser?.name || 'Staf Procurement / Finance',
+            status: 'VERIFIED',
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to auto-record BKK to cash store:', e);
+      }
+
+      const updatedPO: PurchaseOrder = {
+        ...currentPO,
+        status: newPoStatus,
+        paid_amount: newAccumulatedPaid,
+        payment_status: paymentStatus,
+        payment_proof_url: proofUrl || currentPO.payment_proof_url,
+        payment_reference_no: referenceNo || currentPO.payment_reference_no,
+        payment_bank_id: bankAccountId,
+        payment_bank_name: bankName,
+        payment_history: updatedHistory,
+        last_payment_date: paymentDate,
+      };
+
+      setPurchaseOrders((prev) =>
+        prev.map((p) => (p.id === currentPO.id ? updatedPO : p))
+      );
+
+      setIsPaymentModalOpen(false);
+      alert(
+        `✅ Pembayaran ${isLunas ? 'PELUNASAN' : 'TERMIN/CICILAN'} PO ${currentPO.po_number} berhasil dicatat!\n\nNominal Bayar: ${formatIDR(paidAmount)}\nSisa Hutang: ${formatIDR(remaining)}\nKas Keluar (BKK) otomatis tercatat pada ${bankName}.`
+      );
+    } catch (err: any) {
+      console.error('Failed to submit PO payment:', err);
+      alert('Gagal mencatat pembayaran PO: ' + err.message);
+    } finally {
+      setIsPaymentSubmitting(false);
+    }
+  };
 
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
@@ -908,6 +1028,26 @@ export default function PODetailPage() {
             )}
           </button>
 
+          {/* Payment / Cicilan Button */}
+          {po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED' && (
+            <button
+              onClick={() => setIsPaymentModalOpen(true)}
+              className={`text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all border cursor-pointer ${
+                Number(po.paid_amount || 0) >= Number(po.total_amount || 0) && Number(po.total_amount || 0) > 0
+                  ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800'
+                  : 'bg-purple-600 hover:bg-purple-700 border-purple-700 text-white'
+              }`}
+              title="Input Pembayaran / Cicilan Tagihan Vendor PO"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              {Number(po.paid_amount || 0) >= Number(po.total_amount || 0) && Number(po.total_amount || 0) > 0
+                ? '✓ Lunas (Lihat Riwayat Bayar)'
+                : Number(po.paid_amount || 0) > 0
+                ? `Cicil / Lunasi PO (Sisa ${formatIDR(Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)))})`
+                : 'Input Pembayaran Vendor PO'}
+            </button>
+          )}
+
           {/* Cancel PO Button — only if not yet completed/cancelled */}
           {(po.status === 'BUAT_EMAIL' || po.status === 'DIKIRIM') && (
             <button
@@ -1706,6 +1846,15 @@ export default function PODetailPage() {
           </div>
         </div>
       )}
+
+      {/* POPaymentModal */}
+      <POPaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        po={po}
+        onConfirmPayment={handleConfirmPOPayment}
+        isSubmitting={isPaymentSubmitting}
+      />
     </div>
   );
 }
