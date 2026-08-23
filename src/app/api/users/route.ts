@@ -102,3 +102,31 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, is_active } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: 'ID pengguna wajib diisi.' },
+        { status: 400 }
+      );
+    }
+
+    const activeVal = is_active ? 1 : 0;
+    await executeQuery('UPDATE users SET is_active = ? WHERE id = ?', [activeVal, id]);
+
+    return NextResponse.json({
+      success: true,
+      message: `Status pengguna berhasil diubah menjadi ${is_active ? 'AKTIF' : 'NON-AKTIF'}.`,
+    });
+  } catch (error: any) {
+    console.error('Toggle User Status Error:', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Gagal mengubah status pengguna.' },
+      { status: 500 }
+    );
+  }
+}

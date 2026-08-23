@@ -758,6 +758,34 @@ export default function MasterDataPage() {
     }
   };
 
+  const handleToggleUserStatus = async (userId: string, newStatus: boolean, userName: string) => {
+    try {
+      // Optimistic UI update
+      setAppUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_active: newStatus } : u))
+      );
+
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, is_active: newStatus }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        // Revert if error
+        setAppUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, is_active: !newStatus } : u))
+        );
+        alert(json.message || 'Gagal mengubah status pengguna.');
+      }
+    } catch (err: any) {
+      setAppUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_active: !newStatus } : u))
+      );
+      alert('Terjadi kesalahan saat mengubah status pengguna.');
+    }
+  };
+
   // --- PRICELIST MODAL HANDLERS ---
   const openPricelistModal = (prod: Product) => {
     setSelectedProductForPricelist(prod);
@@ -2983,9 +3011,32 @@ export default function MasterDataPage() {
                         </td>
 
                         <td className="px-6 py-3.5">
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold">
-                            AKTIF
-                          </span>
+                          <div className="flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUserStatus(u.id, !u.is_active, u.name)}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                                u.is_active ? 'bg-emerald-600' : 'bg-slate-300'
+                              }`}
+                              title={u.is_active ? 'Klik untuk Menonaktifkan Pengguna' : 'Klik untuk Mengaktifkan Pengguna'}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  u.is_active ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                            <span
+                              className={`text-[11px] px-2 py-0.5 rounded-full font-bold border transition-colors ${
+                                u.is_active
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                              }`}
+                            >
+                              {u.is_active ? 'AKTIF' : 'NON-AKTIF'}
+                            </span>
+                          </div>
                         </td>
 
                         <td className="px-6 py-3.5 text-right">
