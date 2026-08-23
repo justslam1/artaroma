@@ -503,6 +503,9 @@ export default function PODetailPage() {
 
   // Tahapan PO: Diajukan -> Dikirim -> Diterima
   const poCreatorName = po.created_by || currentUser?.name || currentUser?.username || 'ADMIN PROCUREMENT';
+  const isShipped = po.status === 'DIKIRIM' || po.status === 'DITERIMA' || (po.shipments && po.shipments.length > 0);
+  const isReceived = po.status === 'DITERIMA' || (receivedShipments && receivedShipments.length > 0);
+
   const steps = [
     {
       key: 'BUAT_EMAIL',
@@ -513,14 +516,16 @@ export default function PODetailPage() {
     {
       key: 'DIKIRIM',
       title: 'Dikirim',
-      time: (po.status === 'DIKIRIM' || po.status === 'DITERIMA') ? stepDikirimTime : '-',
-      actor: 'Oleh EKSPEDISI CARGO DISTRIBUTOR',
+      time: isShipped ? stepDikirimTime : 'Menunggu Pengiriman Suplier',
+      actor: isShipped
+        ? (po.distributor_name ? `Oleh EKSPEDISI ${po.distributor_name.toUpperCase()}` : 'Oleh EKSPEDISI CARGO DISTRIBUTOR')
+        : null,
     },
     {
       key: 'DITERIMA',
       title: 'Diterima',
       time: stepDiterimaTime,
-      actor: 'Oleh GUDANG FEFO ARTAROMA',
+      actor: isReceived ? 'Oleh GUDANG FEFO ARTAROMA' : null,
     },
   ];
 
@@ -671,9 +676,11 @@ export default function PODetailPage() {
                     <div className={`font-semibold ${step.key === 'DITERIMA' && po.status === 'DIKIRIM' ? 'text-amber-700 font-bold' : 'text-slate-600'}`}>
                       {step.time}
                     </div>
-                    <div className="text-[10px] text-slate-400 uppercase leading-tight font-medium">
-                      {step.actor}
-                    </div>
+                    {step.actor && (
+                      <div className="text-[10px] text-slate-400 uppercase leading-tight font-medium">
+                        {step.actor}
+                      </div>
+                    )}
                   </div>
 
                   {/* Tombol Cepat Aksi Penerimaan Barang untuk Tahap 3 */}

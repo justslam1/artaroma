@@ -1296,6 +1296,11 @@ export default function OrderDetailPage() {
 
   // 5 Simplified Stepper Statuses
   const soCreatorName = order.created_by || (order.customer_name ? `${order.customer_name}${order.customer_company ? ` (${order.customer_company})` : ''}` : currentUser?.name || 'Customer B2B');
+  const isSOConfirmed = order.status !== 'DIAJUKAN' && order.status !== 'PENDING_APPROVAL';
+  const isSOGudang = ['PROSES_GUDANG', 'DIKIRIM', 'DITERIMA'].includes(order.status);
+  const isSODikirim = ['DIKIRIM', 'DITERIMA'].includes(order.status);
+  const isSODiterima = order.status === 'DITERIMA';
+
   const steps = [
     {
       key: 'DIAJUKAN',
@@ -1306,34 +1311,26 @@ export default function OrderDetailPage() {
     {
       key: 'DIKONFIRMASI',
       title: 'Dikonfirmasi',
-      time: (order.status !== 'DIAJUKAN' && order.status !== 'PENDING_APPROVAL') ? '22 JUL 2026 20:24' : '-',
-      actor: 'Oleh TIM KEUANGAN',
+      time: isSOConfirmed ? (order.invoice_id ? 'Dikonfirmasi' : '22 JUL 2026 20:24') : 'Menunggu Konfirmasi',
+      actor: isSOConfirmed ? 'Oleh TIM KEUANGAN' : null,
     },
     {
       key: 'PROSES_GUDANG',
       title: 'Proses Gudang',
-      time:
-        order.status === 'PROSES_GUDANG' ||
-        order.status === 'DIKIRIM' ||
-        order.status === 'DITERIMA'
-          ? '22 JUL 2026 20:28'
-          : '-',
-      actor: 'Oleh TIM GUDANG FEFO',
+      time: isSOGudang ? 'Diproses Gudang' : 'Menunggu Antrean Gudang',
+      actor: isSOGudang ? 'Oleh TIM GUDANG FEFO' : null,
     },
     {
       key: 'DIKIRIM',
       title: 'Dikirim',
-      time:
-        order.status === 'DIKIRIM' || order.status === 'DITERIMA'
-          ? '22 JUL 2026 20:29'
-          : '-',
-      actor: 'Oleh KURIR / EXPEDISI',
+      time: isSODikirim ? 'Dalam Perjalanan' : 'Menunggu Pengiriman',
+      actor: isSODikirim ? (order.courier_name ? `Oleh KURIR (${order.courier_name.toUpperCase()})` : 'Oleh KURIR / EXPEDISI') : null,
     },
     {
       key: 'DITERIMA',
       title: 'Diterima',
-      time: order.status === 'DITERIMA' ? '22 JUL 2026 20:31' : '-',
-      actor: order.status === 'DITERIMA' ? 'Oleh USER / PENERIMA' : '-',
+      time: isSODiterima ? (order.delivered_date || 'Selesai Diterima') : 'Menunggu Diterima',
+      actor: isSODiterima ? (order.received_by ? `Oleh ${order.received_by.toUpperCase()}` : 'Oleh PENERIMA / CUSTOMER') : null,
     },
   ];
 
@@ -1485,9 +1482,11 @@ export default function OrderDetailPage() {
                   {/* Timestamp & Actor */}
                   <div className="text-[11px] text-slate-500 pt-1">
                     <div className="font-semibold text-slate-600">{step.time}</div>
-                    <div className="text-[10px] text-slate-400 uppercase leading-tight font-medium">
-                      {step.actor}
-                    </div>
+                    {step.actor && (
+                      <div className="text-[10px] text-slate-400 uppercase leading-tight font-medium">
+                        {step.actor}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
