@@ -73,7 +73,7 @@ export default function ProcurementPage() {
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
   // Filter States (Enterprise Grid Theme)
-  const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
