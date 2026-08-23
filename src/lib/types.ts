@@ -177,6 +177,7 @@ export interface POItem {
   foreign_cost_per_kg?: number;
   foreign_subtotal?: number;
   cost_per_kg: number;
+  unit_price?: number;
   subtotal: number;
 }
 

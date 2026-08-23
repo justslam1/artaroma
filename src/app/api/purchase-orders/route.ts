@@ -230,11 +230,14 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { 
-      id, 
-      status, 
-      payment_method, 
+    const {
+      id,
+      status,
+      payment_method,
       payment_terms_days,
+      shipments,
+      items,
+      total_amount,
       paid_amount,
       payment_status,
       payment_proof_url,
@@ -243,21 +246,18 @@ export async function PUT(req: NextRequest) {
       payment_bank_name,
       payment_history,
       last_payment_date,
-      items, 
-      shipments,
       cancellation_note,
       cancelled_at,
-      cancelled_by
+      cancelled_by,
     } = body;
 
     if (!id) {
       return NextResponse.json(
-        { success: false, message: 'id is required' },
+        { success: false, message: 'ID is required' },
         { status: 400 }
       );
     }
 
-    try {
       // Ensure columns exist safely in MySQL
       try {
         await executeQuery(`ALTER TABLE purchase_orders ADD COLUMN paid_amount DECIMAL(15,2) DEFAULT 0`);
@@ -287,11 +287,12 @@ export async function PUT(req: NextRequest) {
       const shipmentsJson = shipments ? JSON.stringify(shipments) : null;
       const historyJson = payment_history ? JSON.stringify(payment_history) : null;
 
-      // Update with payment fields if provided
+      // Update with payment fields and total_amount if provided
       if (paid_amount !== undefined || payment_status !== undefined || payment_history !== undefined) {
         await executeQuery(
           `UPDATE purchase_orders 
            SET status = COALESCE(?, status), 
+               total_amount = COALESCE(?, total_amount),
                payment_method = COALESCE(?, payment_method), 
                payment_terms_days = COALESCE(?, payment_terms_days), 
                shipments = COALESCE(?, shipments), 
@@ -309,6 +310,7 @@ export async function PUT(req: NextRequest) {
            WHERE id = ?`,
           [
             status || null,
+            total_amount !== undefined ? total_amount : null,
             payment_method || null,
             payment_terms_days !== undefined ? payment_terms_days : null,
             shipmentsJson,
@@ -329,11 +331,12 @@ export async function PUT(req: NextRequest) {
       } else {
         await executeQuery(
           `UPDATE purchase_orders 
-           SET status = ?, payment_method = ?, payment_terms_days = ?, shipments = ?, 
+           SET status = ?, total_amount = COALESCE(?, total_amount), payment_method = ?, payment_terms_days = ?, shipments = ?, 
                cancellation_note = ?, cancelled_at = ?, cancelled_by = ?
            WHERE id = ?`,
           [
             status || 'BUAT_EMAIL',
+            total_amount !== undefined ? total_amount : null,
             payment_method || 'TUNAI',
             payment_terms_days || 0,
             shipmentsJson,
@@ -347,12 +350,20 @@ export async function PUT(req: NextRequest) {
 
       if (items && Array.isArray(items)) {
         for (const item of items) {
-          if (item.qty_shipped_kg !== undefined) {
+          if (item.qty_shipped_kg !== undefined || item.qty_ordered_kg !== undefined) {
             await executeQuery(
               `UPDATE po_items 
-               SET qty_shipped_kg = ? 
+               SET qty_shipped_kg = COALESCE(?, qty_shipped_kg),
+                   qty_ordered_kg = COALESCE(?, qty_ordered_kg),
+                   subtotal = COALESCE(?, subtotal)
                WHERE po_id = ? AND product_id = ?`,
-              [item.qty_shipped_kg, id, item.product_id]
+              [
+                item.qty_shipped_kg !== undefined ? item.qty_shipped_kg : null,
+                item.qty_ordered_kg !== undefined ? item.qty_ordered_kg : null,
+                item.subtotal !== undefined ? item.subtotal : null,
+                id,
+                item.product_id,
+              ]
             );
           }
         }
@@ -369,10 +380,4 @@ export async function PUT(req: NextRequest) {
         { status: 500 }
       );
     }
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, message: error.message || 'Internal Server Error' },
-      { status: 500 }
-    );
-  }
 }

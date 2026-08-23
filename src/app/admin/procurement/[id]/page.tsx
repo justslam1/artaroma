@@ -80,6 +80,9 @@ export default function PODetailPage() {
   const [suratJalanData, setSuratJalanData] = useState<string>('');
   const [activeShipmentForGR, setActiveShipmentForGR] = useState<any | null>(null);
 
+  // Fulfillment mode for partial shipment: 'ADJUST_PO' (Final adjustment) vs 'MULTI_TRIP' (Multi-Trip)
+  const [fulfillmentMode, setFulfillmentMode] = useState<'ADJUST_PO' | 'MULTI_TRIP'>('ADJUST_PO');
+
   // Cancel PO modal state
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelNote, setCancelNote] = useState('');
@@ -453,6 +456,7 @@ export default function PODetailPage() {
         body: JSON.stringify({
           id: updatedPO.id,
           status: updatedPO.status,
+          total_amount: updatedPO.total_amount,
           payment_method: updatedPO.payment_method,
           payment_terms_days: updatedPO.payment_terms_days,
           items: updatedPO.items,
@@ -511,7 +515,8 @@ export default function PODetailPage() {
     sjNumber: string,
     sjDate?: string,
     sjName?: string,
-    sjData?: string
+    sjData?: string,
+    adjustPOFinal: boolean = false
   ) => {
     const nextTripNumber = (po.shipments?.length || 0) + 1;
     const finalSJNumber = (sjNumber || '').trim() || `SJ-${po.po_number}-${nextTripNumber}`;
@@ -528,22 +533,51 @@ export default function PODetailPage() {
     
     const updatedShipments = [...(po.shipments || []), newShipment];
     
-    // Update po.items qty_shipped_kg — match by po_item_id first, fallback to product_id
-    const updatedPOItems = po.items.map((item) => {
-      const sumShipped = updatedShipments.reduce((sum, s) => {
-        const itemVal = s.items.find(si =>
-          si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id
-        );
-        return sum + (itemVal ? itemVal.qty_shipped_kg : 0);
-      }, 0);
-      return { ...item, qty_shipped_kg: sumShipped };
-    });
+    let updatedPOItems: typeof po.items = [];
+    let newTotalAmount = po.total_amount;
+
+    if (adjustPOFinal) {
+      // Opsi 1: Menyesuaikan Pesanan PO (Final tanpa Trip 2)
+      updatedPOItems = po.items
+        .map((item) => {
+          const shippedObj = itemsShipped.find((si) =>
+            si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id
+          );
+          const shippedQty = shippedObj ? shippedObj.qty_shipped_kg : 0;
+          const unitCost = item.cost_per_kg || item.unit_price || 0;
+          const newSubtotal = shippedQty * unitCost;
+          return {
+            ...item,
+            qty_ordered_kg: shippedQty,
+            qty_shipped_kg: shippedQty,
+            subtotal: newSubtotal,
+          };
+        })
+        .filter((item) => item.qty_ordered_kg > 0);
+
+      newTotalAmount = updatedPOItems.reduce(
+        (sum, item) => sum + (item.subtotal !== undefined ? item.subtotal : item.qty_ordered_kg * (item.cost_per_kg || item.unit_price || 0)),
+        0
+      );
+    } else {
+      // Opsi 2: Pengiriman Multi-Trip (Bertahap)
+      updatedPOItems = po.items.map((item) => {
+        const sumShipped = updatedShipments.reduce((sum, s) => {
+          const itemVal = s.items.find((si) =>
+            si.po_item_id ? si.po_item_id === item.id : si.product_id === item.product_id
+          );
+          return sum + (itemVal ? itemVal.qty_shipped_kg : 0);
+        }, 0);
+        return { ...item, qty_shipped_kg: sumShipped };
+      });
+    }
 
     const currentUserName = currentUser?.name || currentUser?.username || 'Super Admin HQ';
-    const updatedPO = {
+    const updatedPO: PurchaseOrder = {
       ...po,
       status: 'DIKIRIM' as const,
       shipped_by: currentUserName,
+      total_amount: newTotalAmount,
       items: updatedPOItems,
       shipments: updatedShipments
     };
@@ -1255,167 +1289,277 @@ export default function PODetailPage() {
           </div>
 
           {/* Action Step 1: BUAT_EMAIL -> DIKIRIM */}
-          {po.status === 'BUAT_EMAIL' && (
-            <div className="bg-white p-5 rounded-xl border border-blue-100 text-xs space-y-4 shadow-sm">
-              <div className="font-bold text-slate-800 text-sm border-b border-gray-100 pb-2">
-                Langkah 1: Konfirmasi Pengiriman & Upload Surat Jalan Distributor
-              </div>
-              <p className="text-slate-500 leading-relaxed">
-                Hubungi distributor via email dan kirimkan dokumen PO. Ketika distributor telah mengirimkan barang, harap input jumlah aktual yang dikirim untuk masing-masing item, upload dokumen Surat Jalan, kemudian klik tombol konfirmasi di bawah.
-              </p>
+          {po.status === 'BUAT_EMAIL' && (() => {
+            const totalOrderedKg = po.items.reduce((sum, item) => sum + (item.qty_ordered_kg || 0), 0);
+            const totalShippedKg = po.items.reduce((sum, item) => {
+              const finalQty = shippedQtys[item.id] !== undefined ? shippedQtys[item.id] : item.qty_ordered_kg;
+              return sum + (finalQty || 0);
+            }, 0);
+            const totalRemainingKg = Math.max(0, totalOrderedKg - totalShippedKg);
+            const hasPartialDifference = totalShippedKg < totalOrderedKg;
 
-              {/* Items List to Confirm Qty */}
-              <div className="space-y-3 pt-2">
-                <div className="font-bold text-slate-750 uppercase tracking-wider text-[10px] text-slate-700">
-                  Konfirmasi Jumlah Item yang Dikirim (Kg)
+            return (
+              <div className="bg-white p-5 rounded-xl border border-blue-100 text-xs space-y-4 shadow-sm">
+                <div className="font-bold text-slate-800 text-sm border-b border-gray-100 pb-2">
+                  Langkah 1: Konfirmasi Pengiriman & Upload Surat Jalan Distributor
                 </div>
-                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                  {po.items.map((item) => {
-                    const currentVal = Math.round(shippedQtys[item.id] !== undefined ? shippedQtys[item.id] : item.qty_ordered_kg);
-                    return (
-                      <div key={item.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
-                        <div>
-                          <div className="font-bold text-slate-800">{item.product_name}</div>
-                          <div className="text-slate-400 text-[10px] flex items-center gap-1.5 mt-0.5">
-                            <span>Dipesan:</span>
-                            <span className="font-bold text-slate-700 font-mono">{formatKg(Math.round(item.qty_ordered_kg))}</span>
+                <p className="text-slate-500 leading-relaxed">
+                  Hubungi distributor via email dan kirimkan dokumen PO. Ketika distributor telah mengirimkan barang, harap input jumlah aktual yang dikirim untuk masing-masing item, upload dokumen Surat Jalan, kemudian klik tombol konfirmasi di bawah.
+                </p>
+
+                {/* Items List to Confirm Qty */}
+                <div className="space-y-3 pt-2">
+                  <div className="font-bold text-slate-750 uppercase tracking-wider text-[10px] text-slate-700">
+                    Konfirmasi Jumlah Item yang Dikirim (Kg)
+                  </div>
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                    {po.items.map((item) => {
+                      const currentVal = Math.round(shippedQtys[item.id] !== undefined ? shippedQtys[item.id] : item.qty_ordered_kg);
+                      const isLess = currentVal < item.qty_ordered_kg;
+                      const diffKg = Math.max(0, item.qty_ordered_kg - currentVal);
+                      return (
+                        <div key={item.id} className="p-3.5 space-y-2 hover:bg-slate-50 transition-colors">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="font-bold text-slate-800">{item.product_name}</div>
+                              <div className="text-slate-400 text-[10px] flex items-center gap-1.5 mt-0.5">
+                                <span>Pesanan Awal:</span>
+                                <span className="font-bold text-slate-700 font-mono">{formatKg(Math.round(item.qty_ordered_kg))}</span>
+                                <span>•</span>
+                                <span>Harga Satuan:</span>
+                                <span className="font-bold text-slate-700 font-mono">{formatIDR(item.cost_per_kg || item.unit_price || 0)}/kg</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-slate-500 font-medium">Konfirmasi Jumlah (Kg):</label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    setShippedQtys({
+                                      ...shippedQtys,
+                                      [item.id]: Math.round(Number(e.target.value)) || 0
+                                    });
+                                  }}
+                                  className="w-28 bg-white border border-slate-350 rounded-lg px-2 py-1.5 font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 text-right pr-6"
+                                />
+                                <span className="absolute right-2 top-2 text-slate-400 font-bold text-[10px] pointer-events-none">Kg</span>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Inline warning per item if shipped < ordered */}
+                          {isLess && (
+                            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-in fade-in">
+                              <Truck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span>
+                                {currentVal === 0 ? 'Kuantitas 0 Kg: ' : `Kuantitas ${currentVal} Kg: `}
+                                Produk ini ({diffKg} Kg) akan{' '}
+                                {fulfillmentMode === 'ADJUST_PO'
+                                  ? 'disesuaikan secara final (dihapus/dikurangi dari pesanan PO)'
+                                  : 'masuk ke Multi-Trip selanjutnya (Trip 2)'}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-slate-500 font-medium">Jumlah dikirim:</label>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              value={currentVal}
-                              onChange={(e) => {
-                                setShippedQtys({
-                                  ...shippedQtys,
-                                  [item.id]: Math.round(Number(e.target.value)) || 0
-                                });
-                              }}
-                              className="w-28 bg-white border border-slate-350 rounded-lg px-2 py-1.5 font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 text-right pr-6"
-                            />
-                            <span className="absolute right-2 top-2 text-slate-400 font-bold text-[10px] pointer-events-none">Kg</span>
-                          </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Pilihan: Penyesuaian Pesanan PO vs Pengiriman Multi-Trip */}
+                {hasPartialDifference && (
+                  <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-4 space-y-3 shadow-xs animate-in fade-in duration-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-5 h-5 text-amber-700 shrink-0" />
+                        <div>
+                          <span className="font-extrabold text-amber-900 text-sm block">
+                            Kuantitas Dikirim Vendor Kurang: Pilih Opsi Pemenuhan Pesanan
+                          </span>
+                          <span className="text-[11px] text-amber-800">
+                            Terdapat kuantitas atau item yang tidak dikirim penuh oleh distributor pada pengiriman ini.
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <span className="text-[10px] font-extrabold bg-amber-200 text-amber-950 px-2.5 py-1 rounded-full w-max">
+                        Siap Kirim (Trip 1): {totalShippedKg} Kg | Sisa: {totalRemainingKg} Kg
+                      </span>
+                    </div>
 
-              {/* Tanggal & Nomor Surat Jalan (Wajib) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-blue-600" /> Tanggal Surat Jalan <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={suratJalanDate}
-                    onChange={(e) => setSuratJalanDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-                  />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* Opsi 1: Menyesuaikan Pesanan PO (Penyesuaian Final) */}
+                      <div
+                        onClick={() => setFulfillmentMode('ADJUST_PO')}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                          fulfillmentMode === 'ADJUST_PO'
+                            ? 'border-blue-600 bg-white shadow-sm ring-2 ring-blue-100'
+                            : 'border-amber-200/80 bg-white/70 hover:bg-white hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              fulfillmentMode === 'ADJUST_PO' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
+                            }`}>
+                              {fulfillmentMode === 'ADJUST_PO' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </span>
+                            1. Menyesuaikan Pesanan PO (Final)
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            Tanpa Trip 2
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Pesanan disesuaikan secara final menjadi <strong>{totalShippedKg} Kg</strong>. Item/kuantitas yang tidak dikirim dihapus dari komitmen pesanan PO dan <strong>tidak ada pengiriman susulan (Trip 2)</strong>. Total tagihan PO akan disesuaikan otomatis.
+                        </p>
+                      </div>
 
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-blue-600" /> Nomor Surat Jalan Distributor <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: SJ-GIV-2026-0889"
-                    value={suratJalanNumber}
-                    onChange={(e) => setSuratJalanNumber(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 placeholder:font-normal placeholder:text-slate-400"
-                  />
-                </div>
-              </div>
-
-              {/* Surat Jalan File Upload (Opsional) */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <div className="font-bold uppercase tracking-wider text-[10px] text-slate-700 flex items-center gap-1">
-                    Upload Foto / Dokumen Surat Jalan
-                    <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>
+                      {/* Opsi 2: Pengiriman Multi-Trip (Kirim Bertahap) */}
+                      <div
+                        onClick={() => setFulfillmentMode('MULTI_TRIP')}
+                        className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                          fulfillmentMode === 'MULTI_TRIP'
+                            ? 'border-blue-600 bg-white shadow-sm ring-2 ring-blue-100'
+                            : 'border-amber-200/80 bg-white/70 hover:bg-white hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              fulfillmentMode === 'MULTI_TRIP' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
+                            }`}>
+                              {fulfillmentMode === 'MULTI_TRIP' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </span>
+                            2. Pengiriman Multi-Trip (Bertahap)
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                            Trip 1 + Trip 2
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Bagi pesanan menjadi 2 tahap: <strong>Trip 1 ({totalShippedKg} Kg)</strong> siap dikirim sekarang, dan sisa <strong>Trip 2 ({totalRemainingKg} Kg)</strong> menunggu pengiriman susulan dari distributor.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  {suratJalanName && (
-                    <button
-                      type="button"
-                      onClick={() => { setSuratJalanName(''); setSuratJalanData(''); }}
-                      className="text-[10px] text-red-500 hover:underline font-bold"
-                    >
-                      Hapus Lampiran
-                    </button>
-                  )}
+                )}
+
+                {/* Tanggal & Nomor Surat Jalan (Wajib) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-blue-600" /> Tanggal Surat Jalan <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={suratJalanDate}
+                      onChange={(e) => setSuratJalanDate(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" /> Nomor Surat Jalan Distributor <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: SJ-GIV-2026-0889"
+                      value={suratJalanNumber}
+                      onChange={(e) => setSuratJalanNumber(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 placeholder:font-normal placeholder:text-slate-400"
+                    />
+                  </div>
                 </div>
-                <div className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 text-center bg-slate-50/30 transition-all relative cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const file = e.target.files[0];
-                        setSuratJalanName(file.name);
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          setSuratJalanData(ev.target?.result as string);
-                        };
-                        reader.readAsDataURL(file);
+
+                {/* Surat Jalan File Upload (Opsional) */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold uppercase tracking-wider text-[10px] text-slate-700 flex items-center gap-1">
+                      Upload Foto / Dokumen Surat Jalan
+                      <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>
+                    </div>
+                    {suratJalanName && (
+                      <button
+                        type="button"
+                        onClick={() => { setSuratJalanName(''); setSuratJalanData(''); }}
+                        className="text-[10px] text-red-500 hover:underline font-bold"
+                      >
+                        Hapus Lampiran
+                      </button>
+                    )}
+                  </div>
+                  <div className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 text-center bg-slate-50/30 transition-all relative cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          setSuratJalanName(file.name);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setSuratJalanData(ev.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    {suratJalanName ? (
+                      <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono text-xs">
+                        <FileText className="w-4 h-4 text-blue-500" />
+                        <span>{suratJalanName}</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-slate-500">
+                        <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file foto/PDF Surat Jalan di sini (Opsional)</div>
+                        <div className="text-[10px] text-slate-400">Mendukung format gambar (JPG/PNG) atau PDF</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-155 flex justify-end">
+                  <button
+                    onClick={() => {
+                      if (!suratJalanDate) {
+                        alert('Harap masukkan Tanggal Surat Jalan terlebih dahulu.');
+                        return;
                       }
+                      if (!suratJalanNumber.trim()) {
+                        alert('Harap masukkan Nomor Surat Jalan dari distributor terlebih dahulu.');
+                        return;
+                      }
+                      
+                      // Map items with confirmed shipped quantity — include po_item_id and product_name to track per variant
+                      const itemsShipped = po.items.map((item) => {
+                        const finalQty = shippedQtys[item.id] !== undefined ? shippedQtys[item.id] : item.qty_ordered_kg;
+                        return {
+                          po_item_id: item.id,
+                          product_id: item.product_id,
+                          product_name: item.product_name,
+                          qty_shipped_kg: finalQty
+                        };
+                      }).filter(si => si.qty_shipped_kg > 0);
+
+                      const adjustPOFinal = hasPartialDifference && fulfillmentMode === 'ADJUST_PO';
+                      handleAddShipment(itemsShipped, suratJalanNumber, suratJalanDate, suratJalanName, suratJalanData, adjustPOFinal);
                     }}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                  {suratJalanName ? (
-                    <div className="flex items-center justify-center gap-1.5 text-blue-700 font-bold font-mono text-xs">
-                      <FileText className="w-4 h-4 text-blue-500" />
-                      <span>{suratJalanName}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1 text-slate-500">
-                      <div className="font-bold text-[11px] text-slate-700">Pilih atau seret file foto/PDF Surat Jalan di sini (Opsional)</div>
-                      <div className="text-[10px] text-slate-400">Mendukung format gambar (JPG/PNG) atau PDF</div>
-                    </div>
-                  )}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-md inline-flex items-center gap-1.5 transition-colors animate-in fade-in"
+                  >
+                    <Send className="w-4 h-4" /> Konfirmasi Pesanan Telah Dikirim oleh Distributor (Status: DIKIRIM)
+                  </button>
                 </div>
               </div>
-
-              <div className="pt-2 border-t border-gray-155 flex justify-end">
-                <button
-                  onClick={() => {
-                    if (!suratJalanDate) {
-                      alert('Harap masukkan Tanggal Surat Jalan terlebih dahulu.');
-                      return;
-                    }
-                    if (!suratJalanNumber.trim()) {
-                      alert('Harap masukkan Nomor Surat Jalan dari distributor terlebih dahulu.');
-                      return;
-                    }
-                    
-                    // Map items with confirmed shipped quantity — include po_item_id and product_name to track per variant
-                    const itemsShipped = po.items.map((item) => {
-                      const finalQty = shippedQtys[item.id] !== undefined ? shippedQtys[item.id] : item.qty_ordered_kg;
-                      return {
-                        po_item_id: item.id,
-                        product_id: item.product_id,
-                        product_name: item.product_name,
-                        qty_shipped_kg: finalQty
-                      };
-                    }).filter(si => si.qty_shipped_kg > 0);
-
-                    handleAddShipment(itemsShipped, suratJalanNumber, suratJalanDate, suratJalanName, suratJalanData);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-md inline-flex items-center gap-1.5 transition-colors animate-in fade-in"
-                >
-                  <Send className="w-4 h-4" /> Konfirmasi Pesanan Telah Dikirim oleh Distributor (Status: DIKIRIM)
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Action Step 2: DIKIRIM */}
           {po.status === 'DIKIRIM' && (
