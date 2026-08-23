@@ -160,6 +160,7 @@ export interface AppUser {
   linked_entity_name?: string;
   allowed_modules?: string[];
   is_active: boolean;
+  is_hidden?: boolean;
   last_login?: string;
   created_at: string;
 }

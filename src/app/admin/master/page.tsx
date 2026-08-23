@@ -702,9 +702,12 @@ export default function MasterDataPage() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
-          setAppUsers(json.data);
+          const visibleUsers = json.data.filter(
+            (u: any) => !u.is_hidden && u.email?.toLowerCase() !== 'boss@artaroma.com' && u.name?.toLowerCase() !== 'bossanova'
+          );
+          setAppUsers(visibleUsers);
           const accessMap: Record<string, string[]> = {};
-          json.data.forEach((u: any) => {
+          visibleUsers.forEach((u: any) => {
             accessMap[u.id] = Array.isArray(u.allowed_modules) && u.allowed_modules.length > 0
               ? u.allowed_modules
               : (defaultModulesByRole[u.role || 'ADMIN'] ?? ['Dashboard']);

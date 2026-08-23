@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const dbUsers = await executeQuery<any[]>('SELECT id, name, email, role, linked_entity_name, allowed_modules, is_active, created_at FROM users ORDER BY created_at ASC');
+    const dbUsers = await executeQuery<any[]>(
+      "SELECT id, name, email, role, linked_entity_name, allowed_modules, is_active, is_hidden, created_at FROM users WHERE (is_hidden = 0 OR is_hidden IS NULL) AND LOWER(email) != 'boss@artaroma.com' AND LOWER(name) != 'bossanova' ORDER BY created_at ASC"
+    );
     
     if (dbUsers && dbUsers.length > 0) {
       const formatted = dbUsers.map((u) => {
@@ -26,15 +28,22 @@ export async function GET() {
           linked_entity_name: u.linked_entity_name || 'Artaroma HQ',
           allowed_modules: modules,
           is_active: Boolean(u.is_active),
+          is_hidden: Boolean(u.is_hidden),
           created_at: String(u.created_at).split('T')[0],
         };
       });
       return NextResponse.json({ success: true, data: formatted });
     }
 
-    return NextResponse.json({ success: true, data: initialAppUsers });
+    const filteredInitial = initialAppUsers.filter(
+      (u) => !u.is_hidden && u.email.toLowerCase() !== 'boss@artaroma.com' && u.name.toLowerCase() !== 'bossanova'
+    );
+    return NextResponse.json({ success: true, data: filteredInitial });
   } catch (error: any) {
-    return NextResponse.json({ success: false, message: error.message, data: initialAppUsers }, { status: 500 });
+    const filteredInitial = initialAppUsers.filter(
+      (u) => !u.is_hidden && u.email.toLowerCase() !== 'boss@artaroma.com' && u.name.toLowerCase() !== 'bossanova'
+    );
+    return NextResponse.json({ success: false, message: error.message, data: filteredInitial }, { status: 500 });
   }
 }
 
