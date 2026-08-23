@@ -217,6 +217,8 @@ export interface PurchaseOrder {
   items: POItem[];
   shipments?: POShipment[];
   created_by?: string;
+  shipped_by?: string;
+  received_by?: string;
   // Cancellation fields
   cancellation_note?: string;
   cancelled_at?: string;
@@ -297,6 +299,9 @@ export interface SalesOrder {
   received_photo?: string;
   received_signature?: string;
   created_by?: string;
+  confirmed_by?: string;
+  warehouse_processed_by?: string;
+  shipped_by?: string;
   // Cancellation fields
   cancellation_reason?: string;
   cancelled_at?: string;

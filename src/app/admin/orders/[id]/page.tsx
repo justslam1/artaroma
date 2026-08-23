@@ -1010,6 +1010,7 @@ export default function OrderDetailPage() {
         shipping_type: finalShippingType,
         shipping_cost: finalShippingCost,
         items: finalItemsToSave,
+        confirmed_by: currentUser?.name || currentUser?.username || 'Super Admin HQ',
         invoice_id: newInvoice.id,
         surat_jalan_number: shipments ? shipments[0].surat_jalan_number : (order.surat_jalan_number || `SJ-ART-2026-${order.so_number.split('-').pop()}`),
         shipments: shipments,
@@ -1301,6 +1302,11 @@ export default function OrderDetailPage() {
   const isSODikirim = ['DIKIRIM', 'DITERIMA'].includes(order.status);
   const isSODiterima = order.status === 'DITERIMA';
 
+  const soConfirmedActor = order.confirmed_by || order.credit_approval_by || currentUser?.name || 'Tim Keuangan';
+  const soWarehouseActor = order.warehouse_processed_by || currentUser?.name || 'Tim Gudang FEFO';
+  const soShippedActor = order.shipped_by || (order.courier_name ? `Kurir (${order.courier_name})` : (currentUser?.name ? `${currentUser.name} (Logistik)` : 'Kurir / Ekspedisi'));
+  const soReceivedActor = order.received_by || currentUser?.name || 'Penerima Customer';
+
   const steps = [
     {
       key: 'DIAJUKAN',
@@ -1312,25 +1318,25 @@ export default function OrderDetailPage() {
       key: 'DIKONFIRMASI',
       title: 'Dikonfirmasi',
       time: isSOConfirmed ? (order.invoice_id ? 'Dikonfirmasi' : '22 JUL 2026 20:24') : 'Menunggu Konfirmasi',
-      actor: isSOConfirmed ? 'Oleh TIM KEUANGAN' : null,
+      actor: isSOConfirmed ? `Oleh ${soConfirmedActor.toUpperCase()}` : null,
     },
     {
       key: 'PROSES_GUDANG',
       title: 'Proses Gudang',
       time: isSOGudang ? 'Diproses Gudang' : 'Menunggu Antrean Gudang',
-      actor: isSOGudang ? 'Oleh TIM GUDANG FEFO' : null,
+      actor: isSOGudang ? `Oleh ${soWarehouseActor.toUpperCase()}` : null,
     },
     {
       key: 'DIKIRIM',
       title: 'Dikirim',
       time: isSODikirim ? 'Dalam Perjalanan' : 'Menunggu Pengiriman',
-      actor: isSODikirim ? (order.courier_name ? `Oleh KURIR (${order.courier_name.toUpperCase()})` : 'Oleh KURIR / EXPEDISI') : null,
+      actor: isSODikirim ? `Oleh ${soShippedActor.toUpperCase()}` : null,
     },
     {
       key: 'DITERIMA',
       title: 'Diterima',
       time: isSODiterima ? (order.delivered_date || 'Selesai Diterima') : 'Menunggu Diterima',
-      actor: isSODiterima ? (order.received_by ? `Oleh ${order.received_by.toUpperCase()}` : 'Oleh PENERIMA / CUSTOMER') : null,
+      actor: isSODiterima ? `Oleh ${soReceivedActor.toUpperCase()}` : null,
     },
   ];
 

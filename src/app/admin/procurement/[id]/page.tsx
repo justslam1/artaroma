@@ -275,9 +275,11 @@ export default function PODetailPage() {
       return { ...item, qty_shipped_kg: sumShipped };
     });
 
+    const currentUserName = currentUser?.name || currentUser?.username || 'Super Admin HQ';
     const updatedPO = {
       ...po,
       status: 'DIKIRIM' as const,
+      shipped_by: currentUserName,
       items: updatedPOItems,
       shipments: updatedShipments
     };
@@ -321,9 +323,10 @@ export default function PODetailPage() {
 
     setBatches([newBatch, ...batches]);
     
+    const currentUserName = currentUser?.name || currentUser?.username || 'Gudang FEFO';
     if (shipmentId && po.shipments) {
       const updatedShipments = po.shipments.map(s => 
-        s.id === shipmentId ? { ...s, status: 'DITERIMA' as const } : s
+        s.id === shipmentId ? { ...s, status: 'DITERIMA' as const, received_by: currentUserName } : s
       );
       
       const allReceived = updatedShipments.every(s => s.status === 'DITERIMA');
@@ -345,6 +348,7 @@ export default function PODetailPage() {
       const updatedPO = {
         ...po,
         status: nextPOStatus,
+        received_by: currentUserName,
         shipments: updatedShipments
       };
 
@@ -356,7 +360,17 @@ export default function PODetailPage() {
 
       savePOUpdate(updatedPO);
     } else {
-      handleAdvanceStatus('DITERIMA');
+      const updatedPO = {
+        ...po,
+        status: 'DITERIMA' as const,
+        received_by: currentUserName,
+      };
+      setPurchaseOrders(
+        purchaseOrders.map((p) =>
+          p.id === po.id ? updatedPO : p
+        )
+      );
+      savePOUpdate(updatedPO);
     }
   };
 
@@ -502,9 +516,12 @@ export default function PODetailPage() {
   // ────────────────────────────────────────────────────────────────────────
 
   // Tahapan PO: Diajukan -> Dikirim -> Diterima
-  const poCreatorName = po.created_by || currentUser?.name || currentUser?.username || 'ADMIN PROCUREMENT';
+  const poCreatorName = po.created_by || currentUser?.name || currentUser?.username || 'SUPER ADMIN HQ';
   const isShipped = po.status === 'DIKIRIM' || po.status === 'DITERIMA' || (po.shipments && po.shipments.length > 0);
   const isReceived = po.status === 'DITERIMA' || (receivedShipments && receivedShipments.length > 0);
+
+  const poShippedActorName = po.shipped_by || (currentUser?.name ? `${currentUser.name} (Ekspedisi ${po.distributor_name || 'Vendor'})` : (po.distributor_name ? `Ekspedisi ${po.distributor_name}` : 'Ekspedisi Cargo Distributor'));
+  const poReceivedActorName = po.received_by || currentUser?.name || 'Gudang FEFO Artaroma';
 
   const steps = [
     {
@@ -518,14 +535,14 @@ export default function PODetailPage() {
       title: 'Dikirim',
       time: isShipped ? stepDikirimTime : 'Menunggu Pengiriman Suplier',
       actor: isShipped
-        ? (po.distributor_name ? `Oleh EKSPEDISI ${po.distributor_name.toUpperCase()}` : 'Oleh EKSPEDISI CARGO DISTRIBUTOR')
+        ? `Oleh ${poShippedActorName.toUpperCase()}`
         : null,
     },
     {
       key: 'DITERIMA',
       title: 'Diterima',
       time: stepDiterimaTime,
-      actor: isReceived ? 'Oleh GUDANG FEFO ARTAROMA' : null,
+      actor: isReceived ? `Oleh ${poReceivedActorName.toUpperCase()}` : null,
     },
   ];
 
