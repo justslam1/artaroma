@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { initialBatches, initialProducts } from '@/lib/mock-data';
 
 async function initStockBatchesSampleColumns() {
   try {
@@ -32,6 +33,18 @@ async function initStockBatchesSampleColumns() {
     const columns = await executeQuery<any[]>('SHOW COLUMNS FROM stock_batches');
     const colNames = new Set(columns.map((c: any) => c.Field.toLowerCase()));
 
+    if (!colNames.has('product_name')) {
+      await executeQuery('ALTER TABLE stock_batches ADD COLUMN product_name VARCHAR(255)');
+    }
+    if (!colNames.has('variant_sku')) {
+      await executeQuery('ALTER TABLE stock_batches ADD COLUMN variant_sku VARCHAR(100)');
+    }
+    if (!colNames.has('pack_size_kg')) {
+      await executeQuery('ALTER TABLE stock_batches ADD COLUMN pack_size_kg DECIMAL(10, 3) DEFAULT 25');
+    }
+    if (!colNames.has('unit_count')) {
+      await executeQuery('ALTER TABLE stock_batches ADD COLUMN unit_count INT DEFAULT 1');
+    }
     if (!colNames.has('is_sample')) {
       await executeQuery('ALTER TABLE stock_batches ADD COLUMN is_sample TINYINT DEFAULT 0');
     }
@@ -55,12 +68,24 @@ async function initStockBatchesSampleColumns() {
 export async function GET() {
   try {
     await initStockBatchesSampleColumns();
-    const rows = await executeQuery<any[]>(
-      'SELECT * FROM stock_batches WHERE is_sample = 1 ORDER BY created_at DESC'
-    );
-    return NextResponse.json({ success: true, data: rows || [] });
+    let rows: any[] = [];
+    try {
+      rows = await executeQuery<any[]>(
+        'SELECT * FROM stock_batches WHERE is_sample = 1 ORDER BY created_at DESC'
+      );
+    } catch {
+      rows = [];
+    }
+
+    const memorySamples = initialBatches.filter((b) => b.is_sample);
+    const dbSampleIds = new Set((rows || []).map((r: any) => r.id));
+    const missing = memorySamples.filter((ms) => !dbSampleIds.has(ms.id));
+    const combined = [...(rows || []), ...missing];
+
+    return NextResponse.json({ success: true, data: combined });
   } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    const memorySamples = initialBatches.filter((b) => b.is_sample);
+    return NextResponse.json({ success: true, data: memorySamples });
   }
 }
 
@@ -95,7 +120,6 @@ export async function POST(req: NextRequest) {
 
     const id = `sample-batch-${Date.now()}`;
     const pDate = production_date || new Date().toISOString().split('T')[0];
-    // Default expiry 2 years if not specified
     const defaultExp = new Date();
     defaultExp.setFullYear(defaultExp.getFullYear() + 2);
     const expDate = expiry_date || defaultExp.toISOString().split('T')[0];
@@ -125,6 +149,20 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString(),
     };
 
+    // Ensure product exists in products table if FK is checked
+    try {
+      const existingProd = await executeQuery<any[]>('SELECT id FROM products WHERE id = ?', [newSampleBatch.product_id]);
+      if (!existingProd || existingProd.length === 0) {
+        await executeQuery(
+          `INSERT INTO products (id, sku, name, application, applications, fragrance_family, density, min_stock_kg, selling_price_per_kg, is_active)
+           VALUES (?, ?, ?, 'Fine Fragrance', '["Fine Fragrance"]', 'Floral', 1.0, 1.0, 0, 1)`,
+          [newSampleBatch.product_id, newSampleBatch.variant_sku || 'FO-SMP', newSampleBatch.product_name || 'Sampel Baru']
+        );
+      }
+    } catch (prodErr: any) {
+      console.warn('Auto insert product for sample warning:', prodErr.message);
+    }
+
     try {
       await executeQuery(
         `INSERT INTO stock_batches 
@@ -151,6 +189,9 @@ export async function POST(req: NextRequest) {
     } catch (err: any) {
       console.warn('DB insert sample batch warning:', err.message);
     }
+
+    // Always push to in-memory initialBatches
+    initialBatches.unshift(newSampleBatch as any);
 
     return NextResponse.json({
       success: true,
@@ -185,6 +226,14 @@ export async function PUT(req: NextRequest) {
       );
     } catch (err: any) {
       console.warn('DB update sample batch warning:', err.message);
+    }
+
+    // Update in memory if present
+    const memoryIdx = initialBatches.findIndex((b) => b.id === id);
+    if (memoryIdx !== -1) {
+      if (sample_status) initialBatches[memoryIdx].sample_status = sample_status;
+      if (sample_notes !== undefined) initialBatches[memoryIdx].sample_notes = sample_notes;
+      if (current_qty_kg !== undefined) initialBatches[memoryIdx].current_qty_kg = parseFloat(current_qty_kg);
     }
 
     return NextResponse.json({

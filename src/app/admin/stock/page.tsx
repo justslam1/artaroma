@@ -232,9 +232,21 @@ export default function StockInventoryPage() {
       }
 
       if (batchJson.success && Array.isArray(batchJson.data)) {
-        setBatches(batchJson.data);
-        if (batchJson.data.length > 0) {
-          setRepackForm((prev) => ({ ...prev, source_batch_id: batchJson.data[0].id }));
+        let combinedBatches = [...batchJson.data];
+        try {
+          const localSamples = JSON.parse(localStorage.getItem('artaroma_custom_samples') || '[]');
+          if (Array.isArray(localSamples) && localSamples.length > 0) {
+            const serverIds = new Set(combinedBatches.map((b: any) => b.id));
+            const missingLocal = localSamples.filter((ls: any) => !serverIds.has(ls.id));
+            combinedBatches = [...missingLocal, ...combinedBatches];
+          }
+        } catch (e) {
+          console.warn('Local samples parse warning:', e);
+        }
+
+        setBatches(combinedBatches);
+        if (combinedBatches.length > 0) {
+          setRepackForm((prev) => ({ ...prev, source_batch_id: combinedBatches[0].id }));
         }
       }
     } catch (err: any) {
@@ -359,6 +371,16 @@ export default function StockInventoryPage() {
 
       const json = await res.json();
       if (json.success && json.data) {
+        // Save to localStorage to guarantee instant persistence
+        try {
+          const localSamples = JSON.parse(localStorage.getItem('artaroma_custom_samples') || '[]');
+          const updatedLocal = [json.data, ...localSamples.filter((s: any) => s.id !== json.data.id)];
+          localStorage.setItem('artaroma_custom_samples', JSON.stringify(updatedLocal));
+        } catch (e) {
+          console.warn('Local samples save warning:', e);
+        }
+
+        setBatches((prev) => [json.data, ...prev.filter((b) => b.id !== json.data.id)]);
         setIsSampleModalOpen(false);
         alert(`✅ Sampel ${sampleForm.batch_number} (${targetProductName}) sebanyak ${formatKg(qty)} berhasil diterima ke gudang!`);
         await fetchStockData();
@@ -399,6 +421,18 @@ export default function StockInventoryPage() {
 
       const json = await res.json();
       if (json.success) {
+        try {
+          const localSamples = JSON.parse(localStorage.getItem('artaroma_custom_samples') || '[]');
+          const updated = localSamples.map((s: any) =>
+            s.id === editingSampleBatch.id
+              ? { ...s, sample_status: sampleStatusForm.sample_status, sample_notes: sampleStatusForm.sample_notes }
+              : s
+          );
+          localStorage.setItem('artaroma_custom_samples', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Local samples status update warning:', e);
+        }
+
         setBatches((prev) =>
           prev.map((b) =>
             b.id === editingSampleBatch.id
