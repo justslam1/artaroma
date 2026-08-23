@@ -421,7 +421,7 @@ export default function ProcurementPage() {
               Purchase Order
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Kelola Alur Kerja PO 3 Tahap (Diajukan &rarr; Dikirim &rarr; Diterima)
+              Kelola Pesanan Pembelian dari Suplier.
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
