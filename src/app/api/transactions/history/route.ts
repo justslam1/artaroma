@@ -6,6 +6,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const categoryFilter = searchParams.get('category') || 'ALL';
     const searchQuery = searchParams.get('q') || '';
+    const startDate = searchParams.get('start_date') || '';
+    const endDate = searchParams.get('end_date') || '';
 
     const allLogs: any[] = [];
 
@@ -302,6 +304,21 @@ export async function GET(req: NextRequest) {
     let filtered = allLogs;
     if (categoryFilter !== 'ALL') {
       filtered = filtered.filter((l) => l.category === categoryFilter);
+    }
+
+    // Apply date range filter
+    if (startDate || endDate) {
+      filtered = filtered.filter((l) => {
+        if (!l.timestamp) return false;
+        try {
+          const dStr = new Date(l.timestamp).toISOString().split('T')[0];
+          if (startDate && dStr < startDate) return false;
+          if (endDate && dStr > endDate) return false;
+          return true;
+        } catch {
+          return true;
+        }
+      });
     }
 
     // Apply text search
