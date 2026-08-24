@@ -229,6 +229,14 @@ export async function PUT(
         updateFields.push('cancelled_by = ?');
         updateValues.push(cancelled_by);
       }
+      if (body.payment_proof_url !== undefined) {
+        updateFields.push('payment_proof_url = ?');
+        updateValues.push(body.payment_proof_url);
+      }
+      if (body.payment_status !== undefined) {
+        updateFields.push('payment_status = ?');
+        updateValues.push(body.payment_status);
+      }
 
       if (updateFields.length > 0) {
         updateValues.push(realId);
@@ -236,6 +244,18 @@ export async function PUT(
           `UPDATE sales_orders SET ${updateFields.join(', ')} WHERE id = ?`,
           updateValues
         );
+      }
+
+      // If customer just uploaded a payment proof, notify admin devices
+      if (body.payment_proof_url) {
+        const { sendPushNotificationToAll } = await import('@/lib/push-notifications');
+        sendPushNotificationToAll({
+          title: `💳 Bukti Transfer Masuk (${existingOrders[0]?.so_number || soId})`,
+          body: `Customer baru saja mengunggah bukti pembayaran transfer. Perlu verifikasi kas.`,
+          icon: '/icon.png',
+          url: `/admin/sales-orders?so=${existingOrders[0]?.so_number || soId}`,
+          tag: `proof-${realId}`,
+        }).catch((e) => console.warn('[WebPush] proof upload push error:', e));
       }
 
       // 2. Update so_items if provided

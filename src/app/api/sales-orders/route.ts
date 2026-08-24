@@ -184,6 +184,16 @@ export async function POST(req: NextRequest) {
           ]
         );
       }
+
+      // Send Instant Web Push Notification to Admin Smartphones / Browsers
+      const { sendPushNotificationToAll } = await import('@/lib/push-notifications');
+      sendPushNotificationToAll({
+        title: `📦 Sales Order Baru (${soNumber})`,
+        body: `${customer?.company_name || customer?.pic_name || 'Customer B2B'} mengajukan pesanan baru senilai Rp ${Math.round(grandTotal).toLocaleString('id-ID')}`,
+        icon: '/icon.png',
+        url: `/admin/orders/${soId}`,
+        tag: `so-${soId}`,
+      }).catch((pushErr) => console.warn('[WebPush] Error on SO create:', pushErr));
     } catch (e: any) {
       console.error('DB insert SO error:', e.message);
       return NextResponse.json(

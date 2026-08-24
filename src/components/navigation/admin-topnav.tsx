@@ -37,6 +37,17 @@ import { formatIDR } from '@/lib/utils';
 import { getStoredInvoices, getStoredOrders } from '@/lib/order-store';
 import { Invoice } from '@/lib/types';
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export function AdminTopNav() {
   const pathname = usePathname();
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
@@ -55,6 +66,12 @@ export function AdminTopNav() {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [activeNotifTab, setActiveNotifTab] = useState<'ALL' | 'ORDERS' | 'PROOFS' | 'DUES'>('ALL');
   const [toastNotif, setToastNotif] = useState<{ type: 'ORDER' | 'PROOF'; data: any } | null>(null);
+
+  // Mobile Web Push Notification States
+  const [isPushSupported, setIsPushSupported] = useState(false);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [isPushLoading, setIsPushLoading] = useState(false);
+  const [pushSubscriberCount, setPushSubscriberCount] = useState(0);
 
   const financeRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -236,6 +253,26 @@ export function AdminTopNav() {
     fetchAllNotifications();
     const interval = setInterval(fetchAllNotifications, 15000); // Check every 15s
 
+    // Check Push Notification support & active subscription status
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+      setIsPushSupported(true);
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        reg.pushManager.getSubscription().then((sub) => {
+          setIsPushSubscribed(Boolean(sub));
+        });
+      }).catch((err) => console.warn('[WebPush] SW registration error:', err));
+    }
+
+    // Fetch total subscribers count
+    fetch('/api/notifications/push')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.subscriberCount !== undefined) {
+          setPushSubscriberCount(json.subscriberCount);
+        }
+      })
+      .catch((e) => console.warn(e));
+
     const handleDataUpdate = () => {
       fetchAllNotifications();
     };
@@ -250,6 +287,96 @@ export function AdminTopNav() {
       window.removeEventListener('artaroma_invoices_updated', handleDataUpdate);
     };
   }, [fetchAllNotifications]);
+
+  const handleSubscribePush = async () => {
+    if (!isPushSupported) {
+      alert('Browser atau perangkat ini tidak mendukung Push Notification.');
+      return;
+    }
+
+    setIsPushLoading(true);
+    try {
+      // 1. Request permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Izin notifikasi ditolak. Silakan aktifkan izin notifikasi di pengaturan browser/HP Anda.');
+        setIsPushLoading(false);
+        return;
+      }
+
+      // 2. Fetch VAPID public key
+      const keyRes = await fetch('/api/notifications/push');
+      const keyJson = await keyRes.json();
+      if (!keyJson.success || !keyJson.vapidPublicKey) {
+        throw new Error('Gagal memuat VAPID Public Key dari server');
+      }
+
+      // 3. Register service worker and subscribe
+      const registration = await navigator.serviceWorker.ready;
+      const convertedKey = urlBase64ToUint8Array(keyJson.vapidPublicKey);
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey,
+      });
+
+      // 4. Send subscription to server
+      const saveRes = await fetch('/api/notifications/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'subscribe',
+          subscription,
+          user: {
+            id: currentUser?.id,
+            name: currentUser?.name,
+            role: currentUser?.role,
+          },
+        }),
+      });
+
+      const saveJson = await saveRes.json();
+      if (saveJson.success) {
+        setIsPushSubscribed(true);
+        setPushSubscriberCount((prev) => prev + 1);
+        alert('🎉 Selamat! Push Notification di HP/Browser Anda telah aktif! Anda akan menerima notifikasi bergetar & bersuara saat ada pesanan baru & bukti transfer.');
+      } else {
+        alert(saveJson.message || 'Gagal mendaftarkan notifikasi.');
+      }
+    } catch (err: any) {
+      console.error('[WebPush] Subscribe error:', err);
+      alert(`Gagal mengaktifkan push notification: ${err.message}`);
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
+
+  const handleTestPushNotification = async () => {
+    setIsPushLoading(true);
+    try {
+      const res = await fetch('/api/notifications/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test',
+          payload: {
+            title: '🔔 Uji Coba Notifikasi Artaroma',
+            body: `Halo ${currentUser?.name || 'Admin'}! Push notification di HP Anda berfungsi normal (Vibrasi & Suara Aktif).`,
+          },
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(json.message || 'Notifikasi uji coba berhasil dikirim!');
+      } else {
+        alert(json.message || 'Gagal mengirim uji coba notifikasi.');
+      }
+    } catch (err: any) {
+      alert(`Error mengirim test notifikasi: ${err.message}`);
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
@@ -453,6 +580,52 @@ export function AdminTopNav() {
                         Tandai Semua Dibaca
                       </button>
                     )}
+                  </div>
+
+                  {/* Mobile Push Notification Status Banner */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 px-3.5 py-2.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isPushSubscribed ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                          {isPushSubscribed ? 'Notifikasi HP: Aktif' : 'Notifikasi HP Belum Aktif'}
+                          {isPushSubscribed && (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded">
+                              ONLINE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {isPushSubscribed
+                            ? `${pushSubscriberCount} perangkat terhubung (Suara & Getar Aktif)`
+                            : 'Aktifkan agar HP berbunyi saat ada pesanan & transfer baru'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isPushSubscribed ? (
+                        <button
+                          type="button"
+                          disabled={isPushLoading}
+                          onClick={handleSubscribePush}
+                          className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Bell className="w-3 h-3" />
+                          {isPushLoading ? 'Mengaktifkan...' : 'Aktifkan di HP'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isPushLoading}
+                          onClick={handleTestPushNotification}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          {isPushLoading ? 'Mengirim...' : 'Tes Push HP'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Filter Category Tabs */}
