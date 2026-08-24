@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Building2,
   XCircle,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import {
@@ -708,35 +709,62 @@ export default function CustomerOrdersPage() {
                           )}
                         </td>
 
-                        <td className="px-6 py-4 text-right space-x-2">
-                          {inv ? (
-                            <>
-                              <button
-                                onClick={() =>
-                                  alert(`Download Invoice PDF ${inv.invoice_number}`)
-                                }
-                                className="bg-white hover:bg-gray-50 text-slate-700 border border-gray-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors"
-                              >
-                                <Download className="w-3.5 h-3.5 text-blue-500" /> Invoice
-                              </button>
-                              {inv.faktur_pajak_file_url ? (
-                                <button
-                                  onClick={() =>
-                                    alert(`Download Faktur Pajak PDF ${inv.invoice_number}`)
-                                  }
-                                  className="bg-white hover:bg-amber-50 text-amber-700 border border-amber-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors"
-                                >
-                                  <FileCheck className="w-3.5 h-3.5 text-amber-600" /> Faktur Pajak
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 italic">
-                                  Pajak Pending
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">Belum terbit</span>
-                          )}
+                        <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                          {(() => {
+                            const courierPhoto = (so as any).received_photo || (so as any).proof_photo_url || (so as any).deliv_photo;
+
+                            return (
+                              <>
+                                {inv ? (
+                                  <>
+                                    <button
+                                      onClick={() =>
+                                        alert(`Download Invoice PDF ${inv.invoice_number}`)
+                                      }
+                                      className="bg-white hover:bg-gray-50 text-slate-700 border border-gray-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-blue-500" /> Invoice
+                                    </button>
+                                    {inv.faktur_pajak_file_url ? (
+                                      <button
+                                        onClick={() =>
+                                          alert(`Download Faktur Pajak PDF ${inv.invoice_number}`)
+                                        }
+                                        className="bg-white hover:bg-amber-50 text-amber-700 border border-amber-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                                      >
+                                        <FileCheck className="w-3.5 h-3.5 text-amber-600" /> Faktur Pajak
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 italic">
+                                        Pajak Pending
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-slate-400 italic">Belum terbit</span>
+                                )}
+
+                                {courierPhoto && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const link = document.createElement('a');
+                                      link.href = courierPhoto;
+                                      link.download = `Foto_Penerimaan_${so.so_number}.jpg`;
+                                      link.target = '_blank';
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                    }}
+                                    className="bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 transition-colors shadow-2xs cursor-pointer ml-2"
+                                    title="Download / Buka Foto Bukti Serah Terima dari Kurir (POD)"
+                                  >
+                                    <ImageIcon className="w-3.5 h-3.5 text-emerald-600" /> Foto Penerimaan
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
