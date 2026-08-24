@@ -378,6 +378,36 @@ export function AdminTopNav() {
     }
   };
 
+  const handleUnsubscribePush = async () => {
+    if (!confirm('Apakah Anda yakin ingin menonaktifkan Push Notification pada perangkat ini?')) return;
+    setIsPushLoading(true);
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await subscription.unsubscribe();
+          await fetch('/api/notifications/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'unsubscribe',
+              subscription: { endpoint: subscription.endpoint },
+            }),
+          });
+        }
+      }
+      setIsPushSubscribed(false);
+      setPushSubscriberCount((prev) => Math.max(0, prev - 1));
+      alert('Push notification telah berhasil dinonaktifkan.');
+    } catch (err: any) {
+      console.error('[WebPush] Unsubscribe error:', err);
+      alert(`Gagal menonaktifkan notifikasi: ${err.message}`);
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
       try {
@@ -615,15 +645,27 @@ export function AdminTopNav() {
                           {isPushLoading ? 'Mengaktifkan...' : 'Aktifkan di HP'}
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          disabled={isPushLoading}
-                          onClick={handleTestPushNotification}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          {isPushLoading ? 'Mengirim...' : 'Tes Push HP'}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={isPushLoading}
+                            onClick={handleTestPushNotification}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            title="Kirim notifikasi uji coba ke HP"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            {isPushLoading ? 'Mengirim...' : 'Tes Push'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPushLoading}
+                            onClick={handleUnsubscribePush}
+                            className="bg-slate-200 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold text-[10px] px-2 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Nonaktifkan notifikasi di perangkat ini"
+                          >
+                            Matikan
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
