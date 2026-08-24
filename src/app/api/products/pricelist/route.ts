@@ -4,7 +4,24 @@ import { executeTransaction, executeQuery, ensureSchemaMigrations } from '@/lib/
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-async function ensureLogsTableExists(conn: any) {
+async function ensurePricelistTablesAndColumns(conn: any) {
+  // 1. Ensure product_variants table exists
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS product_variants (
+      id VARCHAR(64) PRIMARY KEY,
+      product_id VARCHAR(64) NOT NULL,
+      variant_sku VARCHAR(64) NOT NULL,
+      variant_name VARCHAR(255) NOT NULL,
+      pack_size_kg DECIMAL(10,2) NOT NULL,
+      selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00,
+      selling_price_usd_per_kg DECIMAL(10,2) DEFAULT 0.00,
+      min_stock_kg DECIMAL(10,2) DEFAULT 5.00,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 2. Ensure product_variant_price_logs table exists
   await conn.query(`
     CREATE TABLE IF NOT EXISTS product_variant_price_logs (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -21,6 +38,48 @@ async function ensureLogsTableExists(conn: any) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  // 3. Ensure products table columns exist
+  try {
+    const [prodCols]: any = await conn.query('SHOW COLUMNS FROM products');
+    const prodColNames = new Set(prodCols.map((c: any) => c.Field.toLowerCase()));
+
+    if (!prodColNames.has('selling_price_per_kg')) {
+      await conn.query('ALTER TABLE products ADD COLUMN selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00');
+    }
+    if (!prodColNames.has('selling_price_usd_per_kg')) {
+      await conn.query('ALTER TABLE products ADD COLUMN selling_price_usd_per_kg DECIMAL(15,2) DEFAULT 0.00');
+    }
+    if (!prodColNames.has('variant_prices')) {
+      await conn.query('ALTER TABLE products ADD COLUMN variant_prices LONGTEXT DEFAULT NULL');
+    }
+    if (!prodColNames.has('variant_names')) {
+      await conn.query('ALTER TABLE products ADD COLUMN variant_names LONGTEXT DEFAULT NULL');
+    }
+    if (!prodColNames.has('variant_skus')) {
+      await conn.query('ALTER TABLE products ADD COLUMN variant_skus LONGTEXT DEFAULT NULL');
+    }
+    if (!prodColNames.has('pack_sizes')) {
+      await conn.query('ALTER TABLE products ADD COLUMN pack_sizes LONGTEXT DEFAULT NULL');
+    }
+  } catch (e: any) {
+    console.warn('[Pricelist Route] products column check:', e.message);
+  }
+
+  // 4. Ensure product_variants table columns exist
+  try {
+    const [pvCols]: any = await conn.query('SHOW COLUMNS FROM product_variants');
+    const pvColNames = new Set(pvCols.map((c: any) => c.Field.toLowerCase()));
+
+    if (!pvColNames.has('selling_price_per_kg')) {
+      await conn.query('ALTER TABLE product_variants ADD COLUMN selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00');
+    }
+    if (!pvColNames.has('selling_price_usd_per_kg')) {
+      await conn.query('ALTER TABLE product_variants ADD COLUMN selling_price_usd_per_kg DECIMAL(10,2) DEFAULT 0.00');
+    }
+  } catch (e: any) {
+    console.warn('[Pricelist Route] product_variants column check:', e.message);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -35,7 +94,7 @@ export async function GET(req: NextRequest) {
     } catch (e: any) {
       // Table might not exist yet, create it
       await executeTransaction(async (conn) => {
-        await ensureLogsTableExists(conn);
+        await ensurePricelistTablesAndColumns(conn);
       });
       logs = [];
     }
@@ -64,11 +123,11 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    await ensureSchemaMigrations();
+    await ensureSchemaMigrations(true);
 
     await executeTransaction(async (conn) => {
-      // 1. Ensure table exists
-      await ensureLogsTableExists(conn);
+      // 1. Ensure tables & columns exist
+      await ensurePricelistTablesAndColumns(conn);
 
       // 2. Loop and update each variant
       for (const priceItem of prices) {

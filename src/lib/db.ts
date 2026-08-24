@@ -33,8 +33,8 @@ if (process.env.NODE_ENV !== 'production') {
 /**
  * Auto-ensure all required columns exist in MySQL schema
  */
-export async function ensureSchemaMigrations(): Promise<void> {
-  if (globalForDb.schemaMigrated) return;
+export async function ensureSchemaMigrations(force = false): Promise<void> {
+  if (globalForDb.schemaMigrated && !force) return;
 
   try {
     const conn = await pool.getConnection();
@@ -409,7 +409,7 @@ export async function executeTransaction<T>(
   callback: (connection: mysql.PoolConnection) => Promise<T>
 ): Promise<T> {
   await ensureSchemaMigrations();
-  const connection = await pool.getConnection();
+  let connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const result = await callback(connection);
@@ -418,6 +418,27 @@ export async function executeTransaction<T>(
   } catch (error: any) {
     await connection.rollback();
     console.error('Transaction Rolled Back:', error.message);
+
+    // If unknown column error, force schema migrations and retry once
+    if (error.message && error.message.includes('Unknown column')) {
+      connection.release();
+      console.log('[executeTransaction] Unknown column detected, forcing schema migration and retrying...');
+      globalForDb.schemaMigrated = false;
+      await ensureSchemaMigrations(true);
+
+      connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const retryResult = await callback(connection);
+        await connection.commit();
+        return retryResult;
+      } catch (retryError: any) {
+        await connection.rollback();
+        console.error('Transaction Rolled Back after Retry:', retryError.message);
+        throw retryError;
+      }
+    }
+
     throw error;
   } finally {
     connection.release();
