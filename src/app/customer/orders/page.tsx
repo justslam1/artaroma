@@ -490,7 +490,6 @@ export default function CustomerOrdersPage() {
                     <th className="px-6 py-3">Jatuh Tempo</th>
                     <th className="px-6 py-3">Sisa Hari</th>
                     <th className="px-6 py-3">Status Bayar (Kas)</th>
-                    <th className="px-6 py-3">Bukti Pembayaran</th>
                     <th className="px-6 py-3 text-right">Dokumen PDF</th>
                   </tr>
                 </thead>
@@ -629,10 +628,6 @@ export default function CustomerOrdersPage() {
                               <AlertTriangle className="w-3 h-3 text-rose-500" /> BELUM LUNAS
                             </span>
                           )}
-                        </td>
-
-                        <td className="px-6 py-4">
-                          {renderPaymentProofStatus(so, inv)}
                         </td>
 
                         <td className="px-6 py-4 text-right space-x-2">
