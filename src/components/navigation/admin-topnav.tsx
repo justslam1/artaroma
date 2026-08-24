@@ -30,8 +30,12 @@ import {
   ExternalLink,
   Landmark,
   Wallet,
+  AlertTriangle,
+  FileCheck,
 } from 'lucide-react';
 import { formatIDR } from '@/lib/utils';
+import { getStoredInvoices, getStoredOrders } from '@/lib/order-store';
+import { Invoice } from '@/lib/types';
 
 export function AdminTopNav() {
   const pathname = usePathname();
@@ -43,15 +47,19 @@ export function AdminTopNav() {
     email: 'admin@artaroma.co.id',
   });
 
-  // Notification States for incoming Sales Orders
+  // Multi-Category Notification States
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
-  const [readOrderIds, setReadOrderIds] = useState<string[]>([]);
+  const [proofOrders, setProofOrders] = useState<any[]>([]);
+  const [dueInvoices, setDueInvoices] = useState<any[]>([]);
+  const [readNotifKeys, setReadNotifKeys] = useState<string[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [toastNewOrder, setToastNewOrder] = useState<any | null>(null);
+  const [activeNotifTab, setActiveNotifTab] = useState<'ALL' | 'ORDERS' | 'PROOFS' | 'DUES'>('ALL');
+  const [toastNotif, setToastNotif] = useState<{ type: 'ORDER' | 'PROOF'; data: any } | null>(null);
 
   const financeRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const prevPendingCountRef = useRef<number>(0);
+  const prevProofCountRef = useRef<number>(0);
 
   // Active section checks
   const isDashboardActive = pathname === '/admin';
@@ -69,49 +77,143 @@ export function AdminTopNav() {
   const isVendorPayablesActive = pathname.startsWith('/admin/finance/payables');
   const isCashManagementActive = pathname.startsWith('/admin/finance/cash');
 
-  // Load read order IDs from localStorage
+  // Load read notification keys from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('artaroma_read_so_notifs');
+      const stored = localStorage.getItem('artaroma_read_all_notifs');
       if (stored) {
-        setReadOrderIds(JSON.parse(stored));
+        setReadNotifKeys(JSON.parse(stored));
       }
     } catch {
       // ignore
     }
   }, []);
 
-  // Fetch Pending Sales Orders for Notifications
-  const fetchPendingOrders = useCallback(async () => {
+  // Fetch Multi-Category Notifications (Orders, Proofs, Receivables)
+  const fetchAllNotifications = useCallback(async () => {
     try {
+      let orders: any[] = [];
       const res = await fetch('/api/sales-orders', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          const pendings = json.data.filter(
-            (o: any) => o.status === 'PENDING_APPROVAL' || o.status === 'DIAJUKAN'
-          );
-          setPendingOrders(pendings);
-
-          // Detect newly arrived order
-          if (
-            prevPendingCountRef.current !== 0 &&
-            pendings.length > prevPendingCountRef.current
-          ) {
-            const newest = pendings[0];
-            if (newest) {
-              setToastNewOrder(newest);
-            }
-          }
-          prevPendingCountRef.current = pendings.length;
+          orders = json.data;
         }
       }
+
+      if (orders.length === 0) {
+        orders = getStoredOrders();
+      }
+
+      // 1. Pending Sales Orders (DIAJUKAN / PENDING_APPROVAL)
+      const pendings = orders.filter(
+        (o: any) => o.status === 'PENDING_APPROVAL' || o.status === 'DIAJUKAN'
+      );
+      setPendingOrders(pendings);
+
+      // Detect newly arrived order
+      if (
+        prevPendingCountRef.current !== 0 &&
+        pendings.length > prevPendingCountRef.current
+      ) {
+        const newest = pendings[0];
+        if (newest) {
+          setToastNotif({ type: 'ORDER', data: newest });
+        }
+      }
+      prevPendingCountRef.current = pendings.length;
+
+      // 2. Incoming Payment Proofs (Customer uploaded transfer proof, awaiting admin verification)
+      const proofs = orders.filter((o: any) => {
+        const hasProof = Boolean(o.payment_proof_url || o.payment_proof);
+        const isNotPaid = o.payment_status !== 'PAID' && o.payment_status !== 'LUNAS';
+        const isNotCancelled = o.status !== 'CANCELLED' && o.status !== 'DIBATALKAN';
+        return hasProof && isNotPaid && isNotCancelled;
+      });
+      setProofOrders(proofs);
+
+      // Detect newly uploaded payment proof
+      if (
+        prevProofCountRef.current !== 0 &&
+        proofs.length > prevProofCountRef.current
+      ) {
+        const newestProof = proofs[0];
+        if (newestProof) {
+          setToastNotif({ type: 'PROOF', data: newestProof });
+        }
+      }
+      prevProofCountRef.current = proofs.length;
+
+      // 3. Receivables Approaching Due Date / Overdue (Invoices H-3 or Overdue)
+      const storedInvoices = getStoredInvoices();
+      const allInvoices: Invoice[] = [...storedInvoices];
+
+      // Merge any confirmed SOs not yet in storedInvoices
+      orders.forEach((so) => {
+        const isConfirmed = ['DIKONFIRMASI', 'PROSES_GUDANG', 'DIKIRIM', 'DITERIMA'].includes(so.status);
+        if (isConfirmed) {
+          const hasInv = allInvoices.some((inv) => inv.so_id === so.id || inv.so_number === so.so_number);
+          if (!hasInv) {
+            const cleanNum = so.so_number.replace(/[^0-9]/g, '') || String(Math.floor(100 + Math.random() * 900));
+            const newInv: Invoice = {
+              id: (so as any).invoice_id || `inv-${so.id}`,
+              invoice_number: `INV-2026-${cleanNum}`,
+              so_id: so.id,
+              so_number: so.so_number,
+              customer_id: so.customer_id,
+              customer_name: (so as any).customer_company || so.customer_name || '',
+              status: 'UNPAID',
+              issue_date: so.order_date || new Date().toISOString().split('T')[0],
+              due_date: (() => {
+                const d = new Date();
+                d.setDate(d.getDate() + 30);
+                return d.toISOString().split('T')[0];
+              })(),
+              total_amount: Number((so as any).grand_total || (so as any).total_goods_amount || 0),
+              paid_amount: 0,
+            };
+            allInvoices.unshift(newInv);
+          }
+        }
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const dueAlerts: any[] = [];
+      allInvoices.forEach((inv) => {
+        const total = Number(inv.total_amount) || 0;
+        const paid = Number(inv.paid_amount) || 0;
+        const remaining = total - paid;
+        const isPaid = inv.status === 'PAID' || remaining <= 0;
+
+        if (!isPaid && inv.due_date) {
+          const dueDate = new Date(inv.due_date);
+          dueDate.setHours(0, 0, 0, 0);
+          const diffTime = dueDate.getTime() - today.getTime();
+          const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          // Alert if due in <= 3 days or already overdue (daysLeft < 0)
+          if (daysLeft <= 3) {
+            dueAlerts.push({
+              ...inv,
+              remaining_amount: remaining,
+              daysLeft,
+            });
+          }
+        }
+      });
+
+      // Sort by urgency (most overdue first)
+      dueAlerts.sort((a, b) => a.daysLeft - b.daysLeft);
+      setDueInvoices(dueAlerts);
+
     } catch (err) {
-      console.warn('Failed to fetch SO notifications:', err);
+      console.warn('Failed to fetch notifications:', err);
     }
   }, []);
 
-  // Fetch company tagline, auth info, and setup polling for new SOs
+  // Setup polling and event listeners for real-time updates
   useEffect(() => {
     fetch('/api/company-settings', { cache: 'no-store' })
       .then((res) => res.json())
@@ -131,19 +233,23 @@ export function AdminTopNav() {
       })
       .catch((err) => console.warn('Failed to load auth user in TopNav:', err));
 
-    fetchPendingOrders();
-    const interval = setInterval(fetchPendingOrders, 15000); // Check every 15s
+    fetchAllNotifications();
+    const interval = setInterval(fetchAllNotifications, 15000); // Check every 15s
 
-    const handleNewSOCreated = () => {
-      fetchPendingOrders();
+    const handleDataUpdate = () => {
+      fetchAllNotifications();
     };
-    window.addEventListener('artaroma_new_so_created', handleNewSOCreated);
+    window.addEventListener('artaroma_new_so_created', handleDataUpdate);
+    window.addEventListener('artaroma_orders_updated', handleDataUpdate);
+    window.addEventListener('artaroma_invoices_updated', handleDataUpdate);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('artaroma_new_so_created', handleNewSOCreated);
+      window.removeEventListener('artaroma_new_so_created', handleDataUpdate);
+      window.removeEventListener('artaroma_orders_updated', handleDataUpdate);
+      window.removeEventListener('artaroma_invoices_updated', handleDataUpdate);
     };
-  }, [fetchPendingOrders]);
+  }, [fetchAllNotifications]);
 
   const handleLogout = async () => {
     if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
@@ -173,31 +279,38 @@ export function AdminTopNav() {
     };
   }, []);
 
-  // Mark all pending notifications as read
+  // Mark all notifications as read
   const handleMarkAllAsRead = () => {
-    const allIds = pendingOrders.map((o) => o.id);
-    setReadOrderIds(allIds);
+    const allKeys: string[] = [
+      ...pendingOrders.map((o) => `order-${o.id}`),
+      ...proofOrders.map((p) => `proof-${p.id}`),
+      ...dueInvoices.map((d) => `due-${d.id}`),
+    ];
+    setReadNotifKeys(allKeys);
     try {
-      localStorage.setItem('artaroma_read_so_notifs', JSON.stringify(allIds));
+      localStorage.setItem('artaroma_read_all_notifs', JSON.stringify(allKeys));
     } catch {
       // ignore
     }
   };
 
-  const handleMarkSingleAsRead = (orderId: string) => {
-    if (!readOrderIds.includes(orderId)) {
-      const updated = [...readOrderIds, orderId];
-      setReadOrderIds(updated);
+  const handleMarkSingleAsRead = (key: string) => {
+    if (!readNotifKeys.includes(key)) {
+      const updated = [...readNotifKeys, key];
+      setReadNotifKeys(updated);
       try {
-        localStorage.setItem('artaroma_read_so_notifs', JSON.stringify(updated));
+        localStorage.setItem('artaroma_read_all_notifs', JSON.stringify(updated));
       } catch {
         // ignore
       }
     }
   };
 
-  const unreadPendingOrders = pendingOrders.filter((o) => !readOrderIds.includes(o.id));
-  const unreadCount = unreadPendingOrders.length;
+  // Count unread per category
+  const unreadPendingOrders = pendingOrders.filter((o) => !readNotifKeys.includes(`order-${o.id}`));
+  const unreadProofOrders = proofOrders.filter((p) => !readNotifKeys.includes(`proof-${p.id}`));
+  const unreadDueInvoices = dueInvoices.filter((d) => !readNotifKeys.includes(`due-${d.id}`));
+  const totalUnreadCount = unreadPendingOrders.length + unreadProofOrders.length + unreadDueInvoices.length;
 
   const initials = (currentUser?.name || 'Admin')
     .split(' ')
@@ -223,6 +336,50 @@ export function AdminTopNav() {
     isSuperAdmin || allowedMods.includes('Log Book & Arsip') || allowedMods.includes('Log Book');
   const canAccessCustomerCatalog = isSuperAdmin || allowedMods.includes('Katalog Customer');
   const canAccessCourierApp = isSuperAdmin || allowedMods.includes('Aplikasi Kurir');
+
+  // Combined notification items list for tab filtering
+  const allNotifItems = [
+    ...pendingOrders.map((o) => ({
+      type: 'ORDER' as const,
+      key: `order-${o.id}`,
+      id: o.id,
+      so_number: o.so_number,
+      customer: o.customer_company || o.customer_name || 'Customer B2B',
+      amount: o.grand_total || o.total_amount || 0,
+      date: o.order_date,
+      data: o,
+    })),
+    ...proofOrders.map((p) => ({
+      type: 'PROOF' as const,
+      key: `proof-${p.id}`,
+      id: p.id,
+      so_number: p.so_number,
+      customer: p.customer_company || p.customer_name || 'Customer B2B',
+      amount: p.grand_total || p.total_amount || 0,
+      date: p.order_date,
+      proof_url: p.payment_proof_url || p.payment_proof,
+      data: p,
+    })),
+    ...dueInvoices.map((d) => ({
+      type: 'DUE' as const,
+      key: `due-${d.id}`,
+      id: d.id,
+      invoice_number: d.invoice_number,
+      so_number: d.so_number,
+      customer: d.customer_name || 'Customer B2B',
+      amount: d.remaining_amount || d.total_amount || 0,
+      due_date: d.due_date,
+      daysLeft: d.daysLeft,
+      data: d,
+    })),
+  ];
+
+  const filteredNotifItems = allNotifItems.filter((item) => {
+    if (activeNotifTab === 'ORDERS') return item.type === 'ORDER';
+    if (activeNotifTab === 'PROOFS') return item.type === 'PROOF';
+    if (activeNotifTab === 'DUES') return item.type === 'DUE';
+    return true;
+  });
 
   return (
     <>
@@ -250,123 +407,298 @@ export function AdminTopNav() {
               FEFO Engine: ACTIVE
             </span>
 
-            {/* REAL-TIME SO NOTIFICATIONS BELL WIDGET */}
+            {/* REAL-TIME MULTI-CATEGORY NOTIFICATIONS BELL WIDGET */}
             <div ref={notifRef} className="relative">
               <button
                 type="button"
                 onClick={() => setIsNotifOpen((prev) => !prev)}
-                title="Notifikasi Pesanan Masuk"
+                title="Pusat Notifikasi Operasional"
                 className={`relative p-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer shadow-2xs border ${
-                  unreadCount > 0
+                  totalUnreadCount > 0
                     ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                     : 'bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border-slate-200 hover:border-blue-200'
                 }`}
               >
-                {unreadCount > 0 ? (
+                {totalUnreadCount > 0 ? (
                   <BellRing className="w-4 h-4 text-amber-600 animate-bounce" />
                 ) : (
                   <Bell className="w-4 h-4" />
                 )}
-                {unreadCount > 0 && (
+                {totalUnreadCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-xs border-2 border-white animate-pulse">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
                   </span>
                 )}
               </button>
 
               {/* Notification Dropdown Panel */}
               {isNotifOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute top-full right-0 mt-2 w-80 sm:w-[420px] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <BellRing className="w-4 h-4 text-amber-400" />
-                      <span className="font-bold text-xs">Notifikasi Pesanan Masuk</span>
-                      {unreadCount > 0 && (
-                        <span className="bg-amber-400 text-slate-900 font-extrabold text-[10px] px-1.5 py-0.2 rounded-full">
-                          {unreadCount} Baru
+                      <span className="font-bold text-xs">Pusat Notifikasi</span>
+                      {totalUnreadCount > 0 && (
+                        <span className="bg-amber-400 text-slate-900 font-extrabold text-[10px] px-2 py-0.5 rounded-full">
+                          {totalUnreadCount} Baru
                         </span>
                       )}
                     </div>
-                    {unreadCount > 0 && (
+                    {totalUnreadCount > 0 && (
                       <button
                         onClick={handleMarkAllAsRead}
                         className="text-[11px] text-blue-200 hover:text-white underline cursor-pointer"
                       >
-                        Tandai Dibaca
+                        Tandai Semua Dibaca
                       </button>
                     )}
                   </div>
 
+                  {/* Filter Category Tabs */}
+                  <div className="bg-slate-50 border-b border-gray-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto text-[11px] font-bold scrollbar-none">
+                    <button
+                      onClick={() => setActiveNotifTab('ALL')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
+                        activeNotifTab === 'ALL'
+                          ? 'bg-blue-800 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-gray-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Semua ({allNotifItems.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveNotifTab('ORDERS')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                        activeNotifTab === 'ORDERS'
+                          ? 'bg-blue-800 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-gray-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <ShoppingBag className="w-3 h-3 text-blue-500" />
+                      Pesanan ({pendingOrders.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveNotifTab('PROOFS')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                        activeNotifTab === 'PROOFS'
+                          ? 'bg-blue-800 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-gray-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <CreditCard className="w-3 h-3 text-emerald-600" />
+                      Bukti Bayar ({proofOrders.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveNotifTab('DUES')}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                        activeNotifTab === 'DUES'
+                          ? 'bg-blue-800 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-gray-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                      Jatuh Tempo ({dueInvoices.length})
+                    </button>
+                  </div>
+
                   {/* Body List */}
-                  <div className="max-h-[350px] overflow-y-auto divide-y divide-gray-100 text-xs">
-                    {pendingOrders.length === 0 ? (
-                      <div className="py-8 text-center text-slate-400 space-y-1.5">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
-                        <div className="font-semibold text-xs text-slate-600">
-                          Tidak Ada Pesanan Tertunda
+                  <div className="max-h-[380px] overflow-y-auto divide-y divide-gray-100 text-xs">
+                    {filteredNotifItems.length === 0 ? (
+                      <div className="py-10 text-center text-slate-400 space-y-1.5">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto" />
+                        <div className="font-semibold text-xs text-slate-700">
+                          Tidak Ada Notifikasi
                         </div>
-                        <div className="text-[11px]">Semua Sales Order telah diproses/disetujui.</div>
+                        <div className="text-[11px] text-slate-400">
+                          Semua pesanan, pembayaran, & piutang dalam kondisi aman.
+                        </div>
                       </div>
                     ) : (
-                      pendingOrders.map((order) => {
-                        const isUnread = !readOrderIds.includes(order.id);
-                        return (
-                          <div
-                            key={order.id}
-                            className={`p-3.5 hover:bg-blue-50/50 transition-colors flex items-start justify-between gap-2.5 ${
-                              isUnread ? 'bg-amber-50/40' : 'bg-white'
-                            }`}
-                          >
-                            <div className="space-y-1 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-extrabold text-blue-700 text-xs">
-                                  {order.so_number}
-                                </span>
-                                {isUnread && (
-                                  <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
-                                )}
-                                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 rounded">
-                                  Perlu Persetujuan
-                                </span>
-                              </div>
-                              <div className="font-bold text-slate-800 text-xs truncate max-w-[220px]">
-                                {order.customer_company || order.customer_name || 'Customer B2B'}
-                              </div>
-                              <div className="text-[11px] text-slate-500 flex items-center justify-between">
-                                <span className="font-mono font-bold text-slate-700">
-                                  {formatIDR(order.grand_total || order.total_amount || 0)}
-                                </span>
-                                <span className="text-[10px] text-slate-400 flex items-center gap-0.5 font-mono">
-                                  <Clock className="w-3 h-3" />
-                                  {order.order_date ? String(order.order_date).substring(0, 10) : 'Hari Ini'}
-                                </span>
-                              </div>
-                            </div>
-                            <Link
-                              href={`/admin/orders/${order.id}`}
-                              onClick={() => {
-                                handleMarkSingleAsRead(order.id);
-                                setIsNotifOpen(false);
-                              }}
-                              className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow-2xs inline-flex items-center gap-1 transition-colors shrink-0 mt-1"
+                      filteredNotifItems.map((item) => {
+                        const isUnread = !readNotifKeys.includes(item.key);
+
+                        if (item.type === 'ORDER') {
+                          return (
+                            <div
+                              key={item.key}
+                              className={`p-3.5 hover:bg-blue-50/50 transition-colors flex items-start justify-between gap-2.5 ${
+                                isUnread ? 'bg-amber-50/40' : 'bg-white'
+                              }`}
                             >
-                              Tinjau <ArrowRight className="w-3 h-3" />
-                            </Link>
-                          </div>
-                        );
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-extrabold text-blue-700 text-xs">
+                                    {item.so_number}
+                                  </span>
+                                  {isUnread && (
+                                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                                  )}
+                                  <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                                    <ShoppingBag className="w-3 h-3" />
+                                    Pesanan Baru
+                                  </span>
+                                </div>
+                                <div className="font-bold text-slate-800 text-xs truncate max-w-[240px]">
+                                  {item.customer}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                                  <span className="font-mono font-bold text-slate-700">
+                                    {formatIDR(item.amount)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 flex items-center gap-0.5 font-mono">
+                                    <Clock className="w-3 h-3" />
+                                    {item.date ? String(item.date).substring(0, 10) : 'Hari Ini'}
+                                  </span>
+                                </div>
+                              </div>
+                              <Link
+                                href={`/admin/orders/${item.id}`}
+                                onClick={() => {
+                                  handleMarkSingleAsRead(item.key);
+                                  setIsNotifOpen(false);
+                                }}
+                                className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow-2xs inline-flex items-center gap-1 transition-colors shrink-0 mt-1 cursor-pointer"
+                              >
+                                Tinjau <ArrowRight className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          );
+                        }
+
+                        if (item.type === 'PROOF') {
+                          return (
+                            <div
+                              key={item.key}
+                              className={`p-3.5 hover:bg-emerald-50/50 transition-colors flex items-start justify-between gap-2.5 ${
+                                isUnread ? 'bg-emerald-50/40' : 'bg-white'
+                              }`}
+                            >
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-extrabold text-blue-700 text-xs">
+                                    {item.so_number}
+                                  </span>
+                                  {isUnread && (
+                                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                                  )}
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                                    <CreditCard className="w-3 h-3" />
+                                    Bukti Transfer Masuk
+                                  </span>
+                                </div>
+                                <div className="font-bold text-slate-800 text-xs truncate max-w-[240px]">
+                                  {item.customer}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                                  <span className="font-mono font-bold text-emerald-700">
+                                    {formatIDR(item.amount)}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                                    <FileCheck className="w-3 h-3" /> Perlu Verifikasi
+                                  </span>
+                                </div>
+                              </div>
+                              <Link
+                                href={`/admin/sales-orders?so=${item.so_number}`}
+                                onClick={() => {
+                                  handleMarkSingleAsRead(item.key);
+                                  setIsNotifOpen(false);
+                                }}
+                                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow-2xs inline-flex items-center gap-1 transition-colors shrink-0 mt-1 cursor-pointer"
+                              >
+                                Verifikasi <ArrowRight className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          );
+                        }
+
+                        if (item.type === 'DUE') {
+                          const isOverdue = (item.daysLeft ?? 0) < 0;
+                          const isToday = item.daysLeft === 0;
+
+                          return (
+                            <div
+                              key={item.key}
+                              className={`p-3.5 hover:bg-amber-50/50 transition-colors flex items-start justify-between gap-2.5 ${
+                                isUnread
+                                  ? isOverdue
+                                    ? 'bg-rose-50/50'
+                                    : 'bg-amber-50/40'
+                                  : 'bg-white'
+                              }`}
+                            >
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-extrabold text-slate-800 text-xs">
+                                    {item.invoice_number || item.so_number}
+                                  </span>
+                                  {isUnread && (
+                                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                                  )}
+                                  {isOverdue ? (
+                                    <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 rounded border border-rose-200 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                      Overdue {Math.abs(item.daysLeft ?? 0)} Hari
+                                    </span>
+                                  ) : isToday ? (
+                                    <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-amber-700" />
+                                      Jatuh Tempo Hari Ini
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-amber-600" />
+                                      Jatuh Tempo H-{item.daysLeft}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="font-bold text-slate-800 text-xs truncate max-w-[240px]">
+                                  {item.customer}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                                  <span className="font-mono font-bold text-rose-700">
+                                    Piutang: {formatIDR(item.amount)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    Tempo: {String(item.due_date).substring(0, 10)}
+                                  </span>
+                                </div>
+                              </div>
+                              <Link
+                                href="/admin/finance"
+                                onClick={() => {
+                                  handleMarkSingleAsRead(item.key);
+                                  setIsNotifOpen(false);
+                                }}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow-2xs inline-flex items-center gap-1 transition-colors shrink-0 mt-1 cursor-pointer"
+                              >
+                                Tagihan <ArrowRight className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          );
+                        }
+
+                        return null;
                       })
                     )}
                   </div>
 
                   {/* Footer */}
-                  <div className="bg-slate-50 px-4 py-2 border-t border-gray-200 text-center">
+                  <div className="bg-slate-50 px-4 py-2 border-t border-gray-200 flex items-center justify-between text-[11px] font-bold">
                     <Link
                       href="/admin/sales-orders"
                       onClick={() => setIsNotifOpen(false)}
-                      className="text-[11px] font-bold text-blue-700 hover:underline inline-flex items-center gap-1"
+                      className="text-blue-700 hover:underline inline-flex items-center gap-1"
                     >
-                      Buka Semua Sales Order <ExternalLink className="w-3 h-3" />
+                      Daftar Sales Order <ExternalLink className="w-3 h-3" />
+                    </Link>
+                    <Link
+                      href="/admin/finance"
+                      onClick={() => setIsNotifOpen(false)}
+                      className="text-slate-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
+                    >
+                      Daftar Tagihan Piutang <ExternalLink className="w-3 h-3" />
                     </Link>
                   </div>
                 </div>
@@ -471,9 +803,9 @@ export function AdminTopNav() {
               >
                 <ShoppingCart className="w-4 h-4" />
                 <span>Sales Order (SO)</span>
-                {unreadCount > 0 && (
+                {unreadPendingOrders.length > 0 && (
                   <span className="bg-amber-400 text-slate-900 font-black text-[10px] px-1.5 py-0.2 rounded-full">
-                    {unreadCount}
+                    {unreadPendingOrders.length}
                   </span>
                 )}
               </Link>
@@ -665,18 +997,22 @@ export function AdminTopNav() {
         </div>
       )}
 
-      {/* FLOATING REAL-TIME TOAST NOTIFICATION FOR NEW SALES ORDER */}
-      {toastNewOrder && (
+      {/* FLOATING REAL-TIME TOAST NOTIFICATION FOR NEW SALES ORDER / TRANSFER PROOF */}
+      {toastNotif && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-blue-500/50 max-w-sm w-full animate-in slide-in-from-bottom-5 duration-200">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2.5 text-amber-400 font-bold text-xs">
-              <div className="w-7 h-7 rounded-lg bg-amber-400/20 flex items-center justify-center text-amber-400">
-                <BellRing className="w-4 h-4 animate-bounce" />
+            <div className={`flex items-center gap-2.5 font-bold text-xs ${toastNotif.type === 'PROOF' ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${toastNotif.type === 'PROOF' ? 'bg-emerald-400/20 text-emerald-400' : 'bg-amber-400/20 text-amber-400'}`}>
+                {toastNotif.type === 'PROOF' ? (
+                  <CreditCard className="w-4 h-4 animate-bounce" />
+                ) : (
+                  <BellRing className="w-4 h-4 animate-bounce" />
+                )}
               </div>
-              <span>Sales Order Baru Masuk!</span>
+              <span>{toastNotif.type === 'PROOF' ? 'Bukti Transfer Pembayaran Masuk!' : 'Sales Order Baru Masuk!'}</span>
             </div>
             <button
-              onClick={() => setToastNewOrder(null)}
+              onClick={() => setToastNotif(null)}
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -684,35 +1020,48 @@ export function AdminTopNav() {
           </div>
 
           <div className="mt-2.5 space-y-1 text-xs">
-            <div className="font-mono font-extrabold text-blue-300">{toastNewOrder.so_number}</div>
+            <div className="font-mono font-extrabold text-blue-300">{toastNotif.data.so_number}</div>
             <div className="font-bold text-slate-100 truncate">
-              {toastNewOrder.customer_company || toastNewOrder.customer_name || 'Customer B2B'}
+              {toastNotif.data.customer_company || toastNotif.data.customer_name || 'Customer B2B'}
             </div>
             <div className="text-slate-400 text-[11px]">
               Total:{' '}
               <strong className="text-emerald-400 font-mono">
-                {formatIDR(toastNewOrder.grand_total || toastNewOrder.total_amount || 0)}
+                {formatIDR(toastNotif.data.grand_total || toastNotif.data.total_amount || 0)}
               </strong>
             </div>
           </div>
 
           <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-end gap-2 text-xs">
             <button
-              onClick={() => setToastNewOrder(null)}
+              onClick={() => setToastNotif(null)}
               className="px-3 py-1 text-slate-400 hover:text-white text-[11px] font-semibold cursor-pointer"
             >
               Nanti
             </button>
-            <Link
-              href={`/admin/orders/${toastNewOrder.id}`}
-              onClick={() => {
-                handleMarkSingleAsRead(toastNewOrder.id);
-                setToastNewOrder(null);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
-            >
-              Tinjau Pesanan <ArrowRight className="w-3 h-3" />
-            </Link>
+            {toastNotif.type === 'PROOF' ? (
+              <Link
+                href={`/admin/sales-orders?so=${toastNotif.data.so_number}`}
+                onClick={() => {
+                  handleMarkSingleAsRead(`proof-${toastNotif.data.id}`);
+                  setToastNotif(null);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+              >
+                Verifikasi Kas <ArrowRight className="w-3 h-3" />
+              </Link>
+            ) : (
+              <Link
+                href={`/admin/orders/${toastNotif.data.id}`}
+                onClick={() => {
+                  handleMarkSingleAsRead(`order-${toastNotif.data.id}`);
+                  setToastNotif(null);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+              >
+                Tinjau Pesanan <ArrowRight className="w-3 h-3" />
+              </Link>
+            )}
           </div>
         </div>
       )}
