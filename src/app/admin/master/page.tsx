@@ -125,6 +125,12 @@ export default function MasterDataPage() {
   const [selectedProductIdsForFilter, setSelectedProductIdsForFilter] = useState<string[]>([]);
   const [isProductFilterDropdownOpen, setIsProductFilterDropdownOpen] = useState(false);
 
+  // Repack pricing formula states
+  const [formulaOffset5Kg, setFormulaOffset5Kg] = useState<number>(0.9);
+  const [formulaOffset1Kg, setFormulaOffset1Kg] = useState<number>(1.35);
+  const [isAutoFormulaActive, setIsAutoFormulaActive] = useState<boolean>(true);
+  const [showFormulaConfig, setShowFormulaConfig] = useState<boolean>(false);
+
   // Company profile / warehouse config states
   const [companyConfig, setCompanyConfig] = useState<any>({
     company_name: 'PT Artaroma Jayatama',
@@ -260,6 +266,18 @@ export default function MasterDataPage() {
     setUsdRateInput(rate);
     setApplicationCategories(getApplications());
     setThemeSettings(getThemeSettings());
+
+    try {
+      const savedFormula = localStorage.getItem('artaroma_pricelist_repack_formula');
+      if (savedFormula) {
+        const parsed = JSON.parse(savedFormula);
+        if (parsed.offset5 !== undefined) setFormulaOffset5Kg(Number(parsed.offset5));
+        if (parsed.offset1 !== undefined) setFormulaOffset1Kg(Number(parsed.offset1));
+        if (parsed.active !== undefined) setIsAutoFormulaActive(Boolean(parsed.active));
+      }
+    } catch (e) {
+      console.error('Failed to load formula settings:', e);
+    }
 
     const handleUpdate = () => {
       const updatedRate = getUsdExchangeRate();
@@ -815,6 +833,45 @@ export default function MasterDataPage() {
   };
 
   // --- PRICELIST MODAL HANDLERS ---
+  const applyFormulaToOtherVariants = (baseVal: number, baseCurrency: 'IDR' | 'USD', currentVariants: any[]) => {
+    if (!isAutoFormulaActive || !currentVariants || !Array.isArray(currentVariants)) return {};
+
+    const var5 = currentVariants.find((v) => Math.round(Number(v.pack_size_kg)) === 5);
+    const var1 = currentVariants.find((v) => Math.round(Number(v.pack_size_kg)) === 1);
+
+    const updates: Record<string, { currency: 'IDR' | 'USD'; value: number }> = {};
+
+    if (var5) {
+      if (baseCurrency === 'USD') {
+        updates[var5.id] = {
+          currency: 'USD',
+          value: Number((baseVal + formulaOffset5Kg).toFixed(2)),
+        };
+      } else {
+        updates[var5.id] = {
+          currency: 'IDR',
+          value: Math.round(baseVal + (formulaOffset5Kg * usdRate)),
+        };
+      }
+    }
+
+    if (var1) {
+      if (baseCurrency === 'USD') {
+        updates[var1.id] = {
+          currency: 'USD',
+          value: Number((baseVal + formulaOffset1Kg).toFixed(2)),
+        };
+      } else {
+        updates[var1.id] = {
+          currency: 'IDR',
+          value: Math.round(baseVal + (formulaOffset1Kg * usdRate)),
+        };
+      }
+    }
+
+    return updates;
+  };
+
   const openPricelistModal = (prod: Product) => {
     setSelectedProductForPricelist(prod);
     const initialForm: Record<string, { currency: 'IDR' | 'USD'; value: number }> = {};
@@ -828,17 +885,29 @@ export default function MasterDataPage() {
       });
     }
     setPricelistForm(initialForm);
+    setShowFormulaConfig(false);
     setIsPricelistModalOpen(true);
   };
 
   const handleValueChange = (vId: string, val: number) => {
-    setPricelistForm((prev) => ({
-      ...prev,
-      [vId]: {
-        ...prev[vId],
-        value: val
+    setPricelistForm((prev) => {
+      const next = {
+        ...prev,
+        [vId]: {
+          ...prev[vId],
+          value: val,
+        },
+      };
+
+      const changedVar = selectedProductForPricelist?.variants?.find((v: any) => v.id === vId);
+      if (changedVar && Math.round(Number(changedVar.pack_size_kg)) === 25 && isAutoFormulaActive && selectedProductForPricelist?.variants) {
+        const curr = prev[vId]?.currency || 'USD';
+        const formulaUpdates = applyFormulaToOtherVariants(val, curr, selectedProductForPricelist.variants);
+        Object.assign(next, formulaUpdates);
       }
-    }));
+
+      return next;
+    });
   };
 
   const handleCurrencyChange = (vId: string, curr: 'IDR' | 'USD') => {
@@ -852,15 +921,84 @@ export default function MasterDataPage() {
       } else if (curr === 'USD' && item.currency === 'IDR') {
         newValue = Number((item.value / usdRate).toFixed(2));
       }
-      return {
+
+      const next = {
         ...prev,
         [vId]: {
           ...item,
           currency: curr,
-          value: newValue
-        }
+          value: newValue,
+        },
       };
+
+      const changedVar = selectedProductForPricelist?.variants?.find((v: any) => v.id === vId);
+      if (changedVar && Math.round(Number(changedVar.pack_size_kg)) === 25 && isAutoFormulaActive && selectedProductForPricelist?.variants) {
+        selectedProductForPricelist.variants.forEach((v: any) => {
+          if (v.id !== vId && next[v.id]) {
+            next[v.id] = {
+              ...next[v.id],
+              currency: curr,
+            };
+          }
+        });
+        const formulaUpdates = applyFormulaToOtherVariants(newValue, curr, selectedProductForPricelist.variants);
+        Object.assign(next, formulaUpdates);
+      }
+
+      return next;
     });
+  };
+
+  const handleFormulaOffsetChange = (type: '5' | '1', newOffset: number) => {
+    if (type === '5') setFormulaOffset5Kg(newOffset);
+    if (type === '1') setFormulaOffset1Kg(newOffset);
+
+    const variants = selectedProductForPricelist?.variants;
+    if (isAutoFormulaActive && variants && Array.isArray(variants)) {
+      const var25 = variants.find((v: any) => Math.round(Number(v.pack_size_kg)) === 25);
+      if (var25) {
+        const formVal25 = pricelistForm[var25.id];
+        if (formVal25 && formVal25.value > 0) {
+          const off5 = type === '5' ? newOffset : formulaOffset5Kg;
+          const off1 = type === '1' ? newOffset : formulaOffset1Kg;
+
+          setPricelistForm((prev) => {
+            const next = { ...prev };
+            const var5 = variants.find((v: any) => Math.round(Number(v.pack_size_kg)) === 5);
+            const var1 = variants.find((v: any) => Math.round(Number(v.pack_size_kg)) === 1);
+
+            if (type === '5' && var5) {
+              if (formVal25.currency === 'USD') {
+                next[var5.id] = { currency: 'USD', value: Number((formVal25.value + off5).toFixed(2)) };
+              } else {
+                next[var5.id] = { currency: 'IDR', value: Math.round(formVal25.value + (off5 * usdRate)) };
+              }
+            }
+            if (type === '1' && var1) {
+              if (formVal25.currency === 'USD') {
+                next[var1.id] = { currency: 'USD', value: Number((formVal25.value + off1).toFixed(2)) };
+              } else {
+                next[var1.id] = { currency: 'IDR', value: Math.round(formVal25.value + (off1 * usdRate)) };
+              }
+            }
+            return next;
+          });
+        }
+      }
+    }
+  };
+
+  const handleSaveFormulaDefaults = () => {
+    try {
+      localStorage.setItem('artaroma_pricelist_repack_formula', JSON.stringify({
+        offset5: formulaOffset5Kg,
+        offset1: formulaOffset1Kg,
+        active: isAutoFormulaActive,
+      }));
+      alert('Rumus default kemasan berhasil disimpan sebagai acuan sistem!');
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleSavePricelist = async (e: React.FormEvent) => {
@@ -7688,7 +7826,7 @@ export default function MasterDataPage() {
       {/* EDIT PRICELIST VARIAN MODAL */}
       {isPricelistModalOpen && selectedProductForPricelist && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden my-8">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden my-8">
             <div className="bg-blue-900 px-6 py-4 flex items-center justify-between text-white">
               <div className="flex items-center gap-2">
                 <Tag className="w-5 h-5 text-amber-300" />
@@ -7697,7 +7835,7 @@ export default function MasterDataPage() {
                   <p className="text-xs text-blue-200">{selectedProductForPricelist.name} ({selectedProductForPricelist.sku})</p>
                 </div>
               </div>
-              <button onClick={() => setIsPricelistModalOpen(false)} className="text-blue-200 hover:text-white">
+              <button onClick={() => setIsPricelistModalOpen(false)} className="text-blue-200 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -7706,8 +7844,98 @@ export default function MasterDataPage() {
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2 text-blue-800">
                 <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                 <p className="leading-relaxed">
-                  Tentukan mata uang acuan pada <strong>kolom kiri</strong> dan masukkan nominal harganya. <strong>Kolom kanan</strong> akan otomatis menganalisa & menghitung harga final dalam Rupiah berdasarkan kurs saat ini (<strong>Rp {usdRate.toLocaleString()}</strong>).
+                  Tentukan mata uang acuan pada <strong>kolom kiri</strong> dan masukkan nominal harganya. <strong>Kolom kanan</strong> otomatis menghitung harga final Rupiah berdasarkan kurs saat ini (<strong>Rp {usdRate.toLocaleString()}</strong>).
                 </p>
+              </div>
+
+              {/* AUTO REPACK FORMULA SETTINGS PANEL */}
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isAutoFormulaActive}
+                      onChange={(e) => setIsAutoFormulaActive(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-600" />
+                      Rumus Selisih Otomatis Kemasan (dari Varian 25 Kg)
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowFormulaConfig(!showFormulaConfig)}
+                    className="text-[11px] font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Settings className="w-3 h-3" />
+                    {showFormulaConfig ? 'Tutup Pengaturan' : 'Ubah Rumus'}
+                  </button>
+                </div>
+
+                {showFormulaConfig ? (
+                  <div className="bg-white/90 border border-amber-200 rounded-lg p-3 space-y-2.5 text-xs animate-fade-in">
+                    <div className="text-[11px] text-slate-600">
+                      Tentukan selisih harga tambahan USD per Kg dari harga dasar 25 Kg:
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="font-semibold text-slate-700 block text-[11px]">
+                          Tambahan Varian 5 Kg:
+                        </label>
+                        <div className="relative font-mono">
+                          <span className="absolute left-2.5 top-1.5 font-bold text-slate-400 text-xs">+ $</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formulaOffset5Kg}
+                            onChange={(e) => handleFormulaOffsetChange('5', Number(e.target.value) || 0)}
+                            className="w-full bg-white border border-amber-300 rounded-md pl-8 pr-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="font-semibold text-slate-700 block text-[11px]">
+                          Tambahan Varian 1 Kg:
+                        </label>
+                        <div className="relative font-mono">
+                          <span className="absolute left-2.5 top-1.5 font-bold text-slate-400 text-xs">+ $</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formulaOffset1Kg}
+                            onChange={(e) => handleFormulaOffsetChange('1', Number(e.target.value) || 0)}
+                            className="w-full bg-white border border-amber-300 rounded-md pl-8 pr-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1 text-[11px] border-t border-amber-100">
+                      <span className="text-slate-500 italic">
+                        Contoh: 25Kg $1.00 &rarr; 5Kg ${Number((1 + formulaOffset5Kg).toFixed(2))} &rarr; 1Kg ${Number((1 + formulaOffset1Kg).toFixed(2))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSaveFormulaDefaults}
+                        className="text-amber-900 font-bold bg-amber-200/80 hover:bg-amber-300 px-2.5 py-1 rounded transition-colors cursor-pointer shrink-0"
+                      >
+                        Simpan sebagai Default
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-amber-800 flex items-center justify-between">
+                    <span>
+                      Aturan aktif: <strong>5 Kg (+${formulaOffset5Kg.toFixed(2)})</strong> &bull; <strong>1 Kg (+${formulaOffset1Kg.toFixed(2)})</strong>
+                    </span>
+                    <span className="text-[10px] text-amber-700/80">Otomatis saat harga 25 Kg diisi</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4 divide-y divide-gray-100">
@@ -7716,13 +7944,29 @@ export default function MasterDataPage() {
                     const formVal = pricelistForm[v.id] || { currency: 'IDR', value: 0 };
                     const isIdrMode = formVal.currency === 'IDR';
                     const finalRupiah = isIdrMode ? formVal.value : Math.round(formVal.value * usdRate);
+                    const packSize = Math.round(Number(v.pack_size_kg));
                     
                     return (
                       <div key={v.id} className={`space-y-2.5 ${index > 0 ? 'pt-4' : ''}`}>
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-800 text-sm">
-                            Varian {v.pack_size_kg} Kg ({v.variant_sku})
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800 text-sm">
+                              Varian {v.pack_size_kg} Kg ({v.variant_sku})
+                            </span>
+                            {packSize === 25 ? (
+                              <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                                ⭐ Acuan Dasar Induk
+                              </span>
+                            ) : packSize === 5 && isAutoFormulaActive ? (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full border border-amber-200">
+                                ⚡ Rumus: 25Kg + ${formulaOffset5Kg.toFixed(2)}
+                              </span>
+                            ) : packSize === 1 && isAutoFormulaActive ? (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full border border-amber-200">
+                                ⚡ Rumus: 25Kg + ${formulaOffset1Kg.toFixed(2)}
+                              </span>
+                            ) : null}
+                          </div>
                           <span className="text-[10px] text-slate-400 font-mono">
                             ID: {v.id}
                           </span>
@@ -7742,7 +7986,7 @@ export default function MasterDataPage() {
                                     name={`currency-${v.id}`}
                                     checked={isIdrMode}
                                     onChange={() => handleCurrencyChange(v.id, 'IDR')}
-                                    className="text-blue-600 focus:ring-blue-500 w-3 h-3"
+                                    className="text-blue-600 focus:ring-blue-500 w-3 h-3 cursor-pointer"
                                   />
                                   <span className={`text-[10px] font-bold ${isIdrMode ? 'text-slate-800' : 'text-slate-400'}`}>IDR</span>
                                 </label>
@@ -7752,7 +7996,7 @@ export default function MasterDataPage() {
                                     name={`currency-${v.id}`}
                                     checked={!isIdrMode}
                                     onChange={() => handleCurrencyChange(v.id, 'USD')}
-                                    className="text-blue-600 focus:ring-blue-500 w-3 h-3"
+                                    className="text-blue-600 focus:ring-blue-500 w-3 h-3 cursor-pointer"
                                   />
                                   <span className={`text-[10px] font-bold ${!isIdrMode ? 'text-blue-700' : 'text-slate-400'}`}>USD</span>
                                 </label>
@@ -7805,14 +8049,14 @@ export default function MasterDataPage() {
                 <button
                   type="button"
                   onClick={() => setIsPricelistModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-medium hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isPricelistSubmitting || !(selectedProductForPricelist.variants && selectedProductForPricelist.variants.length > 0)}
-                  className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors"
+                  className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-bold shadow flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {isPricelistSubmitting ? (
                     <>
