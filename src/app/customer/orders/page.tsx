@@ -506,14 +506,14 @@ export default function CustomerOrdersPage() {
               <table className="w-full text-sm text-left">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
-                    <th className="px-6 py-3">No. SO / Tanggal</th>
+                    <th className="px-6 py-3 whitespace-nowrap">No. SO / Tanggal</th>
                     <th className="px-6 py-3">Item Dipesan</th>
-                    <th className="px-6 py-3">Total Nilai</th>
-                    <th className="px-6 py-3">Status Alur SO</th>
-                    <th className="px-6 py-3">Jatuh Tempo</th>
-                    <th className="px-6 py-3">Sisa Hari</th>
-                    <th className="px-6 py-3">Status Bayar (Kas)</th>
-                    <th className="px-6 py-3 text-right">Dokumen PDF</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Total Nilai</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Status Alur SO</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Jatuh Tempo</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Sisa Hari</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Status Bayar (Kas)</th>
+                    <th className="px-6 py-3 text-right whitespace-nowrap">Dokumen PDF</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -524,18 +524,21 @@ export default function CustomerOrdersPage() {
 
                     return (
                       <tr key={so.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {/* CLICKABLE NO. SO LINK/BUTTON TO OPEN ORDER DETAILS & PAYMENT MODAL */}
                           <button
                             onClick={() => {
                               setSelectedOrder(so);
                               setSelectedInvoice(inv || null);
                             }}
-                            className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1 text-left cursor-pointer"
+                            className="font-mono font-bold text-blue-700 hover:underline inline-flex items-center gap-1.5 text-left cursor-pointer"
                           >
-                            {so.so_number} <ExternalLink className="w-3 h-3 text-blue-500" />
+                            <span>{so.so_number}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                           </button>
-                          <div className="text-[11px] text-slate-400">{so.order_date}</div>
+                          <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                            {formatDate(so.order_date)}
+                          </div>
                         </td>
 
                         <td className="px-6 py-4 text-xs text-slate-600">
