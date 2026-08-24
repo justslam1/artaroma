@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeTransaction } from '@/lib/db';
+import { executeTransaction, ensureSchemaMigrations } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    await ensureSchemaMigrations();
 
     let updatedCount = 0;
 

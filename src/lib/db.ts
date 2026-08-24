@@ -186,6 +186,101 @@ export async function ensureSchemaMigrations(): Promise<void> {
         console.warn('[Schema Migration PO Currency Warning]:', e.message);
       }
 
+      // 2e. Check & Add missing columns in products table
+      try {
+        const [prodCols]: any = await conn.query('SHOW COLUMNS FROM products');
+        const prodColNames = new Set(prodCols.map((c: any) => c.Field.toLowerCase()));
+
+        const prodMigrations = [
+          { col: 'selling_price_per_kg', sql: "ALTER TABLE products ADD COLUMN selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'selling_price_usd_per_kg', sql: "ALTER TABLE products ADD COLUMN selling_price_usd_per_kg DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'variant_prices', sql: "ALTER TABLE products ADD COLUMN variant_prices LONGTEXT DEFAULT NULL" },
+          { col: 'variant_names', sql: "ALTER TABLE products ADD COLUMN variant_names LONGTEXT DEFAULT NULL" },
+          { col: 'variant_skus', sql: "ALTER TABLE products ADD COLUMN variant_skus LONGTEXT DEFAULT NULL" },
+          { col: 'pack_sizes', sql: "ALTER TABLE products ADD COLUMN pack_sizes LONGTEXT DEFAULT NULL" },
+          { col: 'applications', sql: "ALTER TABLE products ADD COLUMN applications LONGTEXT DEFAULT NULL" },
+          { col: 'density', sql: "ALTER TABLE products ADD COLUMN density DECIMAL(8,4) DEFAULT 1.0000" },
+          { col: 'min_stock_kg', sql: "ALTER TABLE products ADD COLUMN min_stock_kg DECIMAL(10,2) DEFAULT 5.00" },
+          { col: 'is_active', sql: "ALTER TABLE products ADD COLUMN is_active TINYINT(1) DEFAULT 1" },
+        ];
+
+        for (const m of prodMigrations) {
+          if (!prodColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column products.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] products.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Products Warning]:', e.message);
+      }
+
+      // 2f. Ensure product_variants table exists and has all columns
+      try {
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS product_variants (
+            id VARCHAR(64) PRIMARY KEY,
+            product_id VARCHAR(64) NOT NULL,
+            variant_sku VARCHAR(64) NOT NULL,
+            variant_name VARCHAR(255) NOT NULL,
+            pack_size_kg DECIMAL(10,2) NOT NULL,
+            selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00,
+            selling_price_usd_per_kg DECIMAL(10,2) DEFAULT 0.00,
+            min_stock_kg DECIMAL(10,2) DEFAULT 5.00,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+
+        const [pvCols]: any = await conn.query('SHOW COLUMNS FROM product_variants');
+        const pvColNames = new Set(pvCols.map((c: any) => c.Field.toLowerCase()));
+
+        const pvMigrations = [
+          { col: 'selling_price_per_kg', sql: "ALTER TABLE product_variants ADD COLUMN selling_price_per_kg DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'selling_price_usd_per_kg', sql: "ALTER TABLE product_variants ADD COLUMN selling_price_usd_per_kg DECIMAL(10,2) DEFAULT 0.00" },
+          { col: 'min_stock_kg', sql: "ALTER TABLE product_variants ADD COLUMN min_stock_kg DECIMAL(10,2) DEFAULT 5.00" },
+          { col: 'is_active', sql: "ALTER TABLE product_variants ADD COLUMN is_active TINYINT(1) DEFAULT 1" },
+        ];
+
+        for (const m of pvMigrations) {
+          if (!pvColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column product_variants.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] product_variants.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Product Variants Warning]:', e.message);
+      }
+
+      // 2g. Ensure product_variant_price_logs table exists
+      try {
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS product_variant_price_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id VARCHAR(50) NOT NULL,
+            product_name VARCHAR(255) NOT NULL,
+            variant_id VARCHAR(50) NOT NULL,
+            variant_sku VARCHAR(100) NOT NULL,
+            pack_size_kg DECIMAL(10,2) NOT NULL,
+            old_price_idr DECIMAL(15,2) NOT NULL,
+            new_price_idr DECIMAL(15,2) NOT NULL,
+            old_price_usd DECIMAL(15,2) NOT NULL,
+            new_price_usd DECIMAL(15,2) NOT NULL,
+            changed_by VARCHAR(100) NOT NULL DEFAULT 'Super Admin',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+      } catch (e: any) {
+        console.warn('[Schema Migration Price Logs Warning]:', e.message);
+      }
+
       // 3. Ensure operational_logs table exists
       try {
         await conn.query(`

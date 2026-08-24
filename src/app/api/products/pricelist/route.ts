@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeTransaction, executeQuery } from '@/lib/db';
+import { executeTransaction, executeQuery, ensureSchemaMigrations } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -63,6 +63,8 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    await ensureSchemaMigrations();
 
     await executeTransaction(async (conn) => {
       // 1. Ensure table exists
