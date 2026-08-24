@@ -4,7 +4,6 @@ import React, { useState, useMemo } from 'react';
 import {
   X,
   Zap,
-  ArrowRight,
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
@@ -15,6 +14,9 @@ import {
   Search,
   Filter,
   Check,
+  Package,
+  Layers,
+  ArrowRight,
 } from 'lucide-react';
 import { Product } from '@/lib/types';
 
@@ -54,8 +56,6 @@ export default function BulkPriceModal({
   usdRate,
   onSuccess,
 }: BulkPriceModalProps) {
-  const [step, setStep] = useState<'CONFIG' | 'PREVIEW'>('CONFIG');
-
   // Config states
   const [scope, setScope] = useState<ScopeType>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>(
@@ -69,9 +69,9 @@ export default function BulkPriceModal({
   const [rounding, setRounding] = useState<RoundingType>('1000');
   const [reason, setReason] = useState<string>('Penyesuaian Berkala / Inflasi');
 
-  // Preview states
-  const [previewItems, setPreviewItems] = useState<SimulatedItem[]>([]);
-  const [previewSearch, setPreviewSearch] = useState<string>('');
+  // Interactive live table states
+  const [excludedSkus, setExcludedSkus] = useState<string[]>([]);
+  const [tableSearch, setTableSearch] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
 
@@ -97,15 +97,10 @@ export default function BulkPriceModal({
     return Math.round(price / stepVal) * stepVal;
   };
 
-  // Generate Simulation on proceeding to Step 2
-  const handleProceedToPreview = () => {
+  // Real-time calculation of simulated items with initial & new prices
+  const simulatedItems: SimulatedItem[] = useMemo(() => {
     const val = Number(valueInput) || 0;
-    if (val <= 0) {
-      alert('Masukkan nilai penyesuaian yang valid (lebih dari 0).');
-      return;
-    }
-
-    const simulated: SimulatedItem[] = [];
+    const items: SimulatedItem[] = [];
 
     targetProducts.forEach((p) => {
       const packSizes = p.pack_sizes && p.pack_sizes.length > 0 ? p.pack_sizes : [25, 5, 1];
@@ -127,18 +122,20 @@ export default function BulkPriceModal({
           || 0;
 
         let rawNewPrice = oldPrice;
-        if (unit === 'PERCENT') {
-          const diff = oldPrice * (val / 100);
-          rawNewPrice = direction === 'INCREASE' ? oldPrice + diff : oldPrice - diff;
-        } else {
-          rawNewPrice = direction === 'INCREASE' ? oldPrice + val : oldPrice - val;
+        if (val > 0) {
+          if (unit === 'PERCENT') {
+            const diff = oldPrice * (val / 100);
+            rawNewPrice = direction === 'INCREASE' ? oldPrice + diff : oldPrice - diff;
+          } else {
+            rawNewPrice = direction === 'INCREASE' ? oldPrice + val : oldPrice - val;
+          }
         }
 
         const roundedNewPrice = Math.max(0, applyRounding(rawNewPrice, rounding));
         const diffIdr = roundedNewPrice - oldPrice;
         const diffPercent = oldPrice > 0 ? (diffIdr / oldPrice) * 100 : 0;
 
-        simulated.push({
+        items.push({
           productId: p.id,
           variantSku: vSku,
           productName: vName,
@@ -148,37 +145,69 @@ export default function BulkPriceModal({
           newPriceIdr: roundedNewPrice,
           diffIdr,
           diffPercent,
-          selected: true,
+          selected: !excludedSkus.includes(vSku),
         });
       });
     });
 
-    if (simulated.length === 0) {
-      alert('Tidak ada varian produk yang sesuai dengan filter yang dipilih.');
-      return;
+    return items;
+  }, [targetProducts, targetPackSize, valueInput, unit, direction, rounding, excludedSkus]);
+
+  // Statistics for live summary cards
+  const stats = useMemo(() => {
+    if (simulatedItems.length === 0) {
+      return { minOld: 0, maxOld: 0, avgOld: 0, minNew: 0, maxNew: 0, avgNew: 0, avgDiff: 0 };
     }
+    const oldPrices = simulatedItems.map((i) => i.oldPriceIdr);
+    const newPrices = simulatedItems.map((i) => i.newPriceIdr);
+    const diffs = simulatedItems.map((i) => i.diffIdr);
 
-    setPreviewItems(simulated);
-    setStep('PREVIEW');
+    const minOld = Math.min(...oldPrices);
+    const maxOld = Math.max(...oldPrices);
+    const avgOld = Math.round(oldPrices.reduce((a, b) => a + b, 0) / oldPrices.length);
+
+    const minNew = Math.min(...newPrices);
+    const maxNew = Math.max(...newPrices);
+    const avgNew = Math.round(newPrices.reduce((a, b) => a + b, 0) / newPrices.length);
+
+    const avgDiff = Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length);
+
+    return { minOld, maxOld, avgOld, minNew, maxNew, avgNew, avgDiff };
+  }, [simulatedItems]);
+
+  // Filtered live table items
+  const filteredLiveItems = useMemo(() => {
+    if (!tableSearch.trim()) return simulatedItems;
+    const q = tableSearch.toLowerCase();
+    return simulatedItems.filter(
+      (i) =>
+        i.productName.toLowerCase().includes(q) ||
+        i.variantSku.toLowerCase().includes(q) ||
+        i.application.toLowerCase().includes(q)
+    );
+  }, [simulatedItems, tableSearch]);
+
+  const selectedCount = simulatedItems.filter((i) => i.selected).length;
+
+  // Toggle single item
+  const handleToggleSku = (sku: string) => {
+    setExcludedSkus((prev) =>
+      prev.includes(sku) ? prev.filter((s) => s !== sku) : [...prev, sku]
+    );
   };
 
-  // Toggle individual item in preview
-  const handleToggleItem = (index: number) => {
-    setPreviewItems((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], selected: !next[index].selected };
-      return next;
-    });
-  };
-
-  // Toggle all items in preview
-  const handleToggleAll = (checked: boolean) => {
-    setPreviewItems((prev) => prev.map((item) => ({ ...item, selected: checked })));
+  // Toggle all items
+  const handleToggleAll = (selectAll: boolean) => {
+    if (selectAll) {
+      setExcludedSkus([]);
+    } else {
+      setExcludedSkus(simulatedItems.map((i) => i.variantSku));
+    }
   };
 
   // Submit bulk update to backend
   const handleConfirmSubmit = async () => {
-    const selectedUpdates = previewItems.filter((item) => item.selected);
+    const selectedUpdates = simulatedItems.filter((item) => item.selected);
     if (selectedUpdates.length === 0) {
       alert('Pilih setidaknya 1 varian produk untuk diperbarui.');
       return;
@@ -188,7 +217,7 @@ export default function BulkPriceModal({
 
     try {
       const payload = {
-        reason,
+        reason: reason.trim() || 'Penyesuaian Harga Massal',
         changed_by: 'Super Admin',
         updates: selectedUpdates.map((item) => ({
           product_id: item.productId,
@@ -223,23 +252,14 @@ export default function BulkPriceModal({
     }
   };
 
-  // Filtered preview items for table display
-  const filteredPreview = previewItems.filter((i) =>
-    i.productName.toLowerCase().includes(previewSearch.toLowerCase()) ||
-    i.variantSku.toLowerCase().includes(previewSearch.toLowerCase()) ||
-    i.application.toLowerCase().includes(previewSearch.toLowerCase())
-  );
-
-  const selectedCount = previewItems.filter((i) => i.selected).length;
-
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-100">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-100">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
               <Zap className="w-5 h-5" />
@@ -252,380 +272,404 @@ export default function BulkPriceModal({
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                {step === 'CONFIG'
-                  ? 'Atur persentase atau nominal kenaikan/penurunan harga produk & varian kemasan.'
-                  : `Simulasi & konfirmasi perubahan harga untuk ${selectedCount} varian terpilih.`}
+                Atur aturan harga dan pantau perbandingan harga awal vs harga baru secara real-time.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Step 1: Configuration Form */}
-        {step === 'CONFIG' && (
-          <div className="p-6 overflow-y-auto space-y-6 flex-1">
-            
-            {/* 1. Target Produk / Scope */}
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Filter className="w-4 h-4 text-amber-400" />
-                1. Pilih Cakupan Produk Target
-              </label>
+        {/* Scrollable Form & Live Table Area */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 max-h-[calc(92vh-140px)]">
+          
+          {/* 1. Target Produk / Scope */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Filter className="w-4 h-4 text-amber-400" />
+              1. Pilih Cakupan Produk Target
+            </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScope('ALL')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    scope === 'ALL'
-                      ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  <div className="font-bold text-sm text-white">Semua Produk</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Seluruh katalog ({products.length} produk induk)
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setScope('CATEGORY')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    scope === 'CATEGORY'
-                      ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  <div className="font-bold text-sm text-white">Berdasarkan Kategori</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Filter aplikasi tertentu (Fine Fragrance, dll.)
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setScope('SELECTED')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    scope === 'SELECTED'
-                      ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  <div className="font-bold text-sm text-white">Pilihan Manual</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    {selectedProductIds.length} produk dipilih
-                  </div>
-                </button>
-              </div>
-
-              {/* Category selector */}
-              {scope === 'CATEGORY' && (
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
-                  <label className="text-xs text-slate-300 font-semibold">Pilih Kategori Aplikasi:</label>
-                  <div className="flex flex-wrap gap-2">
-                    {applicationCategories.map((cat) => {
-                      const count = products.filter(
-                        (p) => ((p.applications && p.applications[0]) || p.application) === cat
-                      ).length;
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setSelectedCategory(cat)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                            selectedCategory === cat
-                              ? 'bg-purple-600 text-white border-purple-500'
-                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600'
-                          }`}
-                        >
-                          {cat} <span className="text-[10px] opacity-70">({count})</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Manual product selector */}
-              {scope === 'SELECTED' && (
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300 font-semibold">Centang Produk yang Ingin Disesuaikan:</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedProductIds(
-                          selectedProductIds.length === products.length ? [] : products.map((p) => p.id)
-                        )
-                      }
-                      className="text-amber-400 hover:underline font-bold"
-                    >
-                      {selectedProductIds.length === products.length ? 'Batal Pilih Semua' : 'Pilih Semua'}
-                    </button>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
-                    {products.map((p) => {
-                      const isChecked = selectedProductIds.includes(p.id);
-                      return (
-                        <label
-                          key={p.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border ${
-                            isChecked
-                              ? 'bg-slate-800 border-amber-500/40 text-amber-200'
-                              : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/40'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setSelectedProductIds((prev) =>
-                                prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
-                              );
-                            }}
-                            className="rounded border-slate-700 text-amber-500 focus:ring-amber-500"
-                          />
-                          <span className="font-mono text-slate-500 font-bold">{p.sku}</span>
-                          <span className="font-bold text-white flex-1">{p.name}</span>
-                          <span className="text-[10px] text-slate-500">
-                            Rp {(p.selling_price_per_kg || 0).toLocaleString('id-ID')} / Kg
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 2. Target Kemasan & Arah Perubahan */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* Target Kemasan */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
-                <label className="text-xs font-bold text-slate-300 block">
-                  2. Target Varian Kemasan
-                </label>
-                <select
-                  value={targetPackSize}
-                  onChange={(e) => setTargetPackSize(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-bold"
-                >
-                  <option value="ALL">Semua Varian Kemasan (25 Kg, 5 Kg, 1 Kg)</option>
-                  <option value="25">Hanya Kemasan 25 Kg (25K)</option>
-                  <option value="5">Hanya Kemasan 5 Kg (5K)</option>
-                  <option value="1">Hanya Kemasan 1 Kg (1K)</option>
-                </select>
-                <p className="text-[10px] text-slate-500">
-                  Pilih apakah perubahan berlaku untuk semua pack size atau kemasan tertentu saja.
-                </p>
-              </div>
-
-              {/* Arah Perubahan */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
-                <label className="text-xs font-bold text-slate-300 block">
-                  3. Arah Penyesuaian Harga
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDirection('INCREASE')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      direction === 'INCREASE'
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 ring-1 ring-emerald-500'
-                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600'
-                    }`}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                    Kenaikan (+)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setDirection('DECREASE')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      direction === 'DECREASE'
-                        ? 'bg-red-500/20 text-red-300 border-red-500 ring-1 ring-red-500'
-                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600'
-                    }`}
-                  >
-                    <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-                    Penurunan (-)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Nilai Penyesuaian & Pembulatan */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* Nilai / Besaran */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
-                <label className="text-xs font-bold text-slate-300 block">
-                  4. Nilai Penyesuaian
-                </label>
-                
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setUnit('PERCENT')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${
-                      unit === 'PERCENT'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
-                        : 'bg-slate-900 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    <Percent className="w-3 h-3" /> Persentase (%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUnit('FIXED_IDR')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${
-                      unit === 'FIXED_IDR'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
-                        : 'bg-slate-900 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    <Coins className="w-3 h-3" /> Nominal Tetap (Rp)
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">
-                    {unit === 'PERCENT' ? '%' : 'Rp'}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step={unit === 'PERCENT' ? '0.5' : '1000'}
-                    value={valueInput}
-                    onChange={(e) => setValueInput(Number(e.target.value) || 0)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold focus:outline-none focus:border-amber-400"
-                    placeholder={unit === 'PERCENT' ? '5' : '25000'}
-                  />
-                </div>
-              </div>
-
-              {/* Opsi Pembulatan */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
-                <label className="text-xs font-bold text-slate-300 block">
-                  5. Aturan Pembulatan (Rounding)
-                </label>
-                
-                <select
-                  value={rounding}
-                  onChange={(e) => setRounding(e.target.value as RoundingType)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-bold"
-                >
-                  <option value="1000">Bulatkan ke Rp 1.000 terdekat (Direkomendasikan)</option>
-                  <option value="5000">Bulatkan ke Rp 5.000 terdekat</option>
-                  <option value="10000">Bulatkan ke Rp 10.000 terdekat</option>
-                  <option value="NONE">Tanpa Pembulatan (Sesuai hitungan eksak)</option>
-                </select>
-
-                <div className="text-[11px] text-slate-400">
-                  Alasan / Catatan Penyesuaian:
-                  <input
-                    type="text"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Contoh: Kenaikan Kurs USD Q3 / Penyesuaian Harga Pokok"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Target Summary Banner */}
-            <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl p-4 flex items-center justify-between text-xs text-amber-200">
-              <div className="space-y-0.5">
-                <div className="font-bold flex items-center gap-1.5">
-                  <span>💡 Target Produk:</span>
-                  <strong>{targetProducts.length} Produk Induk</strong>
-                </div>
-                <div className="text-[11px] text-amber-300/80">
-                  Rumus: Harga Lama {direction === 'INCREASE' ? '+' : '-'} {valueInput} {unit === 'PERCENT' ? '%' : 'Rp/Kg'} (Pembulatan: {rounding === 'NONE' ? 'Nonaktif' : `Rp ${Number(rounding).toLocaleString('id-ID')}`})
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
-                onClick={handleProceedToPreview}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                onClick={() => setScope('ALL')}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  scope === 'ALL'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
+                    : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
               >
-                Lihat Simulasi Harga <ArrowRight className="w-4 h-4" />
+                <div className="font-bold text-sm text-white">Semua Produk</div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  Seluruh katalog ({products.length} produk induk)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScope('CATEGORY')}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  scope === 'CATEGORY'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
+                    : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="font-bold text-sm text-white">Berdasarkan Kategori</div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  Filter aplikasi tertentu (Fine Fragrance, dll.)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScope('SELECTED')}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  scope === 'SELECTED'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-300 ring-1 ring-amber-500'
+                    : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="font-bold text-sm text-white">Pilihan Manual</div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  {selectedProductIds.length} produk dipilih
+                </div>
               </button>
             </div>
 
-          </div>
-        )}
+            {/* Category selector */}
+            {scope === 'CATEGORY' && (
+              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
+                <label className="text-xs text-slate-300 font-semibold">Pilih Kategori Aplikasi:</label>
+                <div className="flex flex-wrap gap-2">
+                  {applicationCategories.map((cat) => {
+                    const count = products.filter(
+                      (p) => ((p.applications && p.applications[0]) || p.application) === cat
+                    ).length;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setSelectedCategory(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          selectedCategory === cat
+                            ? 'bg-purple-600 text-white border-purple-500'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        {cat} <span className="text-[10px] opacity-70">({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-        {/* Step 2: Simulation & Preview Table */}
-        {step === 'PREVIEW' && (
-          <div className="p-6 overflow-y-auto space-y-4 flex-1 flex flex-col">
+            {/* Manual product selector */}
+            {scope === 'SELECTED' && (
+              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-300 font-semibold">Centang Produk yang Ingin Disesuaikan:</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedProductIds(
+                        selectedProductIds.length === products.length ? [] : products.map((p) => p.id)
+                      )
+                    }
+                    className="text-amber-400 hover:underline font-bold cursor-pointer"
+                  >
+                    {selectedProductIds.length === products.length ? 'Batal Pilih Semua' : 'Pilih Semua'}
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                  {products.map((p) => {
+                    const isChecked = selectedProductIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border ${
+                          isChecked
+                            ? 'bg-slate-800 border-amber-500/40 text-amber-200'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedProductIds((prev) =>
+                              prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                            );
+                          }}
+                          className="rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+                        />
+                        <span className="font-mono text-slate-500 font-bold">{p.sku}</span>
+                        <span className="font-bold text-white flex-1">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Harga Awal: Rp {(p.selling_price_per_kg || 0).toLocaleString('id-ID')} / Kg
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Target Kemasan & Arah Perubahan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
-            {/* Top Toolbar */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2">
+            {/* Target Kemasan */}
+            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">
+                2. Target Varian Kemasan
+              </label>
+              <select
+                value={targetPackSize}
+                onChange={(e) => setTargetPackSize(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-bold cursor-pointer"
+              >
+                <option value="ALL">Semua Varian Kemasan (25 Kg, 5 Kg, 1 Kg)</option>
+                <option value="25">Hanya Kemasan 25 Kg (25K)</option>
+                <option value="5">Hanya Kemasan 5 Kg (5K)</option>
+                <option value="1">Hanya Kemasan 1 Kg (1K)</option>
+              </select>
+              <p className="text-[10px] text-slate-500">
+                Pilih apakah perubahan berlaku untuk semua pack size atau kemasan tertentu saja.
+              </p>
+            </div>
+
+            {/* Arah Perubahan */}
+            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">
+                3. Arah Penyesuaian Harga
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setStep('CONFIG')}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 border border-slate-700 font-bold cursor-pointer"
+                  onClick={() => setDirection('INCREASE')}
+                  className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    direction === 'INCREASE'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 ring-1 ring-emerald-500'
+                      : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600'
+                  }`}
                 >
-                  <RotateCcw className="w-3.5 h-3.5" /> Ubah Aturan
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                  Kenaikan (+)
                 </button>
-                <span className="text-xs text-slate-400">
-                  Menampilkan <strong>{previewItems.length}</strong> varian | <strong>{selectedCount}</strong> dipilih untuk diperbarui
-                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setDirection('DECREASE')}
+                  className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    direction === 'DECREASE'
+                      ? 'bg-red-500/20 text-red-300 border-red-500 ring-1 ring-red-500'
+                      : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                  Penurunan (-)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Nilai Penyesuaian & Pembulatan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* Nilai / Besaran */}
+            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
+              <label className="text-xs font-bold text-slate-300 block">
+                4. Nilai Penyesuaian
+              </label>
+              
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUnit('PERCENT')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                    unit === 'PERCENT'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
+                      : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  <Percent className="w-3 h-3" /> Persentase (%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnit('FIXED_IDR')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                    unit === 'FIXED_IDR'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
+                      : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  <Coins className="w-3 h-3" /> Nominal Tetap (Rp)
+                </button>
               </div>
 
-              {/* Search in preview */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">
+                  {unit === 'PERCENT' ? '%' : 'Rp'}
+                </span>
                 <input
-                  type="text"
-                  placeholder="Cari produk / SKU..."
-                  value={previewSearch}
-                  onChange={(e) => setPreviewSearch(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white"
+                  type="number"
+                  min="0"
+                  step={unit === 'PERCENT' ? '0.5' : '1000'}
+                  value={valueInput}
+                  onChange={(e) => setValueInput(Number(e.target.value) || 0)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold focus:outline-none focus:border-amber-400"
+                  placeholder={unit === 'PERCENT' ? '5' : '25000'}
                 />
               </div>
             </div>
 
-            {/* Table */}
-            <div className="border border-slate-800 rounded-xl overflow-hidden flex-1 max-h-96 overflow-y-auto">
+            {/* Opsi Pembulatan & Catatan */}
+            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
+              <label className="text-xs font-bold text-slate-300 block">
+                5. Aturan Pembulatan (Rounding) & Catatan
+              </label>
+              
+              <select
+                value={rounding}
+                onChange={(e) => setRounding(e.target.value as RoundingType)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-bold cursor-pointer"
+              >
+                <option value="1000">Bulatkan ke Rp 1.000 terdekat (Direkomendasikan)</option>
+                <option value="5000">Bulatkan ke Rp 5.000 terdekat</option>
+                <option value="10000">Bulatkan ke Rp 10.000 terdekat</option>
+                <option value="NONE">Tanpa Pembulatan (Sesuai hitungan eksak)</option>
+              </select>
+
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Alasan: Contoh: Kenaikan Kurs USD Q3 / Inflasi"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200"
+              />
+            </div>
+          </div>
+
+          {/* 4. Live Comparison & Statistics Banner */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* Card 1: Harga Awal (Saat Ini) */}
+            <div className="bg-slate-950/70 border border-slate-700/80 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-blue-400" /> Harga Awal (Saat Ini)
+                </span>
+                <span className="text-[11px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono font-bold">
+                  {simulatedItems.length} Varian Target
+                </span>
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <div className="text-xs text-slate-400">
+                  Rentang Harga:
+                </div>
+                <div className="text-sm font-mono font-extrabold text-white">
+                  Rp {stats.minOld.toLocaleString('id-ID')} <span className="text-slate-500 font-normal">s/d</span> Rp {stats.maxOld.toLocaleString('id-ID')} <span className="text-slate-400 text-xs font-normal">/ Kg</span>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-0.5">
+                  Rata-rata Harga Awal: <strong className="font-mono text-slate-300">Rp {stats.avgOld.toLocaleString('id-ID')} / Kg</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Estimasi Harga Baru */}
+            <div className="bg-amber-950/40 border border-amber-700/60 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-amber-400" /> Estimasi Harga Baru ({direction === 'INCREASE' ? '+' : '-'}{valueInput}{unit === 'PERCENT' ? '%' : ' Rp'})
+                </span>
+                <span className={`text-[11px] px-2 py-0.5 rounded font-mono font-bold border ${
+                  direction === 'INCREASE'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-red-500/20 text-red-300 border-red-500/30'
+                }`}>
+                  {stats.avgDiff >= 0 ? '+' : ''}Rp {stats.avgDiff.toLocaleString('id-ID')} / Kg
+                </span>
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <div className="text-xs text-amber-200/80">
+                  Rentang Harga Baru:
+                </div>
+                <div className="text-sm font-mono font-extrabold text-amber-300">
+                  Rp {stats.minNew.toLocaleString('id-ID')} <span className="text-amber-400/60 font-normal">s/d</span> Rp {stats.maxNew.toLocaleString('id-ID')} <span className="text-amber-200/70 text-xs font-normal">/ Kg</span>
+                </div>
+                <div className="text-[11px] text-amber-200/80 pt-0.5">
+                  Rata-rata Harga Baru: <strong className="font-mono text-amber-200">Rp {stats.avgNew.toLocaleString('id-ID')} / Kg</strong>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* 5. Live Interactive Table (Daftar Produk, Harga Awal & Simulasi Baru) */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-400" />
+                  Daftar Produk Target & Simulasi Harga Real-Time
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Centang varian yang ingin diterapkan. Harga awal dan harga baru dihitung otomatis secara langsung.
+                </p>
+              </div>
+
+              {/* Search in live table */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Cari produk / SKU / kemasan..."
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            {/* Table Container */}
+            <div className="border border-slate-800 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 w-10 text-center">
+                    <th className="px-4 py-2.5 w-10 text-center">
                       <input
                         type="checkbox"
-                        checked={selectedCount === previewItems.length && previewItems.length > 0}
+                        checked={selectedCount === simulatedItems.length && simulatedItems.length > 0}
                         onChange={(e) => handleToggleAll(e.target.checked)}
-                        className="rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+                        className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                        title="Pilih / Batalkan Semua"
                       />
                     </th>
-                    <th className="px-4 py-3">Produk & SKU Varian</th>
-                    <th className="px-4 py-3">Aplikasi</th>
-                    <th className="px-4 py-3 text-right">Harga Lama / Kg</th>
-                    <th className="px-4 py-3 text-right text-amber-300">Harga Baru / Kg</th>
-                    <th className="px-4 py-3 text-right">Selisih</th>
+                    <th className="px-4 py-2.5">Produk & SKU Varian</th>
+                    <th className="px-4 py-2.5 text-center">Kemasan</th>
+                    <th className="px-4 py-2.5">Kategori</th>
+                    <th className="px-4 py-2.5 text-right font-bold text-slate-300">Harga Awal / Kg</th>
+                    <th className="px-4 py-2.5 text-right font-bold text-amber-300">Estimasi Harga Baru / Kg</th>
+                    <th className="px-4 py-2.5 text-right font-bold">Perubahan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 bg-slate-900/60">
-                  {filteredPreview.length === 0 ? (
+                  {filteredLiveItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                        Tidak ada varian yang sesuai dengan filter pencarian.
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        Tidak ada varian yang cocok dengan kriteria pencarian atau filter.
                       </td>
                     </tr>
                   ) : (
-                    filteredPreview.map((item, idx) => {
+                    filteredLiveItems.map((item) => {
                       const isUp = item.diffIdr > 0;
                       const isDown = item.diffIdr < 0;
                       return (
@@ -639,30 +683,28 @@ export default function BulkPriceModal({
                             <input
                               type="checkbox"
                               checked={item.selected}
-                              onChange={() => {
-                                const realIdx = previewItems.findIndex(
-                                  (p) => p.variantSku === item.variantSku
-                                );
-                                if (realIdx !== -1) handleToggleItem(realIdx);
-                              }}
-                              className="rounded border-slate-700 text-amber-500 focus:ring-amber-500"
+                              onChange={() => handleToggleSku(item.variantSku)}
+                              className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 cursor-pointer"
                             />
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="font-bold text-white">{item.productName}</div>
                             <div className="font-mono text-[10px] text-slate-400">
-                              {item.variantSku} ({item.packSizeKg} Kg)
+                              {item.variantSku}
                             </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-mono font-bold text-blue-400">
+                            {item.packSizeKg} Kg
                           </td>
                           <td className="px-4 py-2.5">
                             <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 text-[10px] font-bold">
                               {item.application}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-right font-mono text-slate-300">
+                          <td className="px-4 py-2.5 text-right font-mono text-slate-200 font-semibold bg-slate-950/30">
                             Rp {item.oldPriceIdr.toLocaleString('id-ID')}
                           </td>
-                          <td className="px-4 py-2.5 text-right font-mono font-bold text-amber-300 bg-amber-500/5">
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-amber-300 bg-amber-500/10">
                             Rp {item.newPriceIdr.toLocaleString('id-ID')}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono font-bold">
@@ -685,46 +727,46 @@ export default function BulkPriceModal({
                 </tbody>
               </table>
             </div>
-
-            {/* Bottom Actions */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800">
-              <div className="text-xs text-slate-400">
-                Akan memperbarui <strong>{selectedCount}</strong> varian harga di database & katalog.
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setStep('CONFIG')}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
-                >
-                  Kembali
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleConfirmSubmit}
-                  disabled={isSubmitting || selectedCount === 0 || submitSuccess}
-                  className="flex-1 sm:flex-initial bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? (
-                    <span>Menyimpan ke Database...</span>
-                  ) : submitSuccess ? (
-                    <span className="flex items-center gap-1 text-emerald-950 font-bold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-800" /> Berhasil Disimpan!
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <Check className="w-4 h-4" /> Terapkan Perubahan Harga Sekarang
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
           </div>
-        )}
+
+        </div>
+
+        {/* Footer Actions */}
+        <div className="px-6 py-4 bg-slate-950/70 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-400">
+            Akan memperbarui <strong>{selectedCount}</strong> dari <strong>{simulatedItems.length}</strong> varian produk terpilih.
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+
+            <button
+              type="button"
+              onClick={handleConfirmSubmit}
+              disabled={isSubmitting || selectedCount === 0 || submitSuccess}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? (
+                <span>Menyimpan ke Database...</span>
+              ) : submitSuccess ? (
+                <span className="flex items-center gap-1 text-emerald-950 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-800" /> Berhasil Disimpan!
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4" /> Terapkan Perubahan Harga Sekarang
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
 
       </div>
     </div>
