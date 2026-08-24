@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { CustomerNav } from '@/components/navigation/customer-nav';
 import { CustomerOrderDetailModal } from '@/components/customer/customer-order-detail-modal';
 import { initialCustomers } from '@/lib/mock-data';
-import { Customer, Invoice, SalesOrder } from '@/lib/types';
+import { Customer, Invoice, SalesOrder, CashTransaction } from '@/lib/types';
 import { formatIDR, formatKg, formatDate } from '@/lib/utils';
 import {
   getStoredOrders,
@@ -23,8 +23,17 @@ import {
   RefreshCw,
   ExternalLink,
   FileSpreadsheet,
+  Calendar,
+  AlertTriangle,
+  Building2,
+  XCircle,
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
+import {
+  calculateSODueDateInfo,
+  getSOPaymentStatusFromCash,
+  getStoredCashTransactions,
+} from '@/lib/cash-store';
 
 export default function CustomerOrdersPage() {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
@@ -32,13 +41,15 @@ export default function CustomerOrdersPage() {
 
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
-  // Load orders & invoices from OrderStore & API
+  // Load orders & invoices & cash from OrderStore & API
   const syncOrdersAndInvoices = () => {
     const storedInvoices = getStoredInvoices();
     setInvoices(storedInvoices);
+    setCashTxs(getStoredCashTransactions());
 
     fetch('/api/sales-orders')
       .then((res) => res.json())
@@ -91,11 +102,13 @@ export default function CustomerOrdersPage() {
     const handleUpdate = () => syncOrdersAndInvoices();
     window.addEventListener('artaroma_orders_updated', handleUpdate);
     window.addEventListener('artaroma_invoices_updated', handleUpdate);
+    window.addEventListener('artaroma_cash_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
 
     return () => {
       window.removeEventListener('artaroma_orders_updated', handleUpdate);
       window.removeEventListener('artaroma_invoices_updated', handleUpdate);
+      window.removeEventListener('artaroma_cash_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
@@ -411,7 +424,7 @@ export default function CustomerOrdersPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Histori Pesanan & Status Alur Tagihan
+              History Pesanan
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
               {currentCustomer.company_name} — Pantau Alur (Diajukan &rarr; Dikonfirmasi &rarr; Proses Gudang &rarr; Dikirim &rarr; Diterima)
@@ -471,10 +484,12 @@ export default function CustomerOrdersPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                     <th className="px-6 py-3">No. SO / Tanggal</th>
-                    <th className="px-6 py-3">Item Bibit Parfum (Kg)</th>
-                    <th className="px-6 py-3">Total Tagihan</th>
-                    <th className="px-6 py-3">Status Alur Pesanan</th>
+                    <th className="px-6 py-3">Item Dipesan</th>
+                    <th className="px-6 py-3">Total Nilai</th>
+                    <th className="px-6 py-3">Status Alur SO</th>
                     <th className="px-6 py-3">Jatuh Tempo</th>
+                    <th className="px-6 py-3">Sisa Hari</th>
+                    <th className="px-6 py-3">Status Bayar (Kas)</th>
                     <th className="px-6 py-3">Bukti Pembayaran</th>
                     <th className="px-6 py-3 text-right">Dokumen PDF</th>
                   </tr>
@@ -482,6 +497,8 @@ export default function CustomerOrdersPage() {
                 <tbody className="divide-y divide-gray-100">
                   {customerOrders.map((so) => {
                     const inv = invoices.find((i) => i.so_number === so.so_number || i.so_id === so.id);
+                    const dueInfo = calculateSODueDateInfo(so, inv);
+                    const payStatus = getSOPaymentStatusFromCash(so, inv, cashTxs);
 
                     return (
                       <tr key={so.id} className="hover:bg-gray-50 transition-colors">
@@ -533,8 +550,85 @@ export default function CustomerOrdersPage() {
                           </span>
                         </td>
 
-                        <td className="px-6 py-4">
-                          {renderDueDateAndRemaining(inv, so)}
+                        {/* Kolom Jatuh Tempo */}
+                        <td className="px-6 py-4 whitespace-nowrap text-xs">
+                          {inv?.due_date ? (
+                            <div className="space-y-0.5">
+                              <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{formatDate(dueInfo.dueDateStr)}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : 'TOP: 30 Hari'}
+                              </div>
+                            </div>
+                          ) : so.status === 'DIAJUKAN' || so.status === 'PENDING_APPROVAL' ? (
+                            <span className="text-slate-400 text-xs italic">Menunggu Invoice</span>
+                          ) : (
+                            <span className="text-slate-400 text-xs font-mono">-</span>
+                          )}
+                        </td>
+
+                        {/* Kolom Sisa Hari */}
+                        <td className="px-6 py-4 whitespace-nowrap text-xs">
+                          {payStatus.status === 'PAID' || so.payment_status === 'PAID' || inv?.status === 'PAID' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Lunas Selesai
+                            </span>
+                          ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
+                            <span className="text-slate-400 text-xs">-</span>
+                          ) : !inv?.due_date ? (
+                            <span className="text-slate-400 text-xs italic">Menunggu Invoice</span>
+                          ) : dueInfo.isOverdue ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-md border border-rose-300 animate-pulse">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}
+                            </span>
+                          ) : dueInfo.isDueToday ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-300">
+                              <Clock className="w-3 h-3 text-amber-600" /> Hari Ini
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-md border ${
+                              dueInfo.diffDays <= 7
+                                ? 'text-amber-800 bg-amber-50 border-amber-200'
+                                : 'text-blue-700 bg-blue-50 border-blue-200'
+                            }`}>
+                              <Clock className="w-3 h-3" /> {dueInfo.displayText}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Kolom Status Bayar (Kas) */}
+                        <td className="px-6 py-4 whitespace-nowrap text-xs">
+                          {payStatus.status === 'PAID' || so.payment_status === 'PAID' || inv?.status === 'PAID' ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-1 rounded-full border border-emerald-300 shadow-2xs">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
+                              </span>
+                              {payStatus.bankName && (
+                                <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+                                  <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
+                                </div>
+                              )}
+                            </div>
+                          ) : payStatus.status === 'PARTIAL' || inv?.status === 'PARTIALLY_PAID' ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 shadow-2xs">
+                                <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                              </span>
+                              <div className="text-[10px] text-amber-900 font-mono">
+                                {formatIDR(payStatus.totalPaid || inv?.paid_amount || 0)} / {formatIDR(so.grand_total || inv?.total_amount || 0)}
+                              </div>
+                            </div>
+                          ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                              <XCircle className="w-3 h-3" /> BATAL
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                              <AlertTriangle className="w-3 h-3 text-rose-500" /> BELUM LUNAS
+                            </span>
+                          )}
                         </td>
 
                         <td className="px-6 py-4">
