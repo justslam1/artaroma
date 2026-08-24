@@ -103,7 +103,14 @@ export default function SalesOrdersPage() {
         })(),
         total_amount: Number((so as any).grand_total || (so as any).total_goods_amount || 0),
         paid_amount: 0,
-        payment_verification_status: 'PENDING',
+        payment_proof_url: (so as any).payment_proof_url,
+        payment_verification_status: (so as any).payment_proof_url ? 'PENDING' : undefined,
+      };
+    } else if ((so as any).payment_proof_url && !targetInv.payment_proof_url) {
+      targetInv = {
+        ...targetInv,
+        payment_proof_url: (so as any).payment_proof_url,
+        payment_verification_status: targetInv.payment_verification_status || 'PENDING',
       };
     }
     setSelectedInvoiceForPayment(targetInv);
@@ -1016,6 +1023,11 @@ export default function SalesOrdersPage() {
                             <div className="text-[10px] text-amber-900 font-mono mt-0.5 group-hover:underline">
                               {formatIDR(payStatus.totalPaid)} / {formatIDR(so.grand_total || (so as any).total_goods_amount || 0)}
                             </div>
+                            {(matchingInv?.payment_proof_url || (so as any).payment_proof_url) && (
+                              <div className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-1 font-semibold flex items-center gap-1 w-max">
+                                <Upload className="w-3 h-3 text-amber-600 animate-pulse" /> Bukti Transfer Masuk
+                              </div>
+                            )}
                           </button>
                         ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
@@ -1034,6 +1046,11 @@ export default function SalesOrdersPage() {
                             <div className="text-[10px] text-rose-600 font-mono mt-0.5 group-hover:underline">
                               Sisa: {formatIDR(so.grand_total || (so as any).total_goods_amount || 0)}
                             </div>
+                            {(matchingInv?.payment_proof_url || (so as any).payment_proof_url) && (
+                              <div className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 mt-1 font-semibold flex items-center gap-1 w-max animate-pulse">
+                                <Upload className="w-3 h-3 text-blue-600" /> Bukti Transfer Masuk
+                              </div>
+                            )}
                           </button>
                         )}
                       </td>

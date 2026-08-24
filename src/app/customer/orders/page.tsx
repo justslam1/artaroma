@@ -132,13 +132,36 @@ export default function CustomerOrdersPage() {
           : inv
       );
       saveStoredInvoices(updatedInvoices);
+      setInvoices(updatedInvoices);
     }
 
-    if (targetSoNumber) {
-      // Keep order status as is (DIAJUKAN or DIKONFIRMASI). Tim Keuangan will verify.
+    if (selectedOrder || targetSoNumber) {
+      const updatedOrders = salesOrders.map((so) =>
+        so.id === selectedOrder?.id || so.so_number === targetSoNumber
+          ? {
+              ...so,
+              payment_proof_url: proofUrl,
+            }
+          : so
+      );
+      saveStoredOrders(updatedOrders, false);
+      setSalesOrders(updatedOrders);
+
+      // Persist to API if SO id exists
+      const targetSO = selectedOrder || updatedOrders.find(o => o.so_number === targetSoNumber);
+      if (targetSO?.id) {
+        fetch(`/api/sales-orders/${targetSO.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_proof_url: proofUrl }),
+        }).catch(err => console.warn('Failed to sync payment proof to SO API:', err));
+      }
     }
+
     syncOrdersAndInvoices();
-    alert('Bukti transfer pembayaran berhasil diunggah! Tim Keuangan akan segera memvalidasi pembayaran Anda.');
+    window.dispatchEvent(new CustomEvent('artaroma_orders_updated'));
+    window.dispatchEvent(new CustomEvent('artaroma_invoices_updated'));
+    alert('Bukti transfer pembayaran berhasil diunggah! Tim Keuangan & Admin SO akan segera memvalidasi pembayaran Anda.');
   };
 
   // Helper function to simulate Admin confirmation for demo/testing
@@ -597,36 +620,88 @@ export default function CustomerOrdersPage() {
                           )}
                         </td>
 
-                        {/* Kolom Status Bayar (Kas) */}
+                        {/* Kolom Status Bayar (Kas) - Interactive Upload & Verification */}
                         <td className="px-6 py-4 whitespace-nowrap text-xs">
                           {payStatus.status === 'PAID' || so.payment_status === 'PAID' || inv?.status === 'PAID' ? (
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2.5 py-1 rounded-full border border-emerald-300 shadow-2xs">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> LUNAS
                               </span>
                               {payStatus.bankName && (
                                 <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
                                   <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
                                 </div>
                               )}
+                              {(inv?.payment_proof_url || so.payment_proof_url) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedOrder(so);
+                                    setSelectedInvoice(inv || null);
+                                  }}
+                                  className="text-[11px] text-blue-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer block text-left"
+                                >
+                                  Lihat Bukti Transfer
+                                </button>
+                              )}
+                            </div>
+                          ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                              <XCircle className="w-3.5 h-3.5" /> BATAL
+                            </span>
+                          ) : (inv?.payment_verification_status === 'PENDING' || Boolean(so.payment_proof_url || inv?.payment_proof_url)) ? (
+                            <div className="space-y-1">
+                              <span className="text-amber-800 bg-amber-50 border border-amber-300 text-[11px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 w-max animate-pulse">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" /> Pengecekan Finance
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOrder(so);
+                                  setSelectedInvoice(inv || null);
+                                }}
+                                className="text-[11px] text-blue-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                              >
+                                Lihat / Ganti Bukti
+                              </button>
                             </div>
                           ) : payStatus.status === 'PARTIAL' || inv?.status === 'PARTIALLY_PAID' ? (
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 shadow-2xs">
-                                <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN
+                                <Clock className="w-3.5 h-3.5 text-amber-600" /> SEBAGIAN
                               </span>
                               <div className="text-[10px] text-amber-900 font-mono">
                                 {formatIDR(payStatus.totalPaid || inv?.paid_amount || 0)} / {formatIDR(so.grand_total || inv?.total_amount || 0)}
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOrder(so);
+                                  setSelectedInvoice(inv || null);
+                                }}
+                                className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                              >
+                                <Upload className="w-3 h-3" /> Upload Pelunasan
+                              </button>
                             </div>
-                          ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                              <XCircle className="w-3 h-3" /> BATAL
-                            </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
-                              <AlertTriangle className="w-3 h-3 text-rose-500" /> BELUM LUNAS
-                            </span>
+                            <div className="space-y-1.5">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                                <AlertTriangle className="w-3 h-3 text-rose-500" /> BELUM LUNAS
+                              </span>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedOrder(so);
+                                    setSelectedInvoice(inv || null);
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-2.5 py-1 rounded-lg inline-flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                                >
+                                  <Upload className="w-3 h-3" /> Upload Bukti Transfer
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </td>
 
