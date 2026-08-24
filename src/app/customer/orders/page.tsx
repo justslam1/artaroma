@@ -450,7 +450,7 @@ export default function CustomerOrdersPage() {
               History Pesanan
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              {currentCustomer.company_name} — Pantau Alur (Diajukan &rarr; Dikonfirmasi &rarr; Proses Gudang &rarr; Dikirim &rarr; Diterima)
+              {currentCustomer.company_name}
             </p>
           </div>
 
