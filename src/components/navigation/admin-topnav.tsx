@@ -32,6 +32,7 @@ import {
   Wallet,
   AlertTriangle,
   FileCheck,
+  Activity,
 } from 'lucide-react';
 import { formatIDR } from '@/lib/utils';
 import { getStoredInvoices, getStoredOrders } from '@/lib/order-store';
@@ -93,6 +94,7 @@ export function AdminTopNav() {
   const isCustomerInvoicesActive = pathname === '/admin/finance';
   const isVendorPayablesActive = pathname.startsWith('/admin/finance/payables');
   const isCashManagementActive = pathname.startsWith('/admin/finance/cash');
+  const isDiagnosticsActive = pathname.startsWith('/admin/diagnostics');
 
   // Load read notification keys from localStorage
   useEffect(() => {
@@ -1169,6 +1171,20 @@ export function AdminTopNav() {
                 )}
               </div>
             )}
+
+            {/* Diagnostik & Uji Otomatis */}
+            <Link
+              href="/admin/diagnostics"
+              prefetch={false}
+              className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                isDiagnosticsActive
+                  ? 'bg-white/20 text-white border-white font-bold'
+                  : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              <span>Diagnostik</span>
+            </Link>
           </div>
         </div>
       </nav>
