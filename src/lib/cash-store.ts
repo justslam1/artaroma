@@ -103,11 +103,13 @@ export function getStoredCashAccounts(): CashAccount[] {
   }
 }
 
-export function saveStoredCashAccounts(accounts: CashAccount[]): void {
+export function saveStoredCashAccounts(accounts: CashAccount[], skipEvent = false): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(accounts));
-    window.dispatchEvent(new Event('artaroma_cash_updated'));
+    if (!skipEvent) {
+      window.dispatchEvent(new Event('artaroma_cash_updated'));
+    }
   } catch (e) {
     console.error('Error saving cash accounts:', e);
   }
@@ -128,11 +130,13 @@ export function getStoredCashTransactions(): CashTransaction[] {
   }
 }
 
-export function saveStoredCashTransactions(txs: CashTransaction[]): void {
+export function saveStoredCashTransactions(txs: CashTransaction[], skipEvent = false): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY_TXS, JSON.stringify(txs));
-    window.dispatchEvent(new Event('artaroma_cash_updated'));
+    if (!skipEvent) {
+      window.dispatchEvent(new Event('artaroma_cash_updated'));
+    }
   } catch (e) {
     console.error('Error saving cash transactions:', e);
   }
@@ -190,7 +194,7 @@ export function syncBankAccountsFromMaster(masterBanks: any[]): CashAccount[] {
   const merged = [...bankAccounts, ...nonBankAccounts];
   const recalculated = recalculateBalances(merged, txs);
 
-  saveStoredCashAccounts(recalculated);
+  saveStoredCashAccounts(recalculated, true);
   return recalculated;
 }
 

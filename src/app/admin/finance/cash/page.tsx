@@ -85,8 +85,12 @@ export default function CashManagementPage() {
     referenceNumber?: string;
   }>({ isOpen: false });
 
+  const isSyncingRef = React.useRef(false);
+
   // Load Data with Master Data Bank sync & Database Order payment sync
   const loadData = async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     setIsLoading(true);
     try {
       let masterBanks: any[] = [];
@@ -130,16 +134,17 @@ export default function CashManagementPage() {
       // 2. Auto-sync Cash Transactions from Restored POs & Sales Orders
       const storedTxs = getStoredCashTransactions();
       const allTxs = syncCashTransactionsFromOrders(purchaseOrders, salesOrders, [], storedTxs);
-      saveStoredCashTransactions(allTxs);
+      saveStoredCashTransactions(allTxs, true);
 
       // 3. Recalculate account balances
       accs = recalculateBalances(accs, allTxs);
-      saveStoredCashAccounts(accs);
+      saveStoredCashAccounts(accs, true);
 
       setAccounts(accs);
       setTransactions(allTxs);
     } finally {
       setIsLoading(false);
+      isSyncingRef.current = false;
     }
   };
 
@@ -147,7 +152,9 @@ export default function CashManagementPage() {
     loadData();
 
     const handleUpdate = () => {
-      loadData();
+      if (!isSyncingRef.current) {
+        loadData();
+      }
     };
     window.addEventListener('artaroma_cash_updated', handleUpdate);
     window.addEventListener('artaroma_company_settings_updated', handleUpdate);
