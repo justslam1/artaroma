@@ -369,7 +369,7 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
           'Purchase Order (PO)',
           'Sales Order (SO)',
           'Lihat Stok (Gudang)',
-          'Finance & Invoice',
+          'Manajemen Kas',
           'Aplikasi Kurir',
           'Katalog Customer',
           'Lihat Nilai Finansial (PO/SO)',

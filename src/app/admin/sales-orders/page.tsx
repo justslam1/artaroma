@@ -337,6 +337,7 @@ export default function SalesOrdersPage() {
     currentUser?.role === 'SALES' ||
     (Array.isArray(currentUser?.allowed_modules) &&
       (currentUser.allowed_modules.includes('Lihat Nilai Finansial (PO/SO)') ||
+        currentUser.allowed_modules.includes('Manajemen Kas') ||
         currentUser.allowed_modules.includes('Finance & Invoice')));
 
   const showFinancialColumn = canViewFinancials && !isFinancialHidden;

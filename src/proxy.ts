@@ -68,7 +68,11 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
   }
 
-  if (pathname.startsWith('/admin/finance') && !allowed.includes('Finance & Invoice')) {
+  if (
+    pathname.startsWith('/admin/finance') &&
+    !allowed.includes('Manajemen Kas') &&
+    !allowed.includes('Finance & Invoice')
+  ) {
     return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
   }
 

@@ -141,7 +141,7 @@ export const SYSTEM_MODULES = [
   'Sales Order (SO)',
   'Lihat Stok (Gudang)',
   'Edit Batch & ED (Gudang)',
-  'Finance & Invoice',
+  'Manajemen Kas',
   'Log Book & Arsip',
   'Aplikasi Kurir',
   'Katalog Customer',

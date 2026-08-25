@@ -490,7 +490,8 @@ export function AdminTopNav() {
   const canAccessPO = isSuperAdmin || allowedMods.includes('Purchase Order (PO)');
   const canAccessSO = isSuperAdmin || allowedMods.includes('Sales Order (SO)');
   const canAccessStock = isSuperAdmin || allowedMods.includes('Lihat Stok (Gudang)');
-  const canAccessFinance = isSuperAdmin || allowedMods.includes('Finance & Invoice');
+  const canAccessFinance =
+    isSuperAdmin || allowedMods.includes('Manajemen Kas') || allowedMods.includes('Finance & Invoice');
   const canAccessLogBook =
     isSuperAdmin || allowedMods.includes('Log Book & Arsip') || allowedMods.includes('Log Book');
   const canAccessCustomerCatalog = isSuperAdmin || allowedMods.includes('Katalog Customer');
