@@ -33,11 +33,17 @@ import {
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
+  LayoutDashboard,
+  Building2,
+  Users,
+  ShoppingCart,
 } from 'lucide-react';
 import { exportToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import MonthlyTrendsView from '@/components/admin/dashboard/monthly-trends-view';
 
 export default function AdminDashboardPage() {
+  const [dashboardSubTab, setDashboardSubTab] = useState<'overview' | 'sales_trends' | 'po_trends' | 'customer_trends'>('overview');
   const [invoices, setInvoices] = useState<any[]>(initialInvoices);
   const [batches, setBatches] = useState<StockBatch[]>(initialBatches);
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -199,10 +205,15 @@ export default function AdminDashboardPage() {
         {/* Page Title */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Dashboard Overview</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Ringkasan eksekutif penjualan, piutang, dan ketersediaan stok</p>
+            <h1 className="text-2xl font-bold text-slate-800">Dashboard &amp; Analitik Bisnis</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {dashboardSubTab === 'overview' && 'Ringkasan eksekutif penjualan, piutang, dan ketersediaan stok'}
+              {dashboardSubTab === 'sales_trends' && 'Analisis perkembangan dan performa omset penjualan produk tiap bulan'}
+              {dashboardSubTab === 'po_trends' && 'Analisis komitmen belanja purchase order dan pengadaan bahan baku per bulan'}
+              {dashboardSubTab === 'customer_trends' && 'Analisis histori belanja dan pertumbuhan transaksi customer B2B per bulan'}
+            </p>
           </div>
-          {canUserExportXLSX(currentUser) && (
+          {canUserExportXLSX(currentUser) && dashboardSubTab === 'overview' && (
             <button
               onClick={handleExportDashboardXLSX}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer"
@@ -214,7 +225,60 @@ export default function AdminDashboardPage() {
           )}
         </div>
 
-        {/* Live Product Pricing Preview Table (Pricelist Varian) */}
+        {/* Dashboard Sub-Menu Tab Bar */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-1.5 shadow-xs flex items-center gap-1.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setDashboardSubTab('overview')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              dashboardSubTab === 'overview'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" /> Ringkasan Eksekutif
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDashboardSubTab('sales_trends')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              dashboardSubTab === 'sales_trends'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" /> Tren Penjualan Produk
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDashboardSubTab('po_trends')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              dashboardSubTab === 'po_trends'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Building2 className="w-4 h-4" /> Tren Purchase Order (PO)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDashboardSubTab('customer_trends')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              dashboardSubTab === 'customer_trends'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4" /> Tren Transaksi Customer B2B
+          </button>
+        </div>
+
+        {dashboardSubTab === 'overview' && (
+          <>
+            {/* Live Product Pricing Preview Table (Pricelist Varian) */}
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
           <div className="px-5 py-3.5 bg-blue-700 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div className="flex items-center gap-2">
@@ -714,6 +778,17 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+      </>
+    )}
+
+      {/* SUB-MENU VIEW 2: PRODUCT SALES TRENDS */}
+      {dashboardSubTab === 'sales_trends' && <MonthlyTrendsView initialSubTab="sales" />}
+
+      {/* SUB-MENU VIEW 3: PURCHASE ORDER TRENDS */}
+      {dashboardSubTab === 'po_trends' && <MonthlyTrendsView initialSubTab="procurement" />}
+
+      {/* SUB-MENU VIEW 4: CUSTOMER TRANSACTION TRENDS */}
+      {dashboardSubTab === 'customer_trends' && <MonthlyTrendsView initialSubTab="customer" />}
 
       </main>
     </div>
