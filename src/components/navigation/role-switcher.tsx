@@ -14,7 +14,7 @@ export function RoleSwitcher() {
     { label: 'Sales (SO)', href: '/admin/orders', icon: ShoppingBag },
     { label: 'Purchasing (PO)', href: '/admin/procurement', icon: FileText },
     { label: 'Stok & Gudang', href: '/admin/stock', icon: Boxes },
-    { label: 'Finance', href: '/admin/finance', icon: DollarSign },
+    { label: 'Finance', href: '/admin/sales-orders', icon: DollarSign },
     { label: 'Katalog Customer', href: '/customer/catalog', icon: ShoppingBag },
     { label: 'Courier PWA', href: '/courier', icon: Truck },
   ];

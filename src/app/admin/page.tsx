@@ -621,7 +621,7 @@ export default function AdminDashboardPage() {
 
           {/* Total AR */}
           {canViewFinancials && (
-            <Link href="/admin/finance" className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group block">
+            <Link href="/admin/sales-orders" className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group block">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Piutang AR</span>
                 <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-100 transition-colors">

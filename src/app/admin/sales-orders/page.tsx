@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
-import { VerifyPaymentModal } from '@/components/admin/finance-modal';
+import { VerifyPaymentModal, UploadTaxInvoiceModal } from '@/components/admin/finance-modal';
 import DateRangePicker from '@/components/ui/date-range-picker';
 import {
   getStoredCashAccounts,
@@ -54,6 +54,37 @@ export default function SalesOrdersPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [cashTxs, setCashTxs] = useState<CashTransaction[]>([]);
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
+  const [selectedInvoiceForTax, setSelectedInvoiceForTax] = useState<Invoice | null>(null);
+
+  const handleUploadTaxInvoice = (invoiceId: string, pdfUrl: string) => {
+    const updated = invoices.map((inv) =>
+      inv.id === invoiceId ? { ...inv, faktur_pajak_file_url: pdfUrl } : inv
+    );
+    setInvoices(updated);
+    saveStoredInvoices(updated);
+  };
+
+  const handleOpenTaxForSO = (so: SalesOrder) => {
+    let inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    if (!inv) {
+      const soTotal = Number(so.grand_total || so.total_goods_amount || 0);
+      const cleanNum = (so.so_number || '').replace(/[^0-9]/g, '') || String(Math.floor(100 + Math.random() * 900));
+      inv = {
+        id: (so as any).invoice_id || `inv-${so.id}`,
+        invoice_number: `INV-2026-${cleanNum}`,
+        so_id: so.id,
+        so_number: so.so_number,
+        customer_id: so.customer_id,
+        customer_name: (so as any).customer_company || so.customer_name || '',
+        status: 'UNPAID',
+        issue_date: so.order_date || new Date().toISOString().split('T')[0],
+        due_date: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+        total_amount: soTotal,
+        paid_amount: 0,
+      };
+    }
+    setSelectedInvoiceForTax(inv);
+  };
 
   // Filter States (Enterprise Grid Theme)
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -1071,6 +1102,30 @@ export default function SalesOrdersPage() {
                             )}
                           </button>
                         )}
+
+                        {/* Faktur Pajak Action */}
+                        <div className="mt-1.5 pt-1 border-t border-dashed border-gray-200">
+                          {matchingInv?.faktur_pajak_file_url ? (
+                            <a
+                              href={matchingInv.faktur_pajak_file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-colors"
+                              title="Lihat / Download Faktur Pajak PDF"
+                            >
+                              <FileText className="w-3 h-3 text-emerald-600" /> Faktur Pajak PDF
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenTaxForSO(so)}
+                              className="text-[10px] font-semibold text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all cursor-pointer"
+                              title="Unggah berkas PDF Faktur Pajak untuk pesanan ini"
+                            >
+                              <Upload className="w-3 h-3 text-slate-400" /> + Faktur Pajak
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-6 py-3.5">
@@ -1128,6 +1183,14 @@ export default function SalesOrdersPage() {
         onClose={() => setSelectedInvoiceForPayment(null)}
         invoice={selectedInvoiceForPayment}
         onVerify={handleVerifyPayment}
+      />
+
+      {/* Upload & View Tax Invoice PDF Modal */}
+      <UploadTaxInvoiceModal
+        isOpen={!!selectedInvoiceForTax}
+        onClose={() => setSelectedInvoiceForTax(null)}
+        invoice={selectedInvoiceForTax}
+        onUploadTaxInvoice={handleUploadTaxInvoice}
       />
     </div>
   );

@@ -34,7 +34,7 @@ export function AdminSidebar() {
     },
     {
       label: 'Finance & Invoicing',
-      href: '/admin/finance',
+      href: '/admin/sales-orders',
       icon: Receipt,
     },
   ];

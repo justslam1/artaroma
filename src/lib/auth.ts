@@ -83,7 +83,7 @@ export function getRedirectPath(user: { allowed_modules?: string[]; role?: strin
   if (mods.includes('Sales Order (SO)')) return '/admin/sales-orders';
   if (mods.includes('Purchase Order (PO)')) return '/admin/procurement';
   if (mods.includes('Lihat Stok (Gudang)')) return '/admin/stock';
-  if (mods.includes('Finance & Invoice')) return '/admin/finance';
+  if (mods.includes('Finance & Invoice')) return '/admin/sales-orders';
   if (mods.includes('Master Data')) return '/admin/master';
   if (mods.includes('Aplikasi Kurir')) return '/courier';
   if (mods.includes('Katalog Customer')) return '/customer/catalog';
@@ -102,7 +102,7 @@ export function getRedirectPathByRole(role: UserRole | string): string {
     case 'SALES':
       return '/admin/sales-orders';
     case 'FINANCE':
-      return '/admin/finance';
+      return '/admin/sales-orders';
     case 'WAREHOUSE':
       return '/admin/stock';
     case 'COURIER':
