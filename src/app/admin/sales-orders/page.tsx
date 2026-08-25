@@ -310,18 +310,19 @@ export default function SalesOrdersPage() {
 
   const showFinancialColumn = canViewFinancials && !isFinancialHidden;
 
-  // Calculate summary figures for Sales Orders financial cards
-  const totalSemuaSO = salesOrders.reduce(
+  // Calculate summary figures for Sales Orders financial cards (Active SOs only)
+  const activeSOs = salesOrders.filter((so: any) => so.status !== 'DIBATALKAN' && so.status !== 'CANCELLED');
+  const totalSemuaSO = activeSOs.reduce(
     (sum, so: any) => sum + Number(so.grand_total || so.total_goods_amount || so.total_amount || 0),
     0
   );
-  const totalSudahDibayar = salesOrders.reduce((sum, so: any) => {
+  const totalSudahDibayar = activeSOs.reduce((sum, so: any) => {
     const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
     const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
     return sum + paid;
   }, 0);
   const totalSisaPiutang = Math.max(0, totalSemuaSO - totalSudahDibayar);
-  const countSOWithPiutang = salesOrders.filter((so: any) => {
+  const countSOWithPiutang = activeSOs.filter((so: any) => {
     const soTotal = Number(so.grand_total || so.total_goods_amount || so.total_amount || 0);
     const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
     const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
@@ -573,7 +574,7 @@ export default function SalesOrdersPage() {
                   {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSemuaSO)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">
-                  {salesOrders.length} Total Pesanan Sales Order
+                  {activeSOs.length} Total Pesanan Sales Order
                 </div>
               </div>
               <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
