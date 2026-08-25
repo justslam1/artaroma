@@ -77,15 +77,9 @@ export async function GET() {
       rows = [];
     }
 
-    const memorySamples = initialBatches.filter((b) => b.is_sample);
-    const dbSampleIds = new Set((rows || []).map((r: any) => r.id));
-    const missing = memorySamples.filter((ms) => !dbSampleIds.has(ms.id));
-    const combined = [...(rows || []), ...missing];
-
-    return NextResponse.json({ success: true, data: combined });
+    return NextResponse.json({ success: true, data: rows || [] });
   } catch (err: any) {
-    const memorySamples = initialBatches.filter((b) => b.is_sample);
-    return NextResponse.json({ success: true, data: memorySamples });
+    return NextResponse.json({ success: true, data: [] });
   }
 }
 

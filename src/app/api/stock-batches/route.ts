@@ -12,15 +12,11 @@ export async function GET(req: NextRequest) {
       batches = await executeQuery(
         'SELECT * FROM stock_batches ORDER BY expiry_date ASC'
       );
-      if (!batches || batches.length === 0) {
-        batches = initialBatches;
-      } else {
-        const mysqlBatchIds = new Set(batches.map((b: any) => b.id));
-        const missingInitial = initialBatches.filter((ib) => !mysqlBatchIds.has(ib.id));
-        batches = [...batches, ...missingInitial];
+      if (!batches) {
+        batches = [];
       }
     } catch {
-      batches = initialBatches;
+      batches = [];
     }
 
     const normalizedBatches = batches.map((b: any) => {
