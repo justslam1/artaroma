@@ -50,11 +50,11 @@ async function wipeDatabaseForRestoreTest() {
       }
     }
 
-    // Keep only super admin user so login session remains intact
+    // Keep super admin users (admin@artaroma.co.id and boss@artaroma.com) so login session remains intact
     if (tableSet.has('users')) {
       try {
-        await conn.query(`DELETE FROM users WHERE email != 'admin@artaroma.co.id'`);
-        console.log(`✓ Tabel 'users' dibersihkan (Akun Super Admin admin@artaroma.co.id tetap dipertahankan)`);
+        await conn.query(`DELETE FROM users WHERE email NOT IN ('admin@artaroma.co.id', 'boss@artaroma.com') AND name != 'bossanova'`);
+        console.log(`✓ Tabel 'users' dibersihkan (Akun Super Admin admin@artaroma.co.id & boss@artaroma.com tetap dipertahankan)`);
       } catch (err: any) {
         console.warn('Users delete warning:', err.message);
       }
