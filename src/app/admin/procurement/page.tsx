@@ -39,6 +39,7 @@ import {
 import { exportPurchaseOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import DateRangePicker from '@/components/ui/date-range-picker';
+import TablePagination from '@/components/ui/table-pagination';
 import {
   getStoredCashAccounts,
   getStoredCashTransactions,
@@ -82,6 +83,14 @@ export default function ProcurementPage() {
   const [endDate, setEndDate] = useState<string>('');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
   const [multiTripOnly, setMultiTripOnly] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, paymentFilter, distributorFilter, startDate, endDate, paymentMethodFilter, multiTripOnly]);
 
   useEffect(() => {
     setCashTxs(getStoredCashTransactions());
@@ -363,6 +372,8 @@ export default function ProcurementPage() {
     paymentMethodFilter !== 'ALL' ||
     multiTripOnly
   );
+
+  const paginatedPOs = filteredPOs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
@@ -894,7 +905,7 @@ export default function ProcurementPage() {
                       )}
                     </td>
                   </tr>
-                ) : filteredPOs.map((po) => {
+                ) : paginatedPOs.map((po) => {
                   const isRead = readPOIds.includes(po.id);
                   const dueInfo = calculatePODueDateInfo(po);
                   const payStatus = getPOPaymentStatusFromCash(po, cashTxs);
@@ -1082,6 +1093,17 @@ export default function ProcurementPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Table Pagination */}
+          <div className="px-6 py-2 border-t border-gray-200 bg-gray-50/50">
+            <TablePagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={filteredPOs.length}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </div>
       </main>

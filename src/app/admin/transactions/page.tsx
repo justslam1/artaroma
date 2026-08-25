@@ -41,6 +41,7 @@ import {
 import { exportTransactionsToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import DateRangePicker from '@/components/ui/date-range-picker';
+import TablePagination from '@/components/ui/table-pagination';
 
 export default function LogBookPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -73,6 +74,14 @@ export default function LogBookPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, searchQuery, startDate, endDate]);
 
   // Modals for Documents
   const [selectedSOForPDF, setSelectedSOForPDF] = useState<any>(null);
@@ -309,6 +318,8 @@ export default function LogBookPage() {
     }
   };
 
+  const paginatedLogs = logs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-20">
       <AdminTopNav />
@@ -531,7 +542,7 @@ export default function LogBookPage() {
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log) => {
+                  paginatedLogs.map((log) => {
                     const catInfo = getCategoryBadge(log.category);
                     const formattedDate = new Date(log.timestamp).toLocaleString('id-ID', {
                       dateStyle: 'medium',
@@ -693,6 +704,17 @@ export default function LogBookPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Table Pagination */}
+          <div className="px-6 py-2 border-t border-gray-200 bg-gray-50/50">
+            <TablePagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={logs.length}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </div>
       </main>

@@ -36,6 +36,7 @@ import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import { VerifyPaymentModal, UploadTaxInvoiceModal } from '@/components/admin/finance-modal';
 import DateRangePicker from '@/components/ui/date-range-picker';
+import TablePagination from '@/components/ui/table-pagination';
 import {
   getStoredCashAccounts,
   getStoredCashTransactions,
@@ -96,6 +97,14 @@ export default function SalesOrdersPage() {
   const [endDate, setEndDate] = useState<string>('');
   const [shippingTypeFilter, setShippingTypeFilter] = useState<string>('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, paymentFilter, customerFilter, startDate, endDate, shippingTypeFilter, paymentMethodFilter]);
 
   const syncFinanceData = () => {
     setInvoices(getStoredInvoices());
@@ -490,6 +499,8 @@ export default function SalesOrdersPage() {
     shippingTypeFilter !== 'ALL' ||
     paymentMethodFilter !== 'ALL'
   );
+
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const fetchOrders = async () => {
     setIsLoading(true);
@@ -932,7 +943,7 @@ export default function SalesOrdersPage() {
                       )}
                     </td>
                   </tr>
-                ) : filteredOrders.map((so) => {
+                ) : paginatedOrders.map((so) => {
                   const isRead = readOrderIds.includes(so.id);
                   const matchingInv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
                   const dueInfo = calculateSODueDateInfo(so, matchingInv);
@@ -1174,6 +1185,17 @@ export default function SalesOrdersPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Table Pagination */}
+          <div className="px-6 py-2 border-t border-gray-200 bg-gray-50/50">
+            <TablePagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={filteredOrders.length}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </div>
       </main>
