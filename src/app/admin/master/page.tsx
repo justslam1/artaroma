@@ -81,6 +81,7 @@ import {
 import BulkPriceModal from '@/components/admin/bulk-price-modal';
 import ImportPricelistModal from '@/components/admin/import-pricelist-modal';
 import BackupRestoreModal from '@/components/admin/backup-restore-modal';
+import BackupRestorePanel from '@/components/admin/backup-restore-panel';
 import { canUserExportXLSX } from '@/lib/auth';
 import {
   ThemeSettings,
@@ -96,7 +97,7 @@ import {
   DEFAULT_DISPOSAL_REASONS,
 } from '@/lib/disposal-reason-store';
 
-type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config' | 'appearance' | 'disposal';
+type Tab = 'products' | 'customers' | 'distributors' | 'couriers' | 'users' | 'finance' | 'access' | 'pricelist' | 'config' | 'appearance' | 'disposal' | 'backup';
 
 const TAB_LABELS: Record<string, string> = {
   products: 'PRODUK',
@@ -110,6 +111,7 @@ const TAB_LABELS: Record<string, string> = {
   config: 'PENGATURAN',
   appearance: 'TAMPILAN & TEMA',
   disposal: 'PEMBUANGAN',
+  backup: 'BACKUP & RESTORE',
 };
 
 export default function MasterDataPage() {
@@ -334,6 +336,7 @@ export default function MasterDataPage() {
     { key: 'finance' as Tab, icon: Landmark, label: TAB_LABELS.finance, count: 0 },
     { key: 'disposal' as Tab, icon: Trash2, label: TAB_LABELS.disposal, count: disposalReasons.length },
     { key: 'config' as Tab, icon: Settings, label: TAB_LABELS.config, count: 1 },
+    { key: 'backup' as Tab, icon: HardDrive, label: TAB_LABELS.backup, count: 0 },
     { key: 'appearance' as Tab, icon: Palette, label: TAB_LABELS.appearance, count: 0 },
   ];
 
@@ -2234,15 +2237,7 @@ export default function MasterDataPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setIsBackupModalOpen(true)}
-              className="bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
-              title="Cadangkan (Backup) & Pulihkan (Restore) Data Database"
-            >
-              <HardDrive className="w-4 h-4 text-indigo-200" /> Backup &amp; Restore Data
-            </button>
-            {canUserExportXLSX(currentUser) && activeTab !== 'config' && activeTab !== 'appearance' && (
+            {canUserExportXLSX(currentUser) && activeTab !== 'config' && activeTab !== 'appearance' && activeTab !== 'backup' && (
               <button
                 onClick={handleExportCurrentTab}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
@@ -2251,7 +2246,7 @@ export default function MasterDataPage() {
                 <FileSpreadsheet className="w-4 h-4" /> Ekspor ke XLSX
               </button>
             )}
-            {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && activeTab !== 'appearance' && (
+            {activeTab !== 'finance' && activeTab !== 'config' && activeTab !== 'pricelist' && activeTab !== 'appearance' && activeTab !== 'backup' && (
               <button
                 onClick={handleOpenAddModal}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all"
@@ -2327,14 +2322,6 @@ export default function MasterDataPage() {
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setIsBackupModalOpen(true)}
-                  className="text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  title="Backup & Restore Seluruh Data Database"
-                >
-                  <HardDrive className="w-3.5 h-3.5 text-indigo-600" /> Backup &amp; Restore
-                </button>
                 {canUserExportXLSX(currentUser) && (
                   <button
                     type="button"
@@ -4516,6 +4503,22 @@ export default function MasterDataPage() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* BACKUP & RESTORE TAB */}
+          {activeTab === 'backup' && (
+            <div className="p-6">
+              <BackupRestorePanel
+                onSuccess={() => {
+                  fetchProducts();
+                  fetchCustomers();
+                  fetchDistributors();
+                  fetchCouriers();
+                  fetchUsers();
+                  fetchDisposalReasons();
+                }}
+              />
             </div>
           )}
         </div>
