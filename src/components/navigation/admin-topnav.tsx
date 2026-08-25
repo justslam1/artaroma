@@ -1092,7 +1092,7 @@ export function AdminTopNav() {
               </Link>
             )}
 
-            {/* Direct Menu Link: Manajemen Kas & Treasury */}
+            {/* Direct Menu Link: Manajemen Kas */}
             {canAccessFinance && (
               <Link
                 href="/admin/finance/cash"
@@ -1104,7 +1104,7 @@ export function AdminTopNav() {
                 }`}
               >
                 <Landmark className="w-4 h-4" />
-                <span>Manajemen Kas & Treasury</span>
+                <span>Manajemen Kas</span>
               </Link>
             )}
 
@@ -1129,26 +1129,26 @@ export function AdminTopNav() {
       {isFinanceActive && (
         <div className="bg-blue-800 border-t border-blue-600 text-white shadow-inner">
           <div className="max-w-screen-2xl mx-auto px-6 flex items-center gap-2 py-1.5 text-xs font-semibold">
-            <span className="text-blue-200 font-normal">Sub-Menu Keuangan:</span>
+            <span className="text-blue-200 font-normal">Menu Keuangan:</span>
             <Link
-              href="/admin/finance"
+              href="/admin/sales-orders"
               className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                isCustomerInvoicesActive
+                isSOActive
                   ? 'bg-white text-blue-900 font-bold shadow-sm'
                   : 'text-blue-100 hover:bg-blue-700'
               }`}
             >
-              <CreditCard className="w-3.5 h-3.5" /> Invoice Penjualan (Piutang Customer)
+              <CreditCard className="w-3.5 h-3.5" /> Sales Order & Piutang
             </Link>
             <Link
-              href="/admin/finance/payables"
+              href="/admin/procurement"
               className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                isVendorPayablesActive
+                isPOActive
                   ? 'bg-white text-blue-900 font-bold shadow-sm'
                   : 'text-blue-100 hover:bg-blue-700'
               }`}
             >
-              <Building2 className="w-3.5 h-3.5" /> Tagihan Suplier (Hutang PO)
+              <Building2 className="w-3.5 h-3.5" /> Purchase Order & Hutang
             </Link>
             <Link
               href="/admin/finance/cash"
@@ -1158,7 +1158,7 @@ export function AdminTopNav() {
                   : 'text-blue-100 hover:bg-blue-700'
               }`}
             >
-              <Landmark className="w-3.5 h-3.5" /> Manajemen Kas & Treasury
+              <Landmark className="w-3.5 h-3.5" /> Manajemen Kas
             </Link>
           </div>
         </div>

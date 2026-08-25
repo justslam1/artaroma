@@ -34,7 +34,7 @@ export function AdminSidebar() {
       icon: ShoppingBag,
     },
     {
-      label: 'Manajemen Kas & Treasury',
+      label: 'Manajemen Kas',
       href: '/admin/finance/cash',
       icon: Landmark,
     },

@@ -291,7 +291,7 @@ export default function CashManagementPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                  Manajemen Kas & Treasury
+                  Manajemen Kas
                 </h1>
                 <p className="text-xs text-slate-500 font-medium">
                   Pengelolaan Kas Besar Bank, Kas Kantor, Kas Kecil (Petty Cash), Kas Sales & Rekonsiliasi SO/PO
