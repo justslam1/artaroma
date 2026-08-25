@@ -525,6 +525,7 @@ export default function LogBookPage() {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="bg-slate-50/70 border-b border-gray-200 text-slate-500 uppercase tracking-wide font-bold text-[10px]">
+                  <th className="px-3 py-3 w-12 text-center font-bold text-slate-700">No.</th>
                   <th className="px-5 py-3 w-40">WAKTU &amp; TANGGAL</th>
                   <th className="px-4 py-3 w-44">KATEGORI</th>
                   <th className="px-4 py-3 w-36">AKTOR / PELAKU</th>
@@ -537,12 +538,13 @@ export default function LogBookPage() {
               <tbody className="divide-y divide-gray-100 font-medium">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-slate-400 text-xs italic">
+                    <td colSpan={8} className="text-center py-16 text-slate-400 text-xs italic">
                       {isLoading ? 'Memuat data Log Book...' : 'Belum ada catatan log book yang cocok dengan filter.'}
                     </td>
                   </tr>
                 ) : (
-                  paginatedLogs.map((log) => {
+                  paginatedLogs.map((log, idx) => {
+                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
                     const catInfo = getCategoryBadge(log.category);
                     const formattedDate = new Date(log.timestamp).toLocaleString('id-ID', {
                       dateStyle: 'medium',
@@ -551,6 +553,11 @@ export default function LogBookPage() {
 
                     return (
                       <tr key={log.id} className="hover:bg-blue-50/30 transition-colors">
+                        {/* 0. No. Urut */}
+                        <td className="px-3 py-3.5 text-center text-slate-500 font-mono font-bold text-xs">
+                          {rowNumber}
+                        </td>
+
                         {/* 1. Timestamp */}
                         <td className="px-5 py-3.5 text-slate-600 font-mono text-[11px] whitespace-nowrap">
                           <div className="font-bold text-slate-800">{formattedDate.split(',')[0]}</div>

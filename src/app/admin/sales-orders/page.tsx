@@ -906,6 +906,7 @@ export default function SalesOrdersPage() {
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
+                  <th className="px-4 py-3 text-center w-12 font-bold text-slate-700">No.</th>
                   <th className="px-6 py-3">No. SO / Tanggal</th>
                   <th className="px-6 py-3">Customer</th>
                   <th className="px-6 py-3">Item Dipesan</th>
@@ -919,14 +920,14 @@ export default function SalesOrdersPage() {
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-400" />
                       Memuat data pesanan dari database...
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={showFinancialColumn ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={showFinancialColumn ? 9 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
                       {salesOrders.length === 0 ? (
                         'Belum ada Sales Order masuk. Pesanan dari Customer akan muncul di sini.'
                       ) : (
@@ -943,7 +944,8 @@ export default function SalesOrdersPage() {
                       )}
                     </td>
                   </tr>
-                ) : paginatedOrders.map((so) => {
+                ) : paginatedOrders.map((so, idx) => {
+                  const rowNumber = (currentPage - 1) * pageSize + idx + 1;
                   const isRead = readOrderIds.includes(so.id);
                   const matchingInv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
                   const dueInfo = calculateSODueDateInfo(so, matchingInv);
@@ -956,6 +958,9 @@ export default function SalesOrdersPage() {
                         isRead ? 'bg-white hover:bg-gray-50/80 text-slate-600' : 'bg-blue-50/25 hover:bg-blue-50/50 font-medium'
                       }`}
                     >
+                      <td className="px-4 py-3.5 text-center font-bold text-slate-500 font-mono text-xs">
+                        {rowNumber}
+                      </td>
                       <td className="px-6 py-3.5">
                         <Link
                           href={`/admin/orders/${so.id}`}
