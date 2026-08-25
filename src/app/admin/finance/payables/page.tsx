@@ -210,17 +210,13 @@ export default function FinancePayablesPage() {
     }
   };
 
-  const totalSisaHutang = purchaseOrders
-    .filter((po) => po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED')
-    .reduce((sum, po) => sum + Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)), 0);
-
-  const totalSudahDibayar = purchaseOrders
-    .filter((po) => po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED')
-    .reduce((sum, po) => sum + Number(po.paid_amount || 0), 0);
-
-  const totalSemuaPO = purchaseOrders
-    .filter((po) => po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED')
-    .reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
+  const activePOs = purchaseOrders.filter((po) => po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED');
+  const totalSemuaPO = activePOs.reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
+  const totalSudahDibayar = activePOs.reduce((sum, po) => sum + Number(po.paid_amount || 0), 0);
+  const totalSisaHutang = activePOs.reduce((sum, po) => sum + Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)), 0);
+  const countPOWithDebt = activePOs.filter(
+    (po) => Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)) > 0
+  ).length;
 
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-20">
@@ -264,7 +260,7 @@ export default function FinancePayablesPage() {
               <div className="text-xs text-slate-400 font-medium">Sisa Hutang Vendor Perlu Dibayar</div>
               <div className="text-xl font-bold font-mono text-purple-700 mt-0.5">{formatIDR(totalSisaHutang)}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">
-                {purchaseOrders.filter((po) => Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)) > 0).length} PO memiliki sisa hutang
+                {countPOWithDebt} PO memiliki sisa hutang
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
@@ -290,7 +286,7 @@ export default function FinancePayablesPage() {
               <div className="text-xs text-slate-400 font-medium">Total Komitmen Tagihan PO</div>
               <div className="text-xl font-bold font-mono text-slate-800 mt-0.5">{formatIDR(totalSemuaPO)}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">
-                {purchaseOrders.length} Total Tagihan PO
+                {activePOs.length} Total Tagihan PO
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">

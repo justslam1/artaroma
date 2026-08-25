@@ -254,11 +254,12 @@ export default function ProcurementPage() {
 
   const showFinancialColumn = canViewFinancials && !isFinancialHidden;
 
-  // Calculate summary figures for PO Financial cards
-  const totalSemuaPO = purchaseOrders.reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
-  const totalSudahDibayar = purchaseOrders.reduce((sum, po) => sum + Number(po.paid_amount || 0), 0);
-  const totalSisaHutang = Math.max(0, totalSemuaPO - totalSudahDibayar);
-  const countPOWithDebt = purchaseOrders.filter(
+  // Calculate summary figures for PO Financial cards (Consistent with Finance Payables)
+  const activePOs = purchaseOrders.filter((po) => po.status !== 'DIBATALKAN' && po.status !== 'CANCELLED');
+  const totalSemuaPO = activePOs.reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
+  const totalSudahDibayar = activePOs.reduce((sum, po) => sum + Number(po.paid_amount || 0), 0);
+  const totalSisaHutang = activePOs.reduce((sum, po) => sum + Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)), 0);
+  const countPOWithDebt = activePOs.filter(
     (po) => Math.max(0, Number(po.total_amount || 0) - Number(po.paid_amount || 0)) > 0
   ).length;
 
