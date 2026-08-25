@@ -24,11 +24,28 @@ import {
   RefreshCw,
   Clock,
   Check,
+  Play,
+  Activity,
+  Calculator,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  Zap,
 } from 'lucide-react';
 
 interface BackupRestorePanelProps {
   onSuccess?: () => void;
 }
+
+const DIAG_CATEGORY_MAP: Record<string, { label: string; icon: any; color: string }> = {
+  INFRASTRUCTURE: { label: 'Infrastruktur & DB', icon: Database, color: 'text-slate-700 bg-slate-100 border-slate-200' },
+  MASTER: { label: 'Master & Rumus Harga', icon: Calculator, color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  FEFO: { label: 'Stok & FEFO Engine', icon: Layers, color: 'text-purple-700 bg-purple-50 border-purple-200' },
+  ORDERS: { label: 'Sales Order & Plafon', icon: ShoppingCart, color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  FINANCE: { label: 'Finance & Invoicing', icon: CreditCard, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  COURIER: { label: 'Kurir & Bukti POD', icon: Truck, color: 'text-sky-700 bg-sky-50 border-sky-200' },
+  NOTIFICATIONS: { label: 'Push Notification', icon: Bell, color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
+};
 
 const TABLE_META: Record<string, { label: string; icon: any; category: 'MASTER' | 'OPERATIONAL' }> = {
   products: { label: 'Master Produk & Varian', icon: Layers, category: 'MASTER' },
@@ -49,7 +66,7 @@ const TABLE_META: Record<string, { label: string; icon: any; category: 'MASTER' 
 };
 
 export default function BackupRestorePanel({ onSuccess }: BackupRestorePanelProps) {
-  const [subTab, setSubTab] = useState<'BACKUP' | 'RESTORE'>('BACKUP');
+  const [subTab, setSubTab] = useState<'BACKUP' | 'RESTORE' | 'DIAGNOSTICS'>('BACKUP');
   const [isExporting, setIsExporting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -60,6 +77,37 @@ export default function BackupRestorePanel({ onSuccess }: BackupRestorePanelProp
   const [selectedTablesToRestore, setSelectedTablesToRestore] = useState<string[]>([]);
   const [confirmationCode, setConfirmationCode] = useState('');
   const [restoreResult, setRestoreResult] = useState<any | null>(null);
+
+  // Diagnostics state
+  const [isDiagRunning, setIsDiagRunning] = useState(false);
+  const [diagSummary, setDiagSummary] = useState<any | null>(null);
+  const [diagResults, setDiagResults] = useState<any[]>([]);
+  const [diagCategory, setDiagCategory] = useState<string>('ALL');
+  const [expandedTests, setExpandedTests] = useState<Record<string, boolean>>({});
+  const [diagHasRun, setDiagHasRun] = useState(false);
+
+  const handleRunDiagnostics = async () => {
+    setIsDiagRunning(true);
+    try {
+      const res = await fetch('/api/diagnostics/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.summary) setDiagSummary(data.summary);
+      if (data.results) {
+        setDiagResults(data.results);
+        const exp: Record<string, boolean> = {};
+        data.results.forEach((r: any) => { exp[r.id] = true; });
+        setExpandedTests(exp);
+      }
+      setDiagHasRun(true);
+    } catch (err: any) {
+      alert(`Gagal menjalankan pengujian diagnostik: ${err.message}`);
+    } finally {
+      setIsDiagRunning(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -229,6 +277,22 @@ export default function BackupRestorePanel({ onSuccess }: BackupRestorePanelProp
           }`}
         >
           <Upload className="w-4 h-4" /> Pulihkan Data (Restore JSON)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setSubTab('DIAGNOSTICS');
+            if (!diagHasRun) {
+              handleRunDiagnostics();
+            }
+          }}
+          className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            subTab === 'DIAGNOSTICS'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Activity className="w-4 h-4" /> Diagnostik &amp; Uji Sistem
         </button>
       </div>
 
@@ -490,6 +554,172 @@ export default function BackupRestorePanel({ onSuccess }: BackupRestorePanelProp
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* DIAGNOSTICS TAB CONTENT */}
+      {subTab === 'DIAGNOSTICS' && (
+        <div className="space-y-6">
+          {/* Header & Run Action */}
+          <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-bold border border-blue-400/30 mb-2">
+                <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span>Automated System Health &amp; Workflow Monitor</span>
+              </div>
+              <h3 className="text-base font-bold">Pengujian Otomatis Integritas Sistem &amp; Alur Kerja</h3>
+              <p className="text-xs text-slate-300 mt-0.5 max-w-2xl">
+                Verifikasi otomatis integritas tabel database, rumus markup USD varian, urutan FEFO stok gudang, penegakan plafon kredit SO, verifikasi kas masuk, dan push notifikasi.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              disabled={isDiagRunning}
+              onClick={handleRunDiagnostics}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              {isDiagRunning ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Menguji Sistem...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" /> Jalankan Diagnostik Sistem
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Diagnostic Summary Cards */}
+          {diagSummary && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold uppercase">Pass Rate</div>
+                <div className="text-2xl font-black text-emerald-600 mt-1">{diagSummary.pass_rate}%</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tingkat kelulusan uji</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold uppercase">Total Pengujian</div>
+                <div className="text-2xl font-black text-slate-800 mt-1">{diagSummary.total} Test</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Skenario end-to-end</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold uppercase">Status Lulus</div>
+                <div className="text-2xl font-black text-emerald-600 mt-1">{diagSummary.passed} Passed</div>
+                <div className="text-[10px] text-emerald-600 mt-0.5 font-semibold">Semua sistem normal</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                <div className="text-[11px] text-slate-400 font-bold uppercase">Durasi Eksekusi</div>
+                <div className="text-2xl font-black text-blue-600 mt-1">{diagSummary.duration_ms} ms</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Respons server instan</div>
+              </div>
+            </div>
+          )}
+
+          {/* Category Filters */}
+          {diagResults.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setDiagCategory('ALL')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer shrink-0 ${
+                  diagCategory === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Semua Kategori ({diagResults.length})
+              </button>
+              {Object.entries(DIAG_CATEGORY_MAP).map(([key, meta]) => {
+                const count = diagResults.filter((r) => r.category === key).length;
+                if (count === 0) return null;
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDiagCategory(key)}
+                    className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                      diagCategory === key
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{meta.label}</span>
+                    <span className="text-[10px] opacity-75">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Test Results List */}
+          <div className="space-y-3">
+            {diagResults
+              .filter((r) => diagCategory === 'ALL' || r.category === diagCategory)
+              .map((test) => {
+                const isPassed = test.status === 'PASSED';
+                const isExpanded = expandedTests[test.id] !== false;
+                const catMeta = DIAG_CATEGORY_MAP[test.category] || { label: test.category, color: 'bg-slate-100' };
+
+                return (
+                  <div
+                    key={test.id}
+                    className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs transition-all"
+                  >
+                    <div
+                      onClick={() => setExpandedTests((prev) => ({ ...prev, [test.id]: !isExpanded }))}
+                      className="px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {isPassed ? (
+                          <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                            <span>{test.name}</span>
+                            <span className="text-[10px] font-semibold text-slate-400 font-mono">
+                              ({test.duration_ms} ms)
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{test.message}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${catMeta.color}`}>
+                          {catMeta.label}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    {isExpanded && test.details && test.details.length > 0 && (
+                      <div className="px-5 py-3 bg-slate-50/50 border-t border-slate-100 space-y-1.5 text-xs font-mono">
+                        {test.details.map((detail: string, dIdx: number) => (
+                          <div key={dIdx} className="text-slate-600 flex items-start gap-2 text-[11px]">
+                            <span className="text-emerald-500 font-bold">✓</span>
+                            <span>{detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
     </div>
