@@ -24,10 +24,14 @@ import { exportToXLSX } from '@/lib/export-excel';
 
 interface MonthlyTrendsViewProps {
   initialSubTab?: 'sales' | 'procurement' | 'customer';
+  activeSubTab?: 'sales' | 'procurement' | 'customer';
 }
 
-export default function MonthlyTrendsView({ initialSubTab = 'sales' }: MonthlyTrendsViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'procurement' | 'customer'>(initialSubTab);
+export default function MonthlyTrendsView({
+  initialSubTab = 'sales',
+  activeSubTab: propSubTab,
+}: MonthlyTrendsViewProps) {
+  const activeSubTab = propSubTab || initialSubTab;
   const [periodMonths, setPeriodMonths] = useState<number>(12);
   const [metricUnit, setMetricUnit] = useState<'currency' | 'volume'>('currency');
   const [data, setData] = useState<any>(null);
@@ -109,45 +113,34 @@ export default function MonthlyTrendsView({ initialSubTab = 'sales' }: MonthlyTr
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Sub-Menu Tabs Navigation & Controls */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        {/* Tab Buttons */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('sales')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeSubTab === 'sales'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" /> Tren Penjualan Produk
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('procurement')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeSubTab === 'procurement'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
-                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <Building2 className="w-4 h-4" /> Tren Purchase Order (PO)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('customer')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeSubTab === 'customer'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
-                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Tren Transaksi Customer B2B
-          </button>
+      {/* Filter & Export Controls Bar */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        {/* Title & Badge */}
+        <div className="flex items-center gap-2.5">
+          {activeSubTab === 'sales' && (
+            <div className="flex items-center gap-2 font-bold text-sm text-slate-800">
+              <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </span>
+              <span>Analitik Tren Penjualan Produk Bulanan</span>
+            </div>
+          )}
+          {activeSubTab === 'procurement' && (
+            <div className="flex items-center gap-2 font-bold text-sm text-slate-800">
+              <span className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Building2 className="w-4 h-4" />
+              </span>
+              <span>Analitik Tren Belanja Purchase Order (PO) Bulanan</span>
+            </div>
+          )}
+          {activeSubTab === 'customer' && (
+            <div className="flex items-center gap-2 font-bold text-sm text-slate-800">
+              <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </span>
+              <span>Matriks Transaksi &amp; Belanja Customer B2B per Bulan</span>
+            </div>
+          )}
         </div>
 
         {/* Filter Controls & Export */}
