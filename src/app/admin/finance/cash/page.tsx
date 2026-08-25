@@ -47,6 +47,7 @@ import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
+  RotateCcw,
   Landmark,
   PiggyBank,
   Briefcase,
@@ -129,6 +130,20 @@ export default function CashManagementPage() {
   const handleTransferCash = (data: any) => {
     transferCashBetweenAccounts(data);
     loadData();
+  };
+
+  const handleResetCash = () => {
+    if (!confirm('Apakah Anda yakin ingin mengosongkan seluruh saldo kas dan riwayat mutasi kas menjadi Rp 0?')) return;
+    const zeroedAccounts = accounts.map((a) => ({
+      ...a,
+      initial_balance: 0,
+      current_balance: 0,
+    }));
+    saveStoredCashAccounts(zeroedAccounts);
+    saveStoredCashTransactions([]);
+    setAccounts(zeroedAccounts);
+    setTransactions([]);
+    alert('Seluruh akun kas telah di-reset menjadi Rp 0!');
   };
 
   const handleDeleteTransaction = (tx: CashTransaction) => {
@@ -298,6 +313,14 @@ export default function CashManagementPage() {
               title="Ekspor Buku Kas ke File Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-4 h-4" /> Ekspor Buku Kas (XLSX)
+            </button>
+
+            <button
+              onClick={handleResetCash}
+              className="px-3.5 py-2 bg-slate-700 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Kosongkan Saldo Seluruh Akun Kas Menjadi Rp 0"
+            >
+              <RotateCcw className="w-4 h-4" /> Reset Saldo Kas (Rp 0)
             </button>
           </div>
         </div>
