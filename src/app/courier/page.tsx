@@ -21,8 +21,8 @@ import {
 import { exportToXLSX } from '@/lib/export-excel';
 
 export default function CourierPWAPage() {
-  const [couriers, setCouriers] = useState<Courier[]>(initialCouriers);
-  const [selectedCourier, setSelectedCourier] = useState<Courier>(initialCouriers[0]);
+  const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [selectedCourier, setSelectedCourier] = useState<Courier | null>(null);
   const [tasks, setTasks] = useState<DeliveryTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingPOD, setIsSubmittingPOD] = useState(false);
@@ -39,12 +39,17 @@ export default function CourierPWAPage() {
           fetch('/api/auth/me', { cache: 'no-store' }),
         ]);
 
-        let loadedCouriers = initialCouriers;
+        let loadedCouriers: Courier[] = [];
         if (courierRes.ok) {
           const courierJson = await courierRes.json();
-          if (courierJson.success && Array.isArray(courierJson.data) && courierJson.data.length > 0) {
+          if (courierJson.success && Array.isArray(courierJson.data)) {
             loadedCouriers = courierJson.data;
             setCouriers(loadedCouriers);
+            if (loadedCouriers.length > 0) {
+              setSelectedCourier(loadedCouriers[0]);
+            } else {
+              setSelectedCourier(null);
+            }
           }
         }
 
@@ -213,16 +218,20 @@ export default function CourierPWAPage() {
                 className="bg-blue-800 border border-blue-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none font-medium cursor-pointer"
                 title="Super Admin: Ganti profil driver untuk simulasi"
               >
-                {couriers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {couriers.length === 0 ? (
+                  <option value="">(Belum Ada Kurir)</option>
+                ) : (
+                  couriers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
               </select>
             ) : (
               <span className="bg-blue-800/80 border border-blue-600 rounded-lg px-2.5 py-1 text-xs text-white font-bold inline-flex items-center gap-1.5 shadow-2xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                {selectedCourier?.name || currentUser?.name || 'Kurir'}
+                {selectedCourier?.name || currentUser?.name || 'Belum Ada Kurir'}
               </span>
             )}
             <button
@@ -249,9 +258,9 @@ export default function CourierPWAPage() {
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-xs">
           <div>
             <span className="text-gray-400 block text-[10px]">Kurir Aktif:</span>
-            <span className="font-bold text-slate-800 text-sm">{selectedCourier?.name || 'Kurir Artaroma'}</span>
+            <span className="font-bold text-slate-800 text-sm">{selectedCourier?.name || 'Belum Ada Kurir Terdaftar'}</span>
             <span className="text-amber-600 font-semibold text-[11px] block">
-              {selectedCourier?.vehicle_number || 'Armada Cargo'}
+              {selectedCourier?.vehicle_number || '-'}
             </span>
           </div>
           <div className="flex items-center gap-2">

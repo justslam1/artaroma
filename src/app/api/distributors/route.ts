@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
     let distributors = [];
     try {
       distributors = await executeQuery('SELECT * FROM distributors ORDER BY name ASC');
-      if (!distributors || distributors.length === 0) {
-        distributors = initialDistributors;
+      if (!distributors) {
+        distributors = [];
       } else {
         distributors = distributors.map((d: any) => {
           let ids = d.supplied_product_ids;
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
         });
       }
     } catch (e: any) {
-      console.warn('Database query distributors fallback:', e.message);
-      distributors = initialDistributors;
+      console.warn('Database query distributors warning:', e.message);
+      distributors = [];
     }
 
     return NextResponse.json({

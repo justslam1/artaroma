@@ -343,7 +343,7 @@ export default function OrderDetailPage() {
   }, []);
 
   // Fetch active couriers list from MySQL database
-  const [courierList, setCourierList] = useState<any[]>(initialCouriers);
+  const [courierList, setCourierList] = useState<any[]>([]);
   useEffect(() => {
     fetch('/api/couriers')
       .then((res) => res.json())

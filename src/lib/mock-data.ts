@@ -434,32 +434,7 @@ export const initialAppUsers: AppUser[] = [
 
 export const initialDistributors: Distributor[] = [];
 
-export const initialCouriers: Courier[] = [
-  {
-    id: 'cour-001',
-    code: 'KUR-01',
-    name: 'Rian Pratama',
-    phone: '0812-7766-5544',
-    vehicle_number: 'B 9482 SXZ (Blind Van)',
-    is_active: true,
-  },
-  {
-    id: 'cour-002',
-    code: 'KUR-02',
-    name: 'Agus Subandi',
-    phone: '0857-4433-2211',
-    vehicle_number: 'B 3821 KFP (Box Truck)',
-    is_active: true,
-  },
-  {
-    id: 'cour-003',
-    code: 'KUR-03',
-    name: 'Doni Setiawan',
-    phone: '0877-2211-9900',
-    vehicle_number: 'B 1102 WA (Motor Cargo)',
-    is_active: true,
-  },
-];
+export const initialCouriers: Courier[] = [];
 
 export const initialPurchaseOrders: PurchaseOrder[] = [];
 
