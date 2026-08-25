@@ -4,8 +4,10 @@ import { executeQuery } from '@/lib/db';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const startDateParam = searchParams.get('startDate');
+    const endDateParam = searchParams.get('endDate');
     const monthsParam = parseInt(searchParams.get('months') || '12', 10);
-    const monthsCount = isNaN(monthsParam) || monthsParam <= 0 ? 12 : Math.min(monthsParam, 24);
+    const monthsCount = isNaN(monthsParam) || monthsParam <= 0 ? 12 : Math.min(monthsParam, 60);
 
     // 0. Fetch master products and distributors
     let availableProducts: any[] = [];
@@ -127,14 +129,32 @@ export async function GET(req: NextRequest) {
       console.warn('Failed to query po_items for monthly trends:', err);
     }
 
-    // 3. Generate Month Keys for the target range (e.g. 2025-09 to 2026-08)
+    // 3. Generate Month Keys for the target range
     const monthKeys: string[] = [];
-    const now = new Date();
-    for (let i = monthsCount - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      monthKeys.push(`${yyyy}-${mm}`);
+    if (startDateParam && endDateParam) {
+      const startD = new Date(startDateParam.length === 7 ? `${startDateParam}-01` : startDateParam);
+      const endD = new Date(endDateParam.length === 7 ? `${endDateParam}-01` : endDateParam);
+
+      if (!isNaN(startD.getTime()) && !isNaN(endD.getTime()) && startD <= endD) {
+        const cur = new Date(startD.getFullYear(), startD.getMonth(), 1);
+        const endLimit = new Date(endD.getFullYear(), endD.getMonth(), 1);
+        while (cur <= endLimit && monthKeys.length < 60) {
+          const yyyy = cur.getFullYear();
+          const mm = String(cur.getMonth() + 1).padStart(2, '0');
+          monthKeys.push(`${yyyy}-${mm}`);
+          cur.setMonth(cur.getMonth() + 1);
+        }
+      }
+    }
+
+    if (monthKeys.length === 0) {
+      const now = new Date();
+      for (let i = monthsCount - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        monthKeys.push(`${yyyy}-${mm}`);
+      }
     }
 
     const formatMonthLabel = (key: string) => {

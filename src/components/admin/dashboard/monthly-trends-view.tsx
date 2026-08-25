@@ -38,7 +38,16 @@ export default function MonthlyTrendsView({
   activeSubTab: propSubTab,
 }: MonthlyTrendsViewProps) {
   const activeSubTab = propSubTab || initialSubTab;
-  const [periodMonths, setPeriodMonths] = useState<number>(12);
+  const [periodPreset, setPeriodPreset] = useState<string>('12');
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 11);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
+
   const [metricUnit, setMetricUnit] = useState<'currency' | 'volume' | 'count'>('currency');
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -59,7 +68,16 @@ export default function MonthlyTrendsView({
   const fetchTrends = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/dashboard/monthly-trends?months=${periodMonths}`, { cache: 'no-store' });
+      let url = '/api/dashboard/monthly-trends';
+      if (periodPreset === 'CUSTOM') {
+        url += `?startDate=${customStartDate}&endDate=${customEndDate}`;
+      } else if (periodPreset === 'YTD') {
+        const currentYear = new Date().getFullYear();
+        url += `?startDate=${currentYear}-01-01&endDate=${new Date().toISOString().slice(0, 10)}`;
+      } else {
+        url += `?months=${periodPreset}`;
+      }
+      const res = await fetch(url, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
@@ -73,7 +91,7 @@ export default function MonthlyTrendsView({
 
   useEffect(() => {
     fetchTrends();
-  }, [periodMonths]);
+  }, [periodPreset, customStartDate, customEndDate]);
 
   // Master lists
   const availableProducts: any[] = data?.availableProducts || [];
@@ -427,20 +445,46 @@ export default function MonthlyTrendsView({
               </div>
             )}
 
-            {/* Period Selector */}
+            {/* Period Preset Selector */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
               <select
-                value={periodMonths}
-                onChange={(e) => setPeriodMonths(parseInt(e.target.value, 10))}
+                value={periodPreset}
+                onChange={(e) => setPeriodPreset(e.target.value)}
                 className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer"
               >
-                <option value={3}>3 Bulan Terakhir</option>
-                <option value={6}>6 Bulan Terakhir</option>
-                <option value={12}>12 Bulan Terakhir (1 Tahun)</option>
-                <option value={24}>24 Bulan Terakhir (2 Tahun)</option>
+                <option value="3">3 Bulan Terakhir</option>
+                <option value="6">6 Bulan Terakhir</option>
+                <option value="12">12 Bulan Terakhir (1 Tahun)</option>
+                <option value="24">24 Bulan Terakhir (2 Tahun)</option>
+                <option value="YTD">Tahun Berjalan (YTD)</option>
+                <option value="CUSTOM">🗓️ Kustom Rentang Tanggal</option>
               </select>
             </div>
+
+            {/* Custom Date Pickers (Shown when CUSTOM is selected) */}
+            {periodPreset === 'CUSTOM' && (
+              <div className="flex items-center gap-2 bg-blue-50/70 border border-blue-200 px-3 py-1.5 rounded-xl text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-blue-900 font-bold text-[11px]">Dari:</span>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="bg-white border border-blue-300 rounded-lg px-2 py-0.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-blue-900 font-bold text-[11px]">Sampai:</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="bg-white border border-blue-300 rounded-lg px-2 py-0.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Export XLSX Button */}
             <button
@@ -674,7 +718,7 @@ export default function MonthlyTrendsView({
               <div>
                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-blue-600" />
-                  Grafik Perkembangan Penjualan Produk ({periodMonths} Bulan Terakhir)
+                  Grafik Perkembangan Penjualan Produk ({monthKeys.length} Bulan Analisis)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Visualisasi grafik batang{' '}
@@ -860,7 +904,7 @@ export default function MonthlyTrendsView({
               <div>
                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-purple-600" />
-                  Grafik Perkembangan Belanja Purchase Order ({periodMonths} Bulan Terakhir)
+                  Grafik Perkembangan Belanja Purchase Order ({monthKeys.length} Bulan Analisis)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Visualisasi grafik{' '}
