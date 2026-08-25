@@ -2322,32 +2322,13 @@ export default function MasterDataPage() {
                     </button>
                   </>
                 )}
-                {canUserExportXLSX(currentUser) && (
-                  <button
-                    type="button"
-                    onClick={handleExportCurrentTab}
-                    className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                    title={`Ekspor Data ${TAB_LABELS[activeTab] ?? activeTab} ke Excel (.xlsx)`}
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Ekspor XLSX
-                  </button>
-                )}
                 {activeTab === 'products' && (
                   <button
                     type="button"
                     onClick={() => setIsAppModalOpen(true)}
-                    className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                    className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Settings className="w-3.5 h-3.5" /> Kelola Pilihan Aplikasi
-                  </button>
-                )}
-                {activeTab !== 'pricelist' && activeTab !== 'finance' && (
-                  <button
-                    type="button"
-                    onClick={handleOpenAddModal}
-                    className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Tambah {activeTab.slice(0, -1)} baru
                   </button>
                 )}
               </div>
