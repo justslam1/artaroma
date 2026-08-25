@@ -9,7 +9,7 @@ import {
   initialCouriers,
   initialAppUsers,
 } from '@/lib/mock-data';
-import { Customer, Product, Distributor, Courier, AppUser, FragranceFamily, UserRole } from '@/lib/types';
+import { Customer, Product, Distributor, Courier, AppUser, FragranceFamily, UserRole, NotificationPreferences } from '@/lib/types';
 import { formatIDR, formatKg } from '@/lib/utils';
 import { getUsdExchangeRate, setUsdExchangeRate, convertUsdToIdr } from '@/lib/currency-store';
 import {
@@ -63,6 +63,8 @@ import {
   Eye,
   Zap,
   Upload,
+  Smartphone,
+  Bell,
 } from 'lucide-react';
 import {
   exportUsersToXLSX,
@@ -714,6 +716,30 @@ export default function MasterDataPage() {
   const [userModuleAccess, setUserModuleAccess] = useState<Record<string, string[]>>({});
   const [editingAccessUserId, setEditingAccessUserId] = useState<string | null>(null);
   const [draftModules, setDraftModules] = useState<string[]>([]);
+  const [draftNotifPrefs, setDraftNotifPrefs] = useState<NotificationPreferences>({
+    orders: true,
+    payments: true,
+    dues: true,
+    stock: true,
+    deliveries: true,
+  });
+
+  const handleRevokeUserDevices = async (userId: string, userName: string) => {
+    if (confirm(`Apakah Anda yakin ingin memutuskan semua koneksi perangkat notifikasi HP untuk pengguna "${userName}"?`)) {
+      try {
+        const res = await fetch(`/api/users?action=revoke_devices&user_id=${userId}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          alert(json.message || 'Perangkat notifikasi berhasil diputus.');
+          fetchUsers();
+        } else {
+          alert(json.message || 'Gagal memutus perangkat.');
+        }
+      } catch (e: any) {
+        alert(`Error: ${e.message}`);
+      }
+    }
+  };
 
   const fetchUsers = () => {
     fetch('/api/users', { cache: 'no-store' })
@@ -1251,6 +1277,13 @@ export default function MasterDataPage() {
         password: 'Artaroma2026!',
       });
       setDraftModules(userModuleAccess[u.id] || ['Dashboard']);
+      setDraftNotifPrefs(u.notification_preferences || {
+        orders: true,
+        payments: true,
+        dues: true,
+        stock: true,
+        deliveries: true,
+      });
     }
   };
 
@@ -1546,6 +1579,7 @@ export default function MasterDataPage() {
         email: userForm.email,
         role: userForm.role,
         linked_entity_name: userForm.linked_entity_name,
+        notification_preferences: draftNotifPrefs,
         is_active: true,
         last_login: 'Baru mendaftar',
         created_at: new Date().toISOString().split('T')[0],
@@ -1756,7 +1790,7 @@ export default function MasterDataPage() {
     } else if (editingItem.type === 'users') {
       const userId = editingItem.data.id;
       
-      // Update core profile details
+      // Update core profile details and notification preferences
       fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1767,6 +1801,7 @@ export default function MasterDataPage() {
           role: userForm.role,
           linked_entity_name: userForm.linked_entity_name,
           is_active: editingItem.data.is_active !== undefined ? editingItem.data.is_active : true,
+          notification_preferences: draftNotifPrefs,
         }),
       })
       .then((res) => res.json())
@@ -1804,6 +1839,7 @@ export default function MasterDataPage() {
                 role: userForm.role,
                 linked_entity_name: userForm.linked_entity_name,
                 allowed_modules: draftModules,
+                notification_preferences: draftNotifPrefs,
               }
             : u
         )
@@ -3155,6 +3191,7 @@ export default function MasterDataPage() {
                   <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                     <th className="px-6 py-3">Nama Pengguna &amp; Email</th>
                     <th className="px-6 py-3">Modul yang Dapat Diakses</th>
+                    <th className="px-6 py-3">Preferensi Notifikasi &amp; HP</th>
                     <th className="px-6 py-3">Entitas / Unit Terkait</th>
                     <th className="px-6 py-3">Terakhir Login</th>
                     <th className="px-6 py-3">Status</th>
@@ -3171,6 +3208,13 @@ export default function MasterDataPage() {
                     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id', { sensitivity: 'base' }))
                     .map((u) => {
                       const assigned = userModuleAccess[u.id] || [];
+                      const notifs = u.notification_preferences || {
+                        orders: true,
+                        payments: true,
+                        dues: true,
+                        stock: true,
+                        deliveries: true,
+                      };
                       return (
                         <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-3.5">
@@ -3182,7 +3226,7 @@ export default function MasterDataPage() {
                           </td>
 
                           <td className="px-6 py-3.5">
-                            <div className="flex flex-wrap gap-1 max-w-md">
+                            <div className="flex flex-wrap gap-1 max-w-xs">
                               {assigned.length > 0 ? (
                                 assigned.map((mod) => (
                                   <span
@@ -3194,6 +3238,59 @@ export default function MasterDataPage() {
                                 ))
                               ) : (
                                 <span className="text-slate-400 text-xs italic">Belum ada modul</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-6 py-3.5">
+                            <div className="space-y-1.5 max-w-xs">
+                              <div className="flex flex-wrap gap-1">
+                                {notifs.orders !== false && (
+                                  <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[9px] px-1.5 py-0.2 rounded font-extrabold" title="Notifikasi Pesanan Baru">
+                                    📦 Pesanan
+                                  </span>
+                                )}
+                                {notifs.payments !== false && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] px-1.5 py-0.2 rounded font-extrabold" title="Notifikasi Bukti Transfer">
+                                    💳 Bukti Bayar
+                                  </span>
+                                )}
+                                {notifs.dues !== false && (
+                                  <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[9px] px-1.5 py-0.2 rounded font-extrabold" title="Notifikasi Jatuh Tempo Piutang">
+                                    ⚠️ Jatuh Tempo
+                                  </span>
+                                )}
+                                {notifs.stock !== false && (
+                                  <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[9px] px-1.5 py-0.2 rounded font-extrabold" title="Notifikasi Stok/ED">
+                                    🧪 Stok/ED
+                                  </span>
+                                )}
+                                {notifs.deliveries !== false && (
+                                  <span className="bg-sky-50 text-sky-700 border border-sky-200 text-[9px] px-1.5 py-0.2 rounded font-extrabold" title="Notifikasi Serah Terima Kurir">
+                                    🛵 Kurir
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Registered Device Indicator */}
+                              {(u.registered_devices_count || 0) > 0 ? (
+                                <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md w-fit">
+                                  <Smartphone className="w-3 h-3 text-emerald-600" />
+                                  <span>{u.registered_devices_count} HP Terhubung</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevokeUserDevices(u.id, u.name)}
+                                    className="text-rose-600 hover:text-rose-800 underline ml-1 cursor-pointer font-bold text-[9px]"
+                                    title="Putus / cabut semua perangkat HP untuk pengguna ini"
+                                  >
+                                    Putus
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1 font-medium">
+                                  <Smartphone className="w-3 h-3 opacity-40" />
+                                  <span>Belum ada HP terhubung</span>
+                                </div>
                               )}
                             </div>
                           </td>
@@ -6018,6 +6115,118 @@ export default function MasterDataPage() {
                     </div>
                     <div className="text-[10px] text-violet-700 font-medium">
                       {draftModules.length} dari {ALL_MODULES.length} modul aktif untuk pengguna ini
+                    </div>
+                  </div>
+
+                  {/* Preferensi Notifikasi HP Card */}
+                  <div className="bg-sky-50/80 border border-sky-200 p-3.5 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Bell className="w-4 h-4 text-sky-700" />
+                        <label className="font-bold text-sky-950 block text-[11px] uppercase tracking-wide">
+                          Preferensi Notifikasi HP &amp; Push Alerts:
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: true, payments: true, dues: true, stock: true, deliveries: true })}
+                          className="text-sky-700 hover:text-sky-900 font-bold underline cursor-pointer"
+                        >
+                          Semua
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: true, payments: false, dues: false, stock: false, deliveries: true })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Sales
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: false, payments: true, dues: true, stock: false, deliveries: false })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Finance
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: false, payments: false, dues: false, stock: true, deliveries: true })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Gudang
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.orders !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, orders: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">📦 Pesanan Baru (Sales Order)</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat customer order dari katalog</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.payments !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, payments: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">💳 Bukti Transfer Pembayaran</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat bukti bayar diupload customer</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.dues !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, dues: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">⚠️ Tagihan Jatuh Tempo &amp; Overdue</div>
+                          <div className="text-[9px] text-slate-500">Peringatan invoice piutang mendekati jatuh tempo</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.stock !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, stock: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">🧪 Peringatan Stok Menipis &amp; ED</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi stok kritis dan batch expired</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.deliveries !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, deliveries: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">🛵 Serah Terima Pengiriman Kurir</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat kurir menyelesaikan pengantaran &amp; upload foto bukti penerimaan</div>
+                        </div>
+                      </label>
                     </div>
                   </div>
 

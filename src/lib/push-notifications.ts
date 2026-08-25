@@ -107,6 +107,7 @@ export async function removePushSubscription(endpointOrId: string) {
 export interface PushNotificationPayload {
   title: string;
   body: string;
+  category?: 'orders' | 'payments' | 'dues' | 'stock' | 'deliveries';
   icon?: string;
   badge?: string;
   url?: string;
@@ -114,21 +115,48 @@ export interface PushNotificationPayload {
 }
 
 /**
- * Send Web Push notification to all active subscribers (e.g. Admin phones & tablets)
+ * Send Web Push notification to all active subscribers with category preference filtering
  */
 export async function sendPushNotificationToAll(payload: PushNotificationPayload) {
   await ensurePushTableExists();
 
   let subscribers: any[] = [];
   try {
-    subscribers = await executeQuery(`SELECT * FROM push_subscriptions`);
+    subscribers = await executeQuery(`
+      SELECT ps.*, u.notification_preferences 
+      FROM push_subscriptions ps
+      LEFT JOIN users u ON ps.user_id = u.id
+    `);
   } catch (err: any) {
     console.warn('[WebPush] Fetch subscribers error:', err.message);
-    return { success: false, sentCount: 0 };
+    try {
+      subscribers = await executeQuery(`SELECT * FROM push_subscriptions`);
+    } catch {
+      return { success: false, sentCount: 0 };
+    }
   }
 
   if (!subscribers || subscribers.length === 0) {
     return { success: true, sentCount: 0, message: 'No registered devices found' };
+  }
+
+  // Filter subscribers who have this category enabled in their user preferences
+  if (payload.category) {
+    subscribers = subscribers.filter((sub) => {
+      if (!sub.notification_preferences) return true; // default enabled
+      try {
+        const prefs =
+          typeof sub.notification_preferences === 'string'
+            ? JSON.parse(sub.notification_preferences)
+            : sub.notification_preferences;
+        if (prefs[payload.category!] === false) {
+          return false;
+        }
+      } catch {
+        // ignore
+      }
+      return true;
+    });
   }
 
   const notificationPayload = JSON.stringify({
@@ -138,8 +166,9 @@ export async function sendPushNotificationToAll(payload: PushNotificationPayload
     badge: payload.badge || '/icon.png',
     data: {
       url: payload.url || '/admin',
+      category: payload.category || 'general',
     },
-    tag: payload.tag || 'artaroma-notification',
+    tag: payload.tag || `artaroma-${payload.category || 'notif'}`,
   });
 
   let sentCount = 0;

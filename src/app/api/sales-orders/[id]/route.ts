@@ -252,6 +252,7 @@ export async function PUT(
         sendPushNotificationToAll({
           title: `💳 Bukti Transfer Masuk (${existingOrders[0]?.so_number || soId})`,
           body: `Customer baru saja mengunggah bukti pembayaran transfer. Perlu verifikasi kas.`,
+          category: 'payments',
           icon: '/icon.png',
           url: `/admin/sales-orders?so=${existingOrders[0]?.so_number || soId}`,
           tag: `proof-${realId}`,

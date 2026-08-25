@@ -319,6 +319,11 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
           console.log('[Schema Migration] Added column users.last_login');
         }
 
+        if (!userColNames.has('notification_preferences')) {
+          await conn.query('ALTER TABLE users ADD COLUMN notification_preferences LONGTEXT DEFAULT NULL');
+          console.log('[Schema Migration] Added column users.notification_preferences');
+        }
+
         // Check if bossanova account exists
         const [existingBoss]: any = await conn.query(
           "SELECT id FROM users WHERE LOWER(email) = 'boss@artaroma.com' OR LOWER(name) = 'bossanova' LIMIT 1"

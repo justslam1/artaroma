@@ -152,6 +152,14 @@ export const SYSTEM_MODULES = [
 
 export type SystemModule = (typeof SYSTEM_MODULES)[number];
 
+export interface NotificationPreferences {
+  orders?: boolean;      // 📦 Pesanan Baru Masuk (Sales Orders)
+  payments?: boolean;    // 💳 Bukti Transfer Pembayaran Diunggah
+  dues?: boolean;        // ⚠️ Tagihan Piutang Jatuh Tempo & Overdue
+  stock?: boolean;       // 🧪 Peringatan Stok Menipis & Expired (FEFO)
+  deliveries?: boolean;  // 🛵 Pengiriman & Foto Serah Terima Kurir (POD)
+}
+
 export interface AppUser {
   id: string;
   name: string;
@@ -159,6 +167,9 @@ export interface AppUser {
   role?: UserRole;
   linked_entity_name?: string;
   allowed_modules?: string[];
+  notification_preferences?: NotificationPreferences;
+  registered_devices_count?: number;
+  registered_devices?: Array<{ id: string; user_agent?: string; updated_at?: string }>;
   is_active: boolean;
   is_hidden?: boolean;
   last_login?: string;

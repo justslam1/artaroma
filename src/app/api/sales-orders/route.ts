@@ -190,6 +190,7 @@ export async function POST(req: NextRequest) {
       sendPushNotificationToAll({
         title: `📦 Sales Order Baru (${soNumber})`,
         body: `${customer?.company_name || customer?.pic_name || 'Customer B2B'} mengajukan pesanan baru senilai Rp ${Math.round(grandTotal).toLocaleString('id-ID')}`,
+        category: 'orders',
         icon: '/icon.png',
         url: `/admin/orders/${soId}`,
         tag: `so-${soId}`,
