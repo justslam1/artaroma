@@ -91,7 +91,7 @@ export default function CashManagementPage() {
     try {
       let masterBanks: any[] = [];
       let purchaseOrders: any[] = [];
-      let invoices: any[] = [];
+      let salesOrders: any[] = [];
 
       try {
         const [settingsRes, poRes, soRes] = await Promise.all([
@@ -117,7 +117,7 @@ export default function CashManagementPage() {
         if (soRes.ok) {
           const sJson = await soRes.json();
           if (sJson.success && Array.isArray(sJson.data)) {
-            invoices = sJson.data;
+            salesOrders = sJson.data;
           }
         }
       } catch (err) {
@@ -127,9 +127,9 @@ export default function CashManagementPage() {
       // 1. Sync live bank accounts
       let accs = syncBankAccountsFromMaster(masterBanks);
 
-      // 2. Auto-sync Cash Transactions from Restored POs & Invoices
+      // 2. Auto-sync Cash Transactions from Restored POs & Sales Orders
       const storedTxs = getStoredCashTransactions();
-      const allTxs = syncCashTransactionsFromOrders(purchaseOrders, invoices, storedTxs);
+      const allTxs = syncCashTransactionsFromOrders(purchaseOrders, salesOrders, [], storedTxs);
       saveStoredCashTransactions(allTxs);
 
       // 3. Recalculate account balances

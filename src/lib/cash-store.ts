@@ -228,6 +228,7 @@ export function recalculateBalances(
  */
 export function syncCashTransactionsFromOrders(
   purchaseOrders: any[] = [],
+  salesOrders: any[] = [],
   invoices: any[] = [],
   existingTxs: CashTransaction[] = []
 ): CashTransaction[] {
@@ -299,7 +300,91 @@ export function syncCashTransactionsFromOrders(
     }
   }
 
-  // 3. Generate BKM transactions from Invoices payment_history
+  // 3. Generate BKM transactions from Sales Orders (SO)
+  for (const so of salesOrders) {
+    if (so.status === 'DIBATALKAN' || so.status === 'CANCELLED') continue;
+
+    const history: any[] = Array.isArray(so.payment_history)
+      ? so.payment_history
+      : typeof so.payment_history === 'string'
+      ? (() => { try { return JSON.parse(so.payment_history); } catch { return []; } })()
+      : [];
+
+    if (history.length > 0) {
+      history.forEach((pay: any, idx: number) => {
+        const txId = pay.id || `tx-so-${so.id}-${idx}`;
+        const accId = pay.bank_account_id || (pay.bank_name?.toLowerCase().includes('mandiri') ? 'acc-mandiri' : pay.bank_name?.toLowerCase().includes('bni') ? 'acc-bni' : 'acc-bca');
+        const txNum = pay.reference_no || `BKM-SO-${(pay.payment_date || '2026-08-20').replace(/-/g, '').slice(0, 6)}-${String(idx + 1).padStart(3, '0')}`;
+        txMap.set(txId, {
+          id: txId,
+          tx_number: txNum,
+          date: pay.payment_date || (so.order_date ? so.order_date.split('T')[0] : '2026-08-23'),
+          account_id: accId,
+          account_name: pay.bank_name || 'Bank Central Asia (BCA)',
+          tx_type: 'IN',
+          category: 'PENJUALAN_SO',
+          amount: Number(pay.amount || 0),
+          balance_after: 0,
+          recipient_or_payer: so.customer_company || so.customer_name || 'Customer B2B',
+          reference_number: so.so_number || 'Sales Order',
+          notes: pay.payment_notes || `Pelunasan pesanan ${so.so_number}`,
+          proof_url: pay.payment_proof_url || so.payment_proof_url,
+          created_by: pay.created_by || 'Staf Finance',
+          status: 'VERIFIED',
+          created_at: pay.created_at || new Date().toISOString(),
+        });
+      });
+    } else if (Number(so.paid_amount || 0) > 0) {
+      const txId = `tx-so-paid-${so.id}`;
+      const accId = 'acc-bca';
+      const txNum = `BKM-SO-${so.so_number || so.id}`;
+      txMap.set(txId, {
+        id: txId,
+        tx_number: txNum,
+        date: so.delivered_date ? so.delivered_date.split('T')[0] : (so.order_date ? so.order_date.split('T')[0] : '2026-08-23'),
+        account_id: accId,
+        account_name: 'Bank Central Asia (BCA)',
+        tx_type: 'IN',
+        category: 'PENJUALAN_SO',
+        amount: Number(so.paid_amount),
+        balance_after: 0,
+        recipient_or_payer: so.customer_company || so.customer_name || 'Customer B2B',
+        reference_number: so.so_number || 'Sales Order',
+        notes: `Pelunasan pesanan ${so.so_number}`,
+        proof_url: so.payment_proof_url,
+        created_by: 'Staf Finance',
+        status: 'VERIFIED',
+        created_at: new Date().toISOString(),
+      });
+    } else if (so.payment_method === 'LUNAS_TRANSFER' || so.payment_status === 'PAID') {
+      const txId = `tx-so-prepaid-${so.id}`;
+      const accId = 'acc-bca';
+      const txNum = `BKM-SO-${so.so_number || so.id}`;
+      const amount = Number(so.grand_total || so.total_goods_amount || so.total_amount || 0);
+      if (amount > 0) {
+        txMap.set(txId, {
+          id: txId,
+          tx_number: txNum,
+          date: so.delivered_date ? so.delivered_date.split('T')[0] : (so.order_date ? so.order_date.split('T')[0] : '2026-08-23'),
+          account_id: accId,
+          account_name: 'Bank Central Asia (BCA)',
+          tx_type: 'IN',
+          category: 'PENJUALAN_SO',
+          amount,
+          balance_after: 0,
+          recipient_or_payer: so.customer_company || so.customer_name || 'Customer B2B',
+          reference_number: so.so_number || 'Sales Order',
+          notes: `Pembayaran lunas transfer pesanan ${so.so_number}`,
+          proof_url: so.payment_proof_url,
+          created_by: 'Staf Finance',
+          status: 'VERIFIED',
+          created_at: so.order_date || new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  // 4. Generate BKM transactions from Invoices
   for (const inv of invoices) {
     const history: any[] = Array.isArray(inv.payment_history)
       ? inv.payment_history
@@ -333,26 +418,28 @@ export function syncCashTransactionsFromOrders(
       });
     } else if (Number(inv.paid_amount || 0) > 0) {
       const txId = `tx-inv-paid-${inv.id}`;
-      const accId = 'acc-bca';
-      const txNum = `BKM-INV-${inv.invoice_number || inv.id}`;
-      txMap.set(txId, {
-        id: txId,
-        tx_number: txNum,
-        date: inv.last_payment_date || (inv.issue_date ? inv.issue_date.split('T')[0] : '2026-08-23'),
-        account_id: accId,
-        account_name: 'Bank Central Asia (BCA)',
-        tx_type: 'IN',
-        category: 'PENJUALAN_SO',
-        amount: Number(inv.paid_amount),
-        balance_after: 0,
-        recipient_or_payer: inv.customer_name || 'Customer B2B',
-        reference_number: inv.invoice_number || inv.so_number || 'Invoice',
-        notes: `Pelunasan invoice ${inv.invoice_number}`,
-        proof_url: inv.payment_proof_url,
-        created_by: 'Staf Finance',
-        status: 'VERIFIED',
-        created_at: new Date().toISOString(),
-      });
+      if (!txMap.has(`tx-so-paid-${inv.so_id}`) && !txMap.has(`tx-so-prepaid-${inv.so_id}`)) {
+        const accId = 'acc-bca';
+        const txNum = `BKM-INV-${inv.invoice_number || inv.id}`;
+        txMap.set(txId, {
+          id: txId,
+          tx_number: txNum,
+          date: inv.last_payment_date || (inv.issue_date ? inv.issue_date.split('T')[0] : '2026-08-23'),
+          account_id: accId,
+          account_name: 'Bank Central Asia (BCA)',
+          tx_type: 'IN',
+          category: 'PENJUALAN_SO',
+          amount: Number(inv.paid_amount),
+          balance_after: 0,
+          recipient_or_payer: inv.customer_name || 'Customer B2B',
+          reference_number: inv.invoice_number || inv.so_number || 'Invoice',
+          notes: `Pelunasan invoice ${inv.invoice_number}`,
+          proof_url: inv.payment_proof_url,
+          created_by: 'Staf Finance',
+          status: 'VERIFIED',
+          created_at: new Date().toISOString(),
+        });
+      }
     }
   }
 
