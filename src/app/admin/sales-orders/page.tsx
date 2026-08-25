@@ -316,13 +316,30 @@ export default function SalesOrdersPage() {
     (sum, so: any) => sum + Number(so.grand_total || so.total_goods_amount || so.total_amount || 0),
     0
   );
+
+  // SOs that have reached the confirmation stage (Tahap "Konfirmasi" dan seterusnya)
+  const confirmedSOs = salesOrders.filter((so: any) => 
+    so.status !== 'DIAJUKAN' && 
+    so.status !== 'PENDING_APPROVAL' && 
+    so.status !== 'DIBATALKAN' && 
+    so.status !== 'CANCELLED'
+  );
+
   const totalSudahDibayar = activeSOs.reduce((sum, so: any) => {
     const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
     const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
     return sum + paid;
   }, 0);
-  const totalSisaPiutang = Math.max(0, totalSemuaSO - totalSudahDibayar);
-  const countSOWithPiutang = activeSOs.filter((so: any) => {
+
+  // Aturan Piutang: SO masuk ke dalam kartu "Sisa Piutang Customer Perlu Ditagih" ketika di tahap "Konfirmasi" (dan seterusnya)
+  const totalSisaPiutang = confirmedSOs.reduce((sum, so: any) => {
+    const soTotal = Number(so.grand_total || so.total_goods_amount || so.total_amount || 0);
+    const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
+    const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
+    return sum + Math.max(0, soTotal - paid);
+  }, 0);
+
+  const countSOWithPiutang = confirmedSOs.filter((so: any) => {
     const soTotal = Number(so.grand_total || so.total_goods_amount || so.total_amount || 0);
     const inv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
     const paid = inv ? Number(inv.paid_amount || 0) : Number(so.paid_amount || 0);
@@ -544,7 +561,7 @@ export default function SalesOrdersPage() {
                   {isFinancialHidden ? 'Rp •••••••' : formatIDR(totalSisaPiutang)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">
-                  {countSOWithPiutang} SO memiliki sisa piutang
+                  {countSOWithPiutang} SO terkonfirmasi memiliki sisa piutang
                 </div>
               </div>
               <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">

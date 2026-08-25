@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
     try {
       const invoices: any[] = await executeQuery('SELECT * FROM invoices');
-      const salesOrders: any[] = await executeQuery("SELECT * FROM sales_orders WHERE status != 'CANCELLED'");
+      const salesOrders: any[] = await executeQuery("SELECT * FROM sales_orders WHERE status NOT IN ('CANCELLED', 'DIBATALKAN', 'DIAJUKAN', 'PENDING_APPROVAL')");
       const cogsRows: any[] = await executeQuery(
         'SELECT SUM(qty_taken_kg * cogs_per_kg) as total_cogs FROM so_item_batches'
       );
