@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Sparkles, ShoppingBag, FileText, ShieldAlert, CheckCircle2, LogOut } from 'lucide-react';
+import { Sparkles, ShoppingBag, FileText, ShieldAlert, CheckCircle2, LogOut, KeyRound } from 'lucide-react';
 import { Customer } from '@/lib/types';
 import { formatIDR } from '@/lib/utils';
+import { CustomerPasswordModal } from '@/components/customer/customer-password-modal';
 
 interface CustomerNavProps {
   currentCustomer: Customer;
@@ -17,6 +18,7 @@ interface CustomerNavProps {
 
 export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = [], cartCount = 0, onOpenCart }: CustomerNavProps) {
   const pathname = usePathname();
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const currentPiutang = Number(currentCustomer?.current_piutang) || 0;
   const creditLimit = Number(currentCustomer?.credit_limit) || 0;
   const creditUsedPercent = creditLimit > 0 ? Math.min(100, Math.round((currentPiutang / creditLimit) * 100)) : 0;
@@ -131,6 +133,17 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
               </button>
             )}
 
+            {currentCustomer && (
+              <button
+                onClick={() => setIsPasswordModalOpen(true)}
+                title="Ganti Password Akun B2B"
+                className="bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Ganti Password</span>
+              </button>
+            )}
+
             <button
               onClick={async () => {
                 if (confirm('Keluar dari sesi akun Customer?')) {
@@ -182,6 +195,15 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
           </div>
         </div>
       </nav>
+
+      {/* Customer Change Password Modal */}
+      {currentCustomer && (
+        <CustomerPasswordModal
+          isOpen={isPasswordModalOpen}
+          onClose={() => setIsPasswordModalOpen(false)}
+          customer={currentCustomer}
+        />
+      )}
     </>
   );
 }
