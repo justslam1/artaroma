@@ -1125,45 +1125,6 @@ export function AdminTopNav() {
         </div>
       </nav>
 
-      {/* Sub-Bar Navigation when inside Finance Pages */}
-      {isFinanceActive && (
-        <div className="bg-blue-800 border-t border-blue-600 text-white shadow-inner">
-          <div className="max-w-screen-2xl mx-auto px-6 flex items-center gap-2 py-1.5 text-xs font-semibold">
-            <span className="text-blue-200 font-normal">Menu Keuangan:</span>
-            <Link
-              href="/admin/sales-orders"
-              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                isSOActive
-                  ? 'bg-white text-blue-900 font-bold shadow-sm'
-                  : 'text-blue-100 hover:bg-blue-700'
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" /> Sales Order & Piutang
-            </Link>
-            <Link
-              href="/admin/procurement"
-              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                isPOActive
-                  ? 'bg-white text-blue-900 font-bold shadow-sm'
-                  : 'text-blue-100 hover:bg-blue-700'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" /> Purchase Order & Hutang
-            </Link>
-            <Link
-              href="/admin/finance/cash"
-              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                isCashManagementActive
-                  ? 'bg-white text-blue-900 font-bold shadow-sm'
-                  : 'text-blue-100 hover:bg-blue-700'
-              }`}
-            >
-              <Landmark className="w-3.5 h-3.5" /> Manajemen Kas
-            </Link>
-          </div>
-        </div>
-      )}
-
       {/* FLOATING REAL-TIME TOAST NOTIFICATION FOR NEW SALES ORDER / TRANSFER PROOF */}
       {toastNotif && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-blue-500/50 max-w-sm w-full animate-in slide-in-from-bottom-5 duration-200">
