@@ -17,6 +17,8 @@ import {
   transferCashBetweenAccounts,
   deleteCashTransaction,
   syncBankAccountsFromMaster,
+  syncCashTransactionsFromOrders,
+  recalculateBalances,
 } from '@/lib/cash-store';
 import { formatIDR, formatDate } from '@/lib/utils';
 import { exportCashLedgerToXLSX } from '@/lib/export-excel';
@@ -83,25 +85,59 @@ export default function CashManagementPage() {
     referenceNumber?: string;
   }>({ isOpen: false });
 
-  // Load Data with Master Data Bank sync
+  // Load Data with Master Data Bank sync & Database Order payment sync
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch live bank accounts from MySQL / Master Data API
+      let masterBanks: any[] = [];
+      let purchaseOrders: any[] = [];
+      let invoices: any[] = [];
+
       try {
-        const res = await fetch('/api/company-settings', { cache: 'no-store' });
-        const json = await res.json();
-        if (json.success && json.data?.bank_accounts) {
-          syncBankAccountsFromMaster(json.data.bank_accounts);
+        const [settingsRes, poRes, soRes] = await Promise.all([
+          fetch('/api/company-settings', { cache: 'no-store' }),
+          fetch('/api/purchase-orders', { cache: 'no-store' }),
+          fetch('/api/sales-orders', { cache: 'no-store' }),
+        ]);
+
+        if (settingsRes.ok) {
+          const sJson = await settingsRes.json();
+          if (sJson.success && sJson.data?.bank_accounts) {
+            masterBanks = sJson.data.bank_accounts;
+          }
+        }
+
+        if (poRes.ok) {
+          const pJson = await poRes.json();
+          if (pJson.success && Array.isArray(pJson.data)) {
+            purchaseOrders = pJson.data;
+          }
+        }
+
+        if (soRes.ok) {
+          const sJson = await soRes.json();
+          if (sJson.success && Array.isArray(sJson.data)) {
+            invoices = sJson.data;
+          }
         }
       } catch (err) {
-        console.warn('Failed to fetch bank accounts from Master Data API:', err);
+        console.warn('Failed to fetch data for cash page:', err);
       }
 
-      const accs = getStoredCashAccounts();
-      const txs = getStoredCashTransactions();
+      // 1. Sync live bank accounts
+      let accs = syncBankAccountsFromMaster(masterBanks);
+
+      // 2. Auto-sync Cash Transactions from Restored POs & Invoices
+      const storedTxs = getStoredCashTransactions();
+      const allTxs = syncCashTransactionsFromOrders(purchaseOrders, invoices, storedTxs);
+      saveStoredCashTransactions(allTxs);
+
+      // 3. Recalculate account balances
+      accs = recalculateBalances(accs, allTxs);
+      saveStoredCashAccounts(accs);
+
       setAccounts(accs);
-      setTransactions(txs);
+      setTransactions(allTxs);
     } finally {
       setIsLoading(false);
     }

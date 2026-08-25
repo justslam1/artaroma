@@ -224,6 +224,144 @@ export function recalculateBalances(
 }
 
 /**
+ * Automatically sync cash ledger transactions from database Purchase Orders & Invoices payments
+ */
+export function syncCashTransactionsFromOrders(
+  purchaseOrders: any[] = [],
+  invoices: any[] = [],
+  existingTxs: CashTransaction[] = []
+): CashTransaction[] {
+  const txMap = new Map<string, CashTransaction>();
+
+  // 1. Keep existing manual transactions (e.g. transfers, manual operational expenses)
+  for (const tx of existingTxs) {
+    if (tx && tx.id) {
+      txMap.set(tx.id, tx);
+    }
+  }
+
+  // 2. Generate BKK transactions from Purchase Orders payment_history
+  for (const po of purchaseOrders) {
+    if (po.status === 'DIBATALKAN' || po.status === 'CANCELLED') continue;
+
+    const history: any[] = Array.isArray(po.payment_history)
+      ? po.payment_history
+      : typeof po.payment_history === 'string'
+      ? (() => { try { return JSON.parse(po.payment_history); } catch { return []; } })()
+      : [];
+
+    if (history.length > 0) {
+      history.forEach((pay: any, idx: number) => {
+        const txId = pay.id || `tx-po-${po.id}-${idx}`;
+        const accId = pay.bank_account_id || (pay.bank_name?.toLowerCase().includes('mandiri') ? 'acc-mandiri' : pay.bank_name?.toLowerCase().includes('bni') ? 'acc-bni' : 'acc-bca');
+        const txNum = pay.reference_no || `BKK-PO-${(pay.payment_date || '2026-08-20').replace(/-/g, '').slice(0, 6)}-${String(idx + 1).padStart(3, '0')}`;
+        txMap.set(txId, {
+          id: txId,
+          tx_number: txNum,
+          date: pay.payment_date || (po.order_date ? po.order_date.split('T')[0] : '2026-08-23'),
+          account_id: accId,
+          account_name: pay.bank_name || 'Bank Central Asia (BCA)',
+          tx_type: 'OUT',
+          category: 'PEMBELIAN_PO',
+          amount: Number(pay.amount || 0),
+          balance_after: 0,
+          recipient_or_payer: po.distributor_name || 'Vendor Suplier',
+          reference_number: po.po_number || 'PO Tagihan',
+          notes: pay.payment_notes || `Pembayaran tagihan ${po.po_number}`,
+          proof_url: pay.payment_proof_url,
+          created_by: pay.created_by || 'Staf Finance',
+          status: 'VERIFIED',
+          created_at: pay.created_at || new Date().toISOString(),
+        });
+      });
+    } else if (Number(po.paid_amount || 0) > 0) {
+      const txId = `tx-po-paid-${po.id}`;
+      const accId = po.payment_bank_id || 'acc-bca';
+      const txNum = `BKK-PO-${po.po_number || po.id}`;
+      txMap.set(txId, {
+        id: txId,
+        tx_number: txNum,
+        date: po.last_payment_date || (po.order_date ? po.order_date.split('T')[0] : '2026-08-23'),
+        account_id: accId,
+        account_name: po.payment_bank_name || 'Bank Central Asia (BCA)',
+        tx_type: 'OUT',
+        category: 'PEMBELIAN_PO',
+        amount: Number(po.paid_amount),
+        balance_after: 0,
+        recipient_or_payer: po.distributor_name || 'Vendor Suplier',
+        reference_number: po.po_number || 'PO Tagihan',
+        notes: `Pembayaran tagihan ${po.po_number}`,
+        proof_url: po.payment_proof_url,
+        created_by: 'Staf Finance',
+        status: 'VERIFIED',
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  // 3. Generate BKM transactions from Invoices payment_history
+  for (const inv of invoices) {
+    const history: any[] = Array.isArray(inv.payment_history)
+      ? inv.payment_history
+      : typeof inv.payment_history === 'string'
+      ? (() => { try { return JSON.parse(inv.payment_history); } catch { return []; } })()
+      : [];
+
+    if (history.length > 0) {
+      history.forEach((pay: any, idx: number) => {
+        const txId = pay.id || `tx-inv-${inv.id}-${idx}`;
+        const accId = pay.bank_account_id || (pay.bank_name?.toLowerCase().includes('mandiri') ? 'acc-mandiri' : pay.bank_name?.toLowerCase().includes('bni') ? 'acc-bni' : 'acc-bca');
+        const txNum = pay.reference_no || `BKM-INV-${(pay.payment_date || '2026-08-20').replace(/-/g, '').slice(0, 6)}-${String(idx + 1).padStart(3, '0')}`;
+        txMap.set(txId, {
+          id: txId,
+          tx_number: txNum,
+          date: pay.payment_date || (inv.issue_date ? inv.issue_date.split('T')[0] : '2026-08-23'),
+          account_id: accId,
+          account_name: pay.bank_name || 'Bank Central Asia (BCA)',
+          tx_type: 'IN',
+          category: 'PENJUALAN_SO',
+          amount: Number(pay.amount || 0),
+          balance_after: 0,
+          recipient_or_payer: inv.customer_name || 'Customer B2B',
+          reference_number: inv.invoice_number || inv.so_number || 'Invoice',
+          notes: pay.payment_notes || `Pelunasan invoice ${inv.invoice_number}`,
+          proof_url: pay.payment_proof_url,
+          created_by: pay.created_by || 'Staf Finance',
+          status: 'VERIFIED',
+          created_at: pay.created_at || new Date().toISOString(),
+        });
+      });
+    } else if (Number(inv.paid_amount || 0) > 0) {
+      const txId = `tx-inv-paid-${inv.id}`;
+      const accId = 'acc-bca';
+      const txNum = `BKM-INV-${inv.invoice_number || inv.id}`;
+      txMap.set(txId, {
+        id: txId,
+        tx_number: txNum,
+        date: inv.last_payment_date || (inv.issue_date ? inv.issue_date.split('T')[0] : '2026-08-23'),
+        account_id: accId,
+        account_name: 'Bank Central Asia (BCA)',
+        tx_type: 'IN',
+        category: 'PENJUALAN_SO',
+        amount: Number(inv.paid_amount),
+        balance_after: 0,
+        recipient_or_payer: inv.customer_name || 'Customer B2B',
+        reference_number: inv.invoice_number || inv.so_number || 'Invoice',
+        notes: `Pelunasan invoice ${inv.invoice_number}`,
+        proof_url: inv.payment_proof_url,
+        created_by: 'Staf Finance',
+        status: 'VERIFIED',
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  const result = Array.from(txMap.values());
+  result.sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
+  return result;
+}
+
+/**
  * Record a single cash inflow or outflow transaction
  */
 export function recordCashTransaction(
