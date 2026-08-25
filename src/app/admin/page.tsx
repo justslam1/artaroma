@@ -129,12 +129,13 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const totalOmset = financeData ? financeData.total_revenue : initialSalesOrders.reduce((sum, so) => sum + (so.grand_total || 0), 0);
-  const totalPiutang = financeData ? financeData.total_piutang : customers.reduce((sum, c) => sum + c.current_piutang, 0);
-  const agingLancar = financeData ? financeData.aging_ar.ar_0_to_15_days : 0;
-  const agingMendekati = financeData ? financeData.aging_ar.ar_16_to_30_days : 0;
+  const totalOmset = financeData ? Number(financeData.total_revenue) || 0 : 0;
+  const totalPiutang = financeData ? Number(financeData.total_piutang) || 0 : 0;
+  const grossMarginPercent = financeData ? Number(financeData.gross_margin_percent) || 0 : 0;
+  const agingLancar = financeData?.aging_ar ? financeData.aging_ar.ar_0_to_15_days : 0;
+  const agingMendekati = financeData?.aging_ar ? financeData.aging_ar.ar_16_to_30_days : 0;
   const agingCurrent = agingLancar + agingMendekati;
-  const agingOverdue = financeData ? financeData.aging_ar.ar_over_30_days : invoices.filter((inv) => inv.status === 'OVERDUE').reduce((sum, inv) => sum + inv.total_amount, 0);
+  const agingOverdue = financeData?.aging_ar ? financeData.aging_ar.ar_over_30_days : 0;
   const countLancar = financeData?.aging_ar?.count_lancar ?? 0;
   const countMendekati = financeData?.aging_ar?.count_mendekati ?? 0;
   const countOverdue = financeData?.aging_ar?.count_overdue ?? 0;
@@ -527,7 +528,13 @@ export default function AdminDashboardPage() {
               </div>
               <div className="text-2xl font-bold text-slate-800 font-mono">{formatIDR(totalOmset)}</div>
               <div className="text-xs text-emerald-600 mt-2 flex items-center gap-1 font-medium">
-                <ArrowUpRight className="w-3.5 h-3.5" /> +14.2% vs bulan lalu
+                {totalOmset > 0 ? (
+                  <>
+                    <ArrowUpRight className="w-3.5 h-3.5" /> Transaksi Aktif
+                  </>
+                ) : (
+                  <span className="text-slate-400 font-normal">Belum ada transaksi</span>
+                )}
               </div>
             </div>
           )}
@@ -541,7 +548,9 @@ export default function AdminDashboardPage() {
                   <DollarSign className="w-4.5 h-4.5" />
                 </div>
               </div>
-              <div className="text-2xl font-bold text-slate-800">34.8%</div>
+              <div className="text-2xl font-bold text-slate-800">
+                {grossMarginPercent > 0 ? `${grossMarginPercent.toFixed(1)}%` : '0%'}
+              </div>
               <div className="text-xs text-slate-400 mt-2">Dihitung via HPP batch spesifik (FEFO)</div>
             </div>
           )}
