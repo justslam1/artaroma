@@ -7742,6 +7742,118 @@ export default function MasterDataPage() {
                     </div>
                   </div>
 
+                  {/* Preferensi Notifikasi HP Card (Edit Modal) */}
+                  <div className="bg-sky-50/80 border border-sky-200 p-3.5 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Bell className="w-4 h-4 text-sky-700" />
+                        <label className="font-bold text-sky-950 block text-[11px] uppercase tracking-wide">
+                          Preferensi Notifikasi HP &amp; Push Alerts:
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: true, payments: true, dues: true, stock: true, deliveries: true })}
+                          className="text-sky-700 hover:text-sky-900 font-bold underline cursor-pointer"
+                        >
+                          Semua
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: true, payments: false, dues: false, stock: false, deliveries: true })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Sales
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: false, payments: true, dues: true, stock: false, deliveries: false })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Finance
+                        </button>
+                        <span className="text-sky-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftNotifPrefs({ orders: false, payments: false, dues: false, stock: true, deliveries: true })}
+                          className="text-slate-600 hover:text-slate-900 font-medium underline cursor-pointer"
+                        >
+                          Gudang
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.orders !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, orders: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">📦 Pesanan Baru (Sales Order)</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat customer order dari katalog</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.payments !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, payments: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">💳 Bukti Transfer Pembayaran</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat bukti bayar diupload customer</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.dues !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, dues: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">⚠️ Tagihan Jatuh Tempo &amp; Overdue</div>
+                          <div className="text-[9px] text-slate-500">Peringatan invoice piutang mendekati jatuh tempo</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.stock !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, stock: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">🧪 Peringatan Stok Menipis &amp; ED</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi stok kritis dan batch expired</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-sky-100 cursor-pointer hover:bg-sky-50/50 transition-colors sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={draftNotifPrefs.deliveries !== false}
+                          onChange={(e) => setDraftNotifPrefs({ ...draftNotifPrefs, deliveries: e.target.checked })}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800 text-[11px]">🛵 Serah Terima Pengiriman Kurir</div>
+                          <div className="text-[9px] text-slate-500">Notifikasi saat kurir menyelesaikan pengantaran &amp; upload foto bukti penerimaan</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Perusahaan / Entitas Terkait</label>
                     <input
