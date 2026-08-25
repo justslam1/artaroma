@@ -85,6 +85,39 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
         console.warn('[Schema Migration Invoices Warning]:', e.message);
       }
 
+      // 2a. Check & Add missing columns in sales_orders (Proof of Delivery, payment proof, cancel metadata)
+      try {
+        const [soCols]: any = await conn.query('SHOW COLUMNS FROM sales_orders');
+        const soColNames = new Set(soCols.map((c: any) => c.Field.toLowerCase()));
+
+        const soMigrations = [
+          { col: 'payment_proof_url', sql: 'ALTER TABLE sales_orders ADD COLUMN payment_proof_url LONGTEXT DEFAULT NULL' },
+          { col: 'payment_status', sql: "ALTER TABLE sales_orders ADD COLUMN payment_status VARCHAR(50) DEFAULT 'UNPAID'" },
+          { col: 'received_by', sql: 'ALTER TABLE sales_orders ADD COLUMN received_by VARCHAR(255) DEFAULT NULL' },
+          { col: 'received_photo', sql: 'ALTER TABLE sales_orders ADD COLUMN received_photo LONGTEXT DEFAULT NULL' },
+          { col: 'received_signature', sql: 'ALTER TABLE sales_orders ADD COLUMN received_signature LONGTEXT DEFAULT NULL' },
+          { col: 'surat_jalan_number', sql: 'ALTER TABLE sales_orders ADD COLUMN surat_jalan_number VARCHAR(100) DEFAULT NULL' },
+          { col: 'courier_name', sql: 'ALTER TABLE sales_orders ADD COLUMN courier_name VARCHAR(100) DEFAULT NULL' },
+          { col: 'delivered_date', sql: 'ALTER TABLE sales_orders ADD COLUMN delivered_date DATETIME DEFAULT NULL' },
+          { col: 'cancellation_reason', sql: 'ALTER TABLE sales_orders ADD COLUMN cancellation_reason TEXT DEFAULT NULL' },
+          { col: 'cancelled_at', sql: 'ALTER TABLE sales_orders ADD COLUMN cancelled_at DATETIME DEFAULT NULL' },
+          { col: 'cancelled_by', sql: 'ALTER TABLE sales_orders ADD COLUMN cancelled_by VARCHAR(100) DEFAULT NULL' },
+        ];
+
+        for (const m of soMigrations) {
+          if (!soColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column sales_orders.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] sales_orders.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration Sales Orders Warning]:', e.message);
+      }
+
       // 2b. Check & Add missing columns in customers (PIC 2, PIC 3 & Phone numbers)
       try {
         const [custCols]: any = await conn.query('SHOW COLUMNS FROM customers');
