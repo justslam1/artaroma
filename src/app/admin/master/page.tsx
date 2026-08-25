@@ -32,6 +32,7 @@ import {
   Trash2,
   Settings,
   X,
+  XCircle,
   Check,
   Save,
   Key,
@@ -320,7 +321,7 @@ export default function MasterDataPage() {
   const [disposalReasons, setDisposalReasons] = useState<DisposalReason[]>([]);
   const [isDisposalReasonModalOpen, setIsDisposalReasonModalOpen] = useState(false);
   const [editingDisposalReason, setEditingDisposalReason] = useState<DisposalReason | null>(null);
-  const [disposalReasonForm, setDisposalReasonForm] = useState({ name: '', description: '' });
+  const [disposalReasonForm, setDisposalReasonForm] = useState({ name: '', description: '', is_active: true });
   const [isDisposalReasonSubmitting, setIsDisposalReasonSubmitting] = useState(false);
 
   const tabs = [
@@ -445,13 +446,17 @@ export default function MasterDataPage() {
 
   const handleOpenAddDisposalReason = () => {
     setEditingDisposalReason(null);
-    setDisposalReasonForm({ name: '', description: '' });
+    setDisposalReasonForm({ name: '', description: '', is_active: true });
     setIsDisposalReasonModalOpen(true);
   };
 
   const handleOpenEditDisposalReason = (reason: DisposalReason) => {
     setEditingDisposalReason(reason);
-    setDisposalReasonForm({ name: reason.name, description: reason.description || '' });
+    setDisposalReasonForm({
+      name: reason.name,
+      description: reason.description || '',
+      is_active: reason.is_active !== false,
+    });
     setIsDisposalReasonModalOpen(true);
   };
 
@@ -471,13 +476,19 @@ export default function MasterDataPage() {
             id: editingDisposalReason.id,
             name: disposalReasonForm.name,
             description: disposalReasonForm.description,
+            is_active: disposalReasonForm.is_active,
           }),
         });
         const json = await res.json();
         if (json.success) {
           const updated = disposalReasons.map((r) =>
             r.id === editingDisposalReason.id
-              ? { ...r, name: disposalReasonForm.name.trim(), description: disposalReasonForm.description.trim() }
+              ? {
+                  ...r,
+                  name: disposalReasonForm.name.trim(),
+                  description: disposalReasonForm.description.trim(),
+                  is_active: disposalReasonForm.is_active,
+                }
               : r
           );
           setDisposalReasons(updated);
@@ -490,11 +501,12 @@ export default function MasterDataPage() {
           body: JSON.stringify({
             name: disposalReasonForm.name,
             description: disposalReasonForm.description,
+            is_active: disposalReasonForm.is_active,
           }),
         });
         const json = await res.json();
         if (json.success && json.data) {
-          const updated = [...disposalReasons, json.data];
+          const updated = [...disposalReasons, { ...json.data, is_active: disposalReasonForm.is_active }];
           setDisposalReasons(updated);
           saveStoredDisposalReasons(updated);
         }
@@ -524,6 +536,46 @@ export default function MasterDataPage() {
       }
     } catch (err: any) {
       alert('Gagal menghapus: ' + err.message);
+    }
+  };
+
+  const handleToggleDisposalReasonStatus = async (reasonId: string, newStatus: boolean, reasonName: string) => {
+    try {
+      // Optimistic UI update
+      const updated = disposalReasons.map((r) =>
+        r.id === reasonId ? { ...r, is_active: newStatus } : r
+      );
+      setDisposalReasons(updated);
+      saveStoredDisposalReasons(updated);
+
+      const target = disposalReasons.find((r) => r.id === reasonId);
+      const res = await fetch('/api/disposal-reasons', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: reasonId,
+          name: target?.name || reasonName,
+          description: target?.description || '',
+          is_active: newStatus,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        // Revert if error
+        const reverted = disposalReasons.map((r) =>
+          r.id === reasonId ? { ...r, is_active: !newStatus } : r
+        );
+        setDisposalReasons(reverted);
+        saveStoredDisposalReasons(reverted);
+        alert(json.message || 'Gagal mengubah status alasan pembuangan.');
+      }
+    } catch (err: any) {
+      const reverted = disposalReasons.map((r) =>
+        r.id === reasonId ? { ...r, is_active: !newStatus } : r
+      );
+      setDisposalReasons(reverted);
+      saveStoredDisposalReasons(reverted);
+      alert('Terjadi kesalahan saat mengubah status alasan pembuangan.');
     }
   };
 
@@ -4396,9 +4448,40 @@ export default function MasterDataPage() {
                               {reason.description || <span className="text-slate-400 italic">Tidak ada deskripsi</span>}
                             </td>
                             <td className="px-4 py-3.5 text-center">
-                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                <CheckCircle2 className="w-3 h-3" /> Aktif
-                              </span>
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleDisposalReasonStatus(reason.id, reason.is_active === false, reason.name)}
+                                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-1 ${
+                                    reason.is_active !== false ? 'bg-emerald-600' : 'bg-slate-300'
+                                  }`}
+                                  title={reason.is_active !== false ? 'Klik untuk Menonaktifkan Alasan' : 'Klik untuk Mengaktifkan Alasan'}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                      reason.is_active !== false ? 'translate-x-4' : 'translate-x-0'
+                                    }`}
+                                  />
+                                </button>
+                                <span
+                                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border transition-colors inline-flex items-center gap-1 ${
+                                    reason.is_active !== false
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                                  }`}
+                                >
+                                  {reason.is_active !== false ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Aktif
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3 h-3 text-rose-600" /> Non-Aktif
+                                    </>
+                                  )}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <div className="flex items-center justify-center gap-1.5">
@@ -4484,6 +4567,32 @@ export default function MasterDataPage() {
                   onChange={(e) => setDisposalReasonForm({ ...disposalReasonForm, description: e.target.value })}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-rose-500 resize-none"
                 />
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <div className="text-xs font-bold text-slate-800">Status Alasan Pembuangan</div>
+                  <div className="text-[11px] text-slate-500">Alasan yang aktif akan muncul di pilihan form disposal gudang</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDisposalReasonForm({ ...disposalReasonForm, is_active: !disposalReasonForm.is_active })}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-rose-400 ${
+                      disposalReasonForm.is_active ? 'bg-emerald-600' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        disposalReasonForm.is_active ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-[11px] font-bold ${disposalReasonForm.is_active ? 'text-emerald-700' : 'text-slate-500'}`}>
+                    {disposalReasonForm.is_active ? 'Aktif' : 'Non-Aktif'}
+                  </span>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
