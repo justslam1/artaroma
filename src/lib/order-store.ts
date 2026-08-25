@@ -5,16 +5,15 @@ const ORDERS_KEY = 'artaroma_sales_orders_v1';
 const INVOICES_KEY = 'artaroma_invoices_v1';
 
 export function getStoredOrders(): SalesOrder[] {
-  if (typeof window === 'undefined') return initialSalesOrders;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(ORDERS_KEY);
     if (!raw) {
-      localStorage.setItem(ORDERS_KEY, JSON.stringify(initialSalesOrders));
-      return initialSalesOrders;
+      return [];
     }
     return JSON.parse(raw);
   } catch {
-    return initialSalesOrders;
+    return [];
   }
 }
 
@@ -31,16 +30,15 @@ export function saveStoredOrders(orders: SalesOrder[], emitEvent: boolean = true
 }
 
 export function getStoredInvoices(): Invoice[] {
-  if (typeof window === 'undefined') return initialInvoices;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(INVOICES_KEY);
     if (!raw) {
-      localStorage.setItem(INVOICES_KEY, JSON.stringify(initialInvoices));
-      return initialInvoices;
+      return [];
     }
     return JSON.parse(raw);
   } catch {
-    return initialInvoices;
+    return [];
   }
 }
 

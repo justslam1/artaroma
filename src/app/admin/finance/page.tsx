@@ -73,11 +73,11 @@ export default function FinanceInvoicesPage() {
         console.warn('Finance page: falling back to localStorage for orders:', err);
       }
 
-      const ordersToUse: SalesOrder[] = apiOrders.length > 0 ? apiOrders : getStoredOrders();
-      if (apiOrders.length === 0) setSalesOrders(ordersToUse);
+      const ordersToUse: SalesOrder[] = apiOrders;
+      setSalesOrders(apiOrders);
 
-      // 2. Merge localStorage invoices with any confirmed SOs not yet invoiced
-      const storedInv = getStoredInvoices();
+      // 2. Merge database invoices with any confirmed SOs not yet invoiced
+      const storedInv = apiOrders.length === 0 ? [] : getStoredInvoices();
       const allInvoices: Invoice[] = [...storedInv];
 
       ordersToUse.forEach((so) => {

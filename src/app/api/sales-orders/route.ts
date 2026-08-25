@@ -13,9 +13,9 @@ export async function GET(req: NextRequest) {
          LEFT JOIN customers c ON so.customer_id = c.id 
          ORDER BY so.order_date DESC`
       );
-      if (!orders || orders.length === 0) {
-        orders = initialSalesOrders;
-      } else {
+      if (!orders) {
+        orders = [];
+      } else if (orders.length > 0) {
         // Load child items from so_items for each order
         for (let i = 0; i < orders.length; i++) {
           const items = await executeQuery(
@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
         }
       }
     } catch (dbErr) {
-      console.warn('DB sales-orders query failed, falling back to mock:', dbErr);
-      orders = initialSalesOrders;
+      console.warn('DB sales-orders query failed:', dbErr);
+      orders = [];
     }
 
     return NextResponse.json({
