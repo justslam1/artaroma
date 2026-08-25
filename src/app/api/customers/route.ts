@@ -7,11 +7,11 @@ export async function GET(req: NextRequest) {
     let customers = [];
     try {
       customers = await executeQuery('SELECT * FROM customers ORDER BY created_at DESC');
-      if (!customers || customers.length === 0) {
-        customers = initialCustomers;
+      if (!customers) {
+        customers = [];
       }
     } catch {
-      customers = initialCustomers;
+      customers = [];
     }
 
     // Parse JSON strings if they exist & calculate live piutang and credit status

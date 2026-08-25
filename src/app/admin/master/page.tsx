@@ -309,11 +309,11 @@ export default function MasterDataPage() {
   };
 
   // Main Data States
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
-  const [distributors, setDistributors] = useState<Distributor[]>(initialDistributors);
-  const [couriers, setCouriers] = useState<Courier[]>(initialCouriers);
-  const [appUsers, setAppUsers] = useState<AppUser[]>(initialAppUsers);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [distributors, setDistributors] = useState<Distributor[]>([]);
+  const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
 
   // Disposal Reasons states
@@ -406,7 +406,7 @@ export default function MasterDataPage() {
     try {
       const res = await fetch('/api/products', { cache: 'no-store' });
       const json = await res.json();
-      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (json.success && Array.isArray(json.data)) {
         setProducts(json.data);
       }
     } catch (err) {

@@ -67,7 +67,11 @@ async function wipeDatabaseForRestoreTest() {
   console.log('Sekarang Anda dapat membuka menu Master Data -> Backup & Restore -> Tab 2 untuk menguji coba Restore File Backup .JSON.');
 }
 
-wipeDatabaseForRestoreTest().catch((e) => {
-  console.error('Fatal error during wipe:', e);
-  process.exit(1);
-});
+wipeDatabaseForRestoreTest()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((e) => {
+    console.error('Fatal error during wipe:', e);
+    process.exit(1);
+  });

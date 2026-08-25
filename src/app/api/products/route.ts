@@ -22,7 +22,11 @@ export async function GET(req: NextRequest) {
       `);
 
       if (!products || products.length === 0) {
-        products = initialProducts;
+        return NextResponse.json({
+          success: true,
+          data: [],
+          count: 0,
+        });
       } else {
         // Fetch all product_variants from MySQL
         let allVariants: any[] = [];
