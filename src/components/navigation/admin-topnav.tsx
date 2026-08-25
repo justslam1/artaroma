@@ -1137,17 +1137,17 @@ export function AdminTopNav() {
                     </Link>
 
                     <Link
-                      href="/admin/finance/payables"
+                      href="/admin/procurement"
                       onClick={() => setIsFinanceOpen(false)}
                       className={`flex items-center gap-3 px-4 py-2.5 text-xs font-semibold hover:bg-blue-50 transition-colors ${
-                        isVendorPayablesActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                        isPOActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
                       }`}
                     >
                       <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
                       <div>
-                        <div className="font-bold text-slate-800">2. Tagihan Suplier (Hutang PO)</div>
+                        <div className="font-bold text-slate-800">2. Purchase Order & Tagihan Suplier</div>
                         <div className="text-[10px] text-slate-400 font-normal">
-                          Pembayaran & Bukti Transfer PO
+                          Pengadaan, Pembayaran & Bukti Transfer PO
                         </div>
                       </div>
                     </Link>
