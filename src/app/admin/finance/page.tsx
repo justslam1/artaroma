@@ -76,53 +76,62 @@ export default function FinanceInvoicesPage() {
       const ordersToUse: SalesOrder[] = apiOrders;
       setSalesOrders(apiOrders);
 
-      // 2. Merge database invoices with any confirmed SOs not yet invoiced
-      const storedInv = apiOrders.length === 0 ? [] : getStoredInvoices();
-      const allInvoices: Invoice[] = [...storedInv];
+      // 2. Filter only confirmed SOs (Tahap Konfirmasi dan seterusnya, exclude DIAJUKAN, PENDING_APPROVAL, DIBATALKAN, CANCELLED)
+      const confirmedSOs = ordersToUse.filter((so) => 
+        so.status !== 'DIAJUKAN' && 
+        so.status !== 'PENDING_APPROVAL' && 
+        (so.status as string) !== 'DIBATALKAN' && 
+        so.status !== 'CANCELLED'
+      );
 
-      ordersToUse.forEach((so) => {
-        const isConfirmedOrBeyond = ['DIKONFIRMASI', 'PROSES_GUDANG', 'DIKIRIM', 'DITERIMA'].includes(so.status);
-        if (isConfirmedOrBeyond) {
-          const hasInv = allInvoices.some((inv) => inv.so_id === so.id || inv.so_number === so.so_number);
-          if (!hasInv) {
-            const cleanNum = so.so_number.replace(/[^0-9]/g, '') || String(Math.floor(100 + Math.random() * 900));
-            const newInv: Invoice = {
-              id: (so as any).invoice_id || `inv-${so.id}`,
-              invoice_number: `INV-2026-${cleanNum}`,
-              so_id: so.id,
-              so_number: so.so_number,
-              customer_id: so.customer_id,
-              customer_name: (so as any).customer_company || so.customer_name || '',
-              status: 'UNPAID',
-              issue_date: so.order_date || new Date().toISOString().split('T')[0],
-              due_date: (() => {
-                const d = new Date();
-                d.setDate(d.getDate() + 30);
-                return d.toISOString().split('T')[0];
-              })(),
-              total_amount: Number((so as any).grand_total || (so as any).total_goods_amount || 0),
-              paid_amount: 0,
-            };
-            allInvoices.unshift(newInv);
-          }
+      const storedInv = apiOrders.length === 0 ? [] : getStoredInvoices();
+      
+      // Build synced invoice list based on confirmed SOs
+      const syncedInvoices: Invoice[] = confirmedSOs.map((so) => {
+        const soTotal = Number((so as any).grand_total || (so as any).total_goods_amount || (so as any).total_amount || 0);
+        const isLunasTransfer = so.payment_method === 'LUNAS_TRANSFER' || (so as any).payment_status === 'PAID' || (so as any).payment_status === 'LUNAS';
+        const existingInv = storedInv.find((inv) => inv.so_id === so.id || inv.so_number === so.so_number);
+
+        let paidAmount = 0;
+        if (existingInv && Number(existingInv.paid_amount) > 0) {
+          paidAmount = Number(existingInv.paid_amount);
+        } else if (Number((so as any).paid_amount) > 0) {
+          paidAmount = Number((so as any).paid_amount);
+        } else if (isLunasTransfer) {
+          paidAmount = soTotal;
         }
+
+        const remaining = Math.max(0, soTotal - paidAmount);
+        const isPaid = soTotal > 0 && remaining === 0;
+
+        const cleanNum = (so.so_number || '').replace(/[^0-9]/g, '') || String(Math.floor(100 + Math.random() * 900));
+
+        return {
+          id: existingInv?.id || (so as any).invoice_id || `inv-${so.id}`,
+          invoice_number: existingInv?.invoice_number || `INV-2026-${cleanNum}`,
+          so_id: so.id,
+          so_number: so.so_number,
+          customer_id: so.customer_id,
+          customer_name: (so as any).customer_company || so.customer_name || existingInv?.customer_name || '',
+          status: isPaid ? 'PAID' : remaining < soTotal && paidAmount > 0 ? 'PARTIALLY_PAID' : (existingInv?.status || 'UNPAID'),
+          payment_verification_status: isPaid ? 'VERIFIED' : (existingInv?.payment_verification_status || 'VERIFIED'),
+          issue_date: existingInv?.issue_date || so.order_date || new Date().toISOString().split('T')[0],
+          due_date: existingInv?.due_date || (() => {
+            const d = new Date(so.order_date || new Date());
+            d.setDate(d.getDate() + 30);
+            return d.toISOString().split('T')[0];
+          })(),
+          total_amount: soTotal,
+          paid_amount: paidAmount,
+          payment_notes: existingInv?.payment_notes || (so as any).payment_notes,
+          faktur_pajak_file_url: existingInv?.faktur_pajak_file_url,
+          payment_proof_url: existingInv?.payment_proof_url || (so as any).payment_proof_url,
+          payment_history: existingInv?.payment_history || (so as any).payment_history || [],
+        };
       });
 
-      // Normalize numeric fields to prevent NaN crashes
-      const normalized = allInvoices.map((inv) => ({
-        ...inv,
-        total_amount: Number(inv.total_amount) || 0,
-        paid_amount: Number(inv.paid_amount) || 0,
-        invoice_number: inv.invoice_number || '',
-        so_number: inv.so_number || '',
-        customer_name: inv.customer_name || '',
-        status: inv.status || 'UNPAID',
-      }));
-
-      setInvoices(normalized as Invoice[]);
-      // Write silently to localStorage WITHOUT dispatching artaroma_invoices_updated
-      // to avoid re-triggering this same listener.
-      try { localStorage.setItem('artaroma_invoices_v1', JSON.stringify(normalized)); } catch (_) {}
+      setInvoices(syncedInvoices as Invoice[]);
+      saveStoredInvoices(syncedInvoices, false);
 
       setIsLoading(false);
       isSyncingRef.current = false;
