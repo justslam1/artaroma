@@ -77,8 +77,16 @@ export const INITIAL_CASH_ACCOUNTS: CashAccount[] = [
 
 export const INITIAL_CASH_TRANSACTIONS: CashTransaction[] = [];
 
-const STORAGE_KEY_ACCOUNTS = 'artaroma_cash_accounts_v1';
-const STORAGE_KEY_TXS = 'artaroma_cash_transactions_v1';
+const STORAGE_KEY_ACCOUNTS = 'artaroma_cash_accounts_v2';
+const STORAGE_KEY_TXS = 'artaroma_cash_transactions_v2';
+
+// Auto-clean legacy v1 cache in user browser
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('artaroma_cash_accounts_v1');
+    localStorage.removeItem('artaroma_cash_transactions_v1');
+  } catch (_) {}
+}
 
 export function getStoredCashAccounts(): CashAccount[] {
   if (typeof window === 'undefined') return INITIAL_CASH_ACCOUNTS;

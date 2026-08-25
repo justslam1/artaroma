@@ -1,8 +1,16 @@
 import { initialSalesOrders, initialInvoices } from './mock-data';
 import { SalesOrder, Invoice } from './types';
 
-const ORDERS_KEY = 'artaroma_sales_orders_v1';
-const INVOICES_KEY = 'artaroma_invoices_v1';
+const ORDERS_KEY = 'artaroma_sales_orders_v2';
+const INVOICES_KEY = 'artaroma_invoices_v2';
+
+// Auto-clean legacy v1 cache in user browser
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('artaroma_sales_orders_v1');
+    localStorage.removeItem('artaroma_invoices_v1');
+  } catch (_) {}
+}
 
 export function getStoredOrders(): SalesOrder[] {
   if (typeof window === 'undefined') return [];
