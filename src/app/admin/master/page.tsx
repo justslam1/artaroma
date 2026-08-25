@@ -65,6 +65,7 @@ import {
   Upload,
   Smartphone,
   Bell,
+  HardDrive,
 } from 'lucide-react';
 import {
   exportUsersToXLSX,
@@ -78,6 +79,7 @@ import {
 } from '@/lib/export-excel';
 import BulkPriceModal from '@/components/admin/bulk-price-modal';
 import ImportPricelistModal from '@/components/admin/import-pricelist-modal';
+import BackupRestoreModal from '@/components/admin/backup-restore-modal';
 import { canUserExportXLSX } from '@/lib/auth';
 import {
   ThemeSettings,
@@ -206,9 +208,10 @@ export default function MasterDataPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
 
-  // Bulk Price Adjustment & Import Pricelist States
+  // Bulk Price Adjustment, Import Pricelist & Backup States
   const [isBulkPriceModalOpen, setIsBulkPriceModalOpen] = useState(false);
   const [isImportPricelistModalOpen, setIsImportPricelistModalOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   // Appearance & Theme Settings States & Handlers
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => getThemeSettings());
@@ -2179,6 +2182,14 @@ export default function MasterDataPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsBackupModalOpen(true)}
+              className="bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+              title="Cadangkan (Backup) & Pulihkan (Restore) Data Database"
+            >
+              <HardDrive className="w-4 h-4 text-indigo-200" /> Backup &amp; Restore Data
+            </button>
             {canUserExportXLSX(currentUser) && activeTab !== 'config' && activeTab !== 'appearance' && (
               <button
                 onClick={handleExportCurrentTab}
@@ -2264,6 +2275,14 @@ export default function MasterDataPage() {
                     </button>
                   </>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setIsBackupModalOpen(true)}
+                  className="text-xs font-bold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Backup & Restore Seluruh Data Database"
+                >
+                  <HardDrive className="w-3.5 h-3.5 text-indigo-600" /> Backup &amp; Restore
+                </button>
                 {canUserExportXLSX(currentUser) && (
                   <button
                     type="button"
@@ -8688,6 +8707,20 @@ export default function MasterDataPage() {
         onSuccess={() => {
           fetchProducts();
           fetchPriceLogs();
+        }}
+      />
+
+      {/* MODAL: Backup & Restore Database */}
+      <BackupRestoreModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        onSuccess={() => {
+          fetchProducts();
+          fetchPriceLogs();
+          fetchCustomers();
+          fetchDistributors();
+          fetchCouriers();
+          fetchUsers();
         }}
       />
     </div>
