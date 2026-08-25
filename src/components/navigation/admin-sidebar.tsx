@@ -8,6 +8,7 @@ import {
   Database,
   ShoppingBag,
   Receipt,
+  Landmark,
   Sparkles,
   TrendingUp,
   AlertTriangle,
@@ -33,9 +34,9 @@ export function AdminSidebar() {
       icon: ShoppingBag,
     },
     {
-      label: 'Finance & Invoicing',
-      href: '/admin/sales-orders',
-      icon: Receipt,
+      label: 'Manajemen Kas & Treasury',
+      href: '/admin/finance/cash',
+      icon: Landmark,
     },
   ];
 

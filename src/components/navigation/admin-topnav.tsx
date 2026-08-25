@@ -1092,84 +1092,20 @@ export function AdminTopNav() {
               </Link>
             )}
 
-            {/* Dropdown Menu 2: Finance & Invoice */}
+            {/* Direct Menu Link: Manajemen Kas & Treasury */}
             {canAccessFinance && (
-              <div ref={financeRef} className="relative h-full">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFinanceOpen((prev) => !prev);
-                  }}
-                  className={`flex items-center gap-1.5 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
-                    isFinanceActive
-                      ? 'bg-white/20 text-white border-white font-bold'
-                      : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Receipt className="w-4 h-4" />
-                  <span>Finance & Invoice</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform ${isFinanceOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-
-                {/* Sub-menu Dropdown Finance */}
-                {isFinanceOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in">
-                    <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
-                      Pilih Sub-Menu Keuangan:
-                    </div>
-
-                    <Link
-                      href="/admin/sales-orders"
-                      onClick={() => setIsFinanceOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2.5 text-xs font-semibold hover:bg-blue-50 transition-colors ${
-                        isSOActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-blue-600 shrink-0" />
-                      <div>
-                        <div className="font-bold text-slate-800">1. Sales Order & Invoice Penjualan</div>
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          Tagihan, Verifikasi Bayar & Faktur Pajak
-                        </div>
-                      </div>
-                    </Link>
-
-                    <Link
-                      href="/admin/procurement"
-                      onClick={() => setIsFinanceOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2.5 text-xs font-semibold hover:bg-blue-50 transition-colors ${
-                        isPOActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
-                      }`}
-                    >
-                      <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
-                      <div>
-                        <div className="font-bold text-slate-800">2. Purchase Order & Tagihan Suplier</div>
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          Pengadaan, Pembayaran & Bukti Transfer PO
-                        </div>
-                      </div>
-                    </Link>
-
-                    <Link
-                      href="/admin/finance/cash"
-                      onClick={() => setIsFinanceOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2.5 text-xs font-semibold hover:bg-blue-50 transition-colors ${
-                        isCashManagementActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
-                      }`}
-                    >
-                      <Landmark className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <div className="font-bold text-slate-800">3. Manajemen Kas & Treasury</div>
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          Kas Besar, Kas Kantor, Kas Kecil & Sales
-                        </div>
-                      </div>
-                    </Link>
-                  </div>
-                )}
-              </div>
+              <Link
+                href="/admin/finance/cash"
+                prefetch={false}
+                className={`flex items-center gap-2 px-4 h-full text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                  isCashManagementActive
+                    ? 'bg-white/15 text-white border-white'
+                    : 'text-blue-100 border-transparent hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Landmark className="w-4 h-4" />
+                <span>Manajemen Kas & Treasury</span>
+              </Link>
             )}
 
             {/* Diagnostik & Uji Otomatis */}
