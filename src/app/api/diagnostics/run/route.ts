@@ -184,14 +184,30 @@ export async function POST(req: NextRequest) {
       }
       details.push(`✓ Deteksi Plafon Kredit: Proyeksi Piutang (Rp 55 Juta) > Plafon (Rp 50 Juta) -> Status: SUPER ADMIN APPROVAL REQUIRED`);
 
+      // 1. Resolve a valid customer ID from MySQL to satisfy foreign keys
+      let validCustomerId = 'cust-001';
+      try {
+        const custRows: any = await executeQuery('SELECT id FROM customers LIMIT 1');
+        if (custRows && custRows[0]?.id) {
+          validCustomerId = custRows[0].id;
+        }
+      } catch {
+        // ignore
+      }
+
       // Test DB sequence and insert simulation
       await executeQuery(
         `INSERT INTO sales_orders 
           (id, so_number, customer_id, status, payment_method, shipping_type, grand_total, order_date)
-         VALUES (?, ?, 'CUST-DEMO', 'PENDING_APPROVAL', 'TEMPO', 'FRANCO', ?, NOW())`,
-        [dummySoId, generatedSoNumber, orderAmount]
+         VALUES (?, ?, ?, 'PENDING_APPROVAL', 'TEMPO', 'FRANCO', ?, NOW())`,
+        [dummySoId, generatedSoNumber, validCustomerId, orderAmount]
       );
-      details.push(`✓ Mock Sales Order '${dummySoId}' berhasil disimpan ke database.`);
+
+      const checkInserted: any[] = await executeQuery('SELECT id FROM sales_orders WHERE id = ?', [dummySoId]);
+      if (!checkInserted || checkInserted.length === 0) {
+        throw new Error(`Data mock sales order '${dummySoId}' tidak tersimpan di database.`);
+      }
+      details.push(`✓ Mock Sales Order '${dummySoId}' (Customer: ${validCustomerId}) berhasil disimpan ke database.`);
 
       return { message: 'Alur Sales Order & penguncian plafon kredit berfungsi sempurna.' };
     }
@@ -209,18 +225,18 @@ export async function POST(req: NextRequest) {
       // Test payment verification state update
       await executeQuery(
         `UPDATE sales_orders 
-         SET payment_proof_url = 'https://artaroma.co.id/test-proof.jpg', payment_status = 'PENDING_VERIFICATION'
+         SET payment_proof_url = ?, payment_status = ?
          WHERE id = ?`,
-        [dummySoId]
+        ['https://artaroma.co.id/test-proof.jpg', 'PENDING_VERIFICATION', dummySoId]
       );
       details.push(`✓ Simulasi unggah bukti transfer pembayaran berhasil.`);
 
       // Verify state in DB
-      const verified: any[] = await executeQuery('SELECT payment_status FROM sales_orders WHERE id = ?', [dummySoId]);
-      if (verified[0]?.payment_status !== 'PENDING_VERIFICATION') {
-        throw new Error('Update status bukti transfer ke DB tidak sesuai.');
+      const verified: any[] = await executeQuery('SELECT payment_status, payment_proof_url FROM sales_orders WHERE id = ?', [dummySoId]);
+      if (!verified || verified.length === 0 || verified[0]?.payment_status !== 'PENDING_VERIFICATION') {
+        throw new Error(`Update status bukti transfer ke DB tidak sesuai (current: ${verified[0]?.payment_status || 'null'}).`);
       }
-      details.push(`✓ Status pembayaran terverifikasi: PENDING_VERIFICATION`);
+      details.push(`✓ Status pembayaran terverifikasi: PENDING_VERIFICATION (Bukti URL tercatat)`);
 
       return { message: 'Integrasi modul keuangan dan verifikasi transfer tervalidasi.' };
     }
@@ -235,12 +251,12 @@ export async function POST(req: NextRequest) {
       // Simulate dispatch and delivery completion
       await executeQuery(
         `UPDATE sales_orders 
-         SET status = 'DITERIMA', 
-             received_by = 'Bpk. Hendra (Penerima Gudang)',
-             received_photo = 'https://artaroma.co.id/test-pod.jpg',
-             received_signature = 'SIGNATURE_DATA_MOCK'
+         SET status = ?, 
+             received_by = ?,
+             received_photo = ?,
+             received_signature = ?
          WHERE id = ?`,
-        [dummySoId]
+        ['DITERIMA', 'Bpk. Hendra (Penerima Gudang)', 'https://artaroma.co.id/test-pod.jpg', 'SIGNATURE_DATA_MOCK', dummySoId]
       );
       details.push(`✓ Kurir menyelesaikan penugasan pengiriman pesanan.`);
 
@@ -249,10 +265,10 @@ export async function POST(req: NextRequest) {
         [dummySoId]
       );
 
-      if (checkOrder[0]?.status !== 'DITERIMA' || !checkOrder[0]?.received_by || !checkOrder[0]?.received_photo) {
+      if (!checkOrder || checkOrder.length === 0 || checkOrder[0]?.status !== 'DITERIMA' || !checkOrder[0]?.received_by || !checkOrder[0]?.received_photo) {
         throw new Error('Data Serah Terima POD tidak tersimpan lengkap di database.');
       }
-      details.push(`✓ Data POD Lengkap: Penerima=${checkOrder[0].received_by}, Foto Lampiran=OK`);
+      details.push(`✓ Data POD Lengkap: Status=${checkOrder[0].status}, Penerima=${checkOrder[0].received_by}, Foto Lampiran=OK`);
 
       return { message: 'Alur aplikasi kurir dan bukti serah terima (POD) berfungsi normal.' };
     }
