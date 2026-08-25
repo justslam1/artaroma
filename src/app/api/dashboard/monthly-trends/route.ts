@@ -7,7 +7,24 @@ export async function GET(req: NextRequest) {
     const monthsParam = parseInt(searchParams.get('months') || '12', 10);
     const monthsCount = isNaN(monthsParam) || monthsParam <= 0 ? 12 : Math.min(monthsParam, 24);
 
-    // 1. Fetch Sales Orders with customer & items
+    // 0. Fetch master products and distributors
+    let availableProducts: any[] = [];
+    let availableDistributors: any[] = [];
+    try {
+      const pRows = await executeQuery<any[]>('SELECT id, name, sku FROM products ORDER BY name ASC');
+      if (pRows) availableProducts = pRows;
+    } catch (e) {
+      console.warn('Failed to query products for filter:', e);
+    }
+
+    try {
+      const dRows = await executeQuery<any[]>('SELECT id, name FROM distributors ORDER BY name ASC');
+      if (dRows) availableDistributors = dRows;
+    } catch (e) {
+      console.warn('Failed to query distributors for filter:', e);
+    }
+
+    // 1. Fetch Sales Orders with customer
     let salesOrders: any[] = [];
     try {
       const soRows = await executeQuery<any[]>(`
@@ -33,7 +50,7 @@ export async function GET(req: NextRequest) {
       console.warn('Failed to query sales_orders for monthly trends:', err);
     }
 
-    // 1b. Fetch SO Items for product-level volume
+    // 1b. Fetch SO Items for product-level volume and revenue
     let soItems: any[] = [];
     try {
       const itemRows = await executeQuery<any[]>(`
@@ -45,6 +62,9 @@ export async function GET(req: NextRequest) {
           si.qty_kg,
           si.unit_price_per_kg,
           si.subtotal,
+          so.customer_id,
+          so.payment_status,
+          so.payment_method,
           so.order_date,
           so.created_at
         FROM so_items si
@@ -94,6 +114,8 @@ export async function GET(req: NextRequest) {
           pi.qty_ordered_kg,
           pi.cost_per_kg,
           pi.subtotal,
+          po.distributor_id,
+          po.payment_status,
           po.order_date,
           po.created_at
         FROM po_items pi
@@ -122,7 +144,7 @@ export async function GET(req: NextRequest) {
     };
 
     // 4. AGGREGATE SALES ORDERS BY MONTH
-    const salesByMonth = monthKeys.map((key, index) => {
+    const salesByMonth = monthKeys.map((key) => {
       const ordersInMonth = salesOrders.filter((so) => {
         const orderDateStr = so.order_date || so.created_at;
         if (!orderDateStr) return false;
@@ -145,14 +167,15 @@ export async function GET(req: NextRequest) {
       const uniqueCustomers = new Set(ordersInMonth.map((o) => o.customer_id || o.customer_name).filter(Boolean)).size;
 
       // Product sales breakdown in this month
-      const productBreakdown: Record<string, { name: string; volumeKg: number; revenue: number }> = {};
+      const productBreakdown: Record<string, { productId: string; name: string; volumeKg: number; revenue: number }> = {};
       itemsInMonth.forEach((it) => {
+        const pId = it.product_id || 'unknown';
         const pName = it.product_name || 'Produk Lainnya';
-        if (!productBreakdown[pName]) {
-          productBreakdown[pName] = { name: pName, volumeKg: 0, revenue: 0 };
+        if (!productBreakdown[pId]) {
+          productBreakdown[pId] = { productId: pId, name: pName, volumeKg: 0, revenue: 0 };
         }
-        productBreakdown[pName].volumeKg += Number(it.qty_kg || 0);
-        productBreakdown[pName].revenue += Number(it.subtotal || 0);
+        productBreakdown[pId].volumeKg += Number(it.qty_kg || 0);
+        productBreakdown[pId].revenue += Number(it.subtotal || 0);
       });
 
       return {
@@ -180,7 +203,7 @@ export async function GET(req: NextRequest) {
     });
 
     // 5. AGGREGATE PURCHASE ORDERS BY MONTH
-    const poByMonth = monthKeys.map((key, index) => {
+    const poByMonth = monthKeys.map((key) => {
       const posInMonth = purchaseOrders.filter((po) => {
         const orderDateStr = po.order_date || po.created_at;
         if (!orderDateStr) return false;
@@ -204,14 +227,15 @@ export async function GET(req: NextRequest) {
       const totalPOs = posInMonth.length;
 
       // Vendor spending breakdown in this month
-      const vendorBreakdown: Record<string, { name: string; totalAmount: number; count: number }> = {};
+      const vendorBreakdown: Record<string, { distributorId: string; name: string; totalAmount: number; count: number }> = {};
       posInMonth.forEach((po) => {
+        const dId = po.distributor_id || 'unknown';
         const vName = po.distributor_name || 'Suplier Lainnya';
-        if (!vendorBreakdown[vName]) {
-          vendorBreakdown[vName] = { name: vName, totalAmount: 0, count: 0 };
+        if (!vendorBreakdown[dId]) {
+          vendorBreakdown[dId] = { distributorId: dId, name: vName, totalAmount: 0, count: 0 };
         }
-        vendorBreakdown[vName].totalAmount += Number(po.total_amount || 0);
-        vendorBreakdown[vName].count += 1;
+        vendorBreakdown[dId].totalAmount += Number(po.total_amount || 0);
+        vendorBreakdown[dId].count += 1;
       });
 
       return {
@@ -233,6 +257,7 @@ export async function GET(req: NextRequest) {
         id: string;
         name: string;
         monthlyTotals: Record<string, number>;
+        monthlyOrders: Record<string, number>;
         totalSpent: number;
         totalOrders: number;
       }
@@ -253,12 +278,14 @@ export async function GET(req: NextRequest) {
           id: cId,
           name: cName,
           monthlyTotals: {},
+          monthlyOrders: {},
           totalSpent: 0,
           totalOrders: 0,
         };
       }
 
       customerMap[cId].monthlyTotals[mKey] = (customerMap[cId].monthlyTotals[mKey] || 0) + amount;
+      customerMap[cId].monthlyOrders[mKey] = (customerMap[cId].monthlyOrders[mKey] || 0) + 1;
       customerMap[cId].totalSpent += amount;
       customerMap[cId].totalOrders += 1;
     });
@@ -275,6 +302,7 @@ export async function GET(req: NextRequest) {
           monthKey: k,
           monthLabel: formatMonthLabel(k),
           amount: c.monthlyTotals[k] || 0,
+          orderCount: c.monthlyOrders[k] || 0,
         })),
       }));
 
@@ -283,6 +311,12 @@ export async function GET(req: NextRequest) {
       data: {
         monthKeys,
         monthsCount,
+        availableProducts,
+        availableDistributors,
+        rawSalesOrders: salesOrders,
+        rawSoItems: soItems,
+        rawPurchaseOrders: purchaseOrders,
+        rawPoItems: poItems,
         salesTrends,
         poTrends: poByMonth,
         customerTrends,
