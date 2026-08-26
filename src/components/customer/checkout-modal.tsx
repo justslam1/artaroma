@@ -115,11 +115,14 @@ export function CheckoutModal({
     };
   };
 
-  // Calculate estimated total price
+  // Calculate estimated total price and weight
   const estimatedTotal = cart.reduce((sum, item) => {
     const info = getVariantPriceInfo(item);
     return sum + info.subtotal;
   }, 0);
+
+  const totalWeightKg = cart.reduce((sum, item) => sum + (Number(item.packSizeKg) * Number(item.quantity)), 0);
+  const totalUnits = cart.reduce((sum, item) => sum + Number(item.quantity), 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,8 +185,13 @@ export function CheckoutModal({
 
             {/* Cart Items List */}
             <div>
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                Daftar Pesanan ({cart.length} Varian)
+              <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                <span>Daftar Pesanan ({cart.length} Varian)</span>
+                {cart.length > 0 && (
+                  <span className="text-blue-700 font-mono text-[11px] font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                    Total Berat: {formatKg(totalWeightKg)} ({totalUnits} Unit)
+                  </span>
+                )}
               </div>
 
               {cart.length === 0 ? (
@@ -257,14 +265,22 @@ export function CheckoutModal({
               )}
             </div>
 
-            {/* Estimated Total Price Summary Bar */}
+            {/* Estimated Total Price & Weight Summary Bar */}
             {cart.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1">
-                <div className="flex justify-between items-center text-slate-800 font-bold text-xs">
-                  <span>ESTIMASI TOTAL NILAI BARANG:</span>
-                  <span className="font-mono text-base text-blue-700">{formatIDR(estimatedTotal)}</span>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-slate-700 text-xs">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-blue-600" /> TOTAL JUMLAH BERAT ITEM DIPESAN:
+                  </span>
+                  <span className="font-mono text-sm font-extrabold text-slate-800 bg-white border border-blue-200 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                    {formatKg(totalWeightKg)} <span className="text-slate-500 font-normal text-xs">({totalUnits} Unit Kemasan)</span>
+                  </span>
                 </div>
-                <div className="text-[10px] text-slate-500 font-medium">
+                <div className="flex justify-between items-center text-slate-800 font-bold text-xs pt-2 border-t border-blue-200/80">
+                  <span>ESTIMASI TOTAL NILAI BARANG:</span>
+                  <span className="font-mono text-base text-blue-700 font-extrabold">{formatIDR(estimatedTotal)}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 font-medium pt-0.5">
                   *Belum termasuk PPN (11%) dan Ongkos Kirim. Rincian total tagihan final akan tertera pada Invoice resmi dari tim Finance.
                 </div>
               </div>

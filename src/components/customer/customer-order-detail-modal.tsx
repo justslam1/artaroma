@@ -248,6 +248,10 @@ export function CustomerOrderDetailModal({
                 </tbody>
                 <tfoot>
                   {(() => {
+                    const totalWeightKg = order.items.reduce(
+                      (sum, item) => sum + (Number(item.qty_kg) || 0),
+                      0
+                    );
                     const rawGoodsTotal = order.items.reduce(
                       (sum, item) => sum + (Number(item.subtotal) || 0),
                       0
@@ -259,6 +263,14 @@ export function CustomerOrderDetailModal({
                     return (
                       <>
                         <tr className="bg-slate-50/80 border-t border-gray-200">
+                          <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
+                            Total Berat Item Dipesan:
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono font-bold text-blue-700 text-xs">
+                            {formatKg(totalWeightKg)}
+                          </td>
+                        </tr>
+                        <tr className="bg-slate-50/80 border-t border-gray-100">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
                             Total Nilai Barang (DPP):
                           </td>
