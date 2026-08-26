@@ -356,6 +356,52 @@ export default function MonthlyTrendsView({
     return list;
   }, [data, customerSearchQuery, customerSortBy, customerLimitFilter]);
 
+  // Map customer IDs to consistent color indices
+  const customerColorsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    (data?.customerTrends || []).forEach((c: any, idx: number) => {
+      map[String(c.id)] = idx % PRODUCT_COLOR_PALETTE.length;
+      if (c.name) map[c.name.toLowerCase()] = idx % PRODUCT_COLOR_PALETTE.length;
+    });
+    return map;
+  }, [data?.customerTrends]);
+
+  // Dynamic monthly aggregated trends per customer
+  const filteredMonthlyCustomerTrends = useMemo(() => {
+    return monthKeys.map((key) => {
+      let totalAmountInMonth = 0;
+      let totalOrdersInMonth = 0;
+
+      const customerSegments = filteredCustomerTrends
+        .map((c: any) => {
+          const mData = (c.history || []).find((h: any) => h.monthKey === key);
+          const amount = Number(mData?.amount || 0);
+          const orderCount = Number(mData?.orderCount || 0);
+          if (amount > 0 || orderCount > 0) {
+            totalAmountInMonth += amount;
+            totalOrdersInMonth += orderCount;
+            return {
+              customerId: c.id,
+              name: c.name,
+              amount,
+              orderCount,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .sort((a: any, b: any) => b.amount - a.amount);
+
+      return {
+        monthKey: key,
+        monthLabel: formatMonthLabel(key),
+        totalAmount: totalAmountInMonth,
+        totalOrders: totalOrdersInMonth,
+        customerSegments,
+      };
+    });
+  }, [monthKeys, filteredCustomerTrends]);
+
   // Handle Export to XLSX for each specific analytics view (Respecting Active Filters)
   const handleExportAnalytics = () => {
     if (!data) return;
@@ -379,21 +425,27 @@ export default function MonthlyTrendsView({
         'Total Terbayar (IDR)': p.totalPaidAmount,
         'Sisa Hutang Vendor (IDR)': p.totalSisaHutang,
         'Volume Pengadaan (Kg)': p.totalVolumeKg,
-        'Jumlah PO Terbit': p.totalPOs,
+        'Jumlah Dokumen PO': p.totalPOs,
       }));
-      exportToXLSX(exportRows, { fileName: `Laporan-Tren-PO-${distName}-${new Date().toISOString().slice(0, 10)}.xlsx` });
+      exportToXLSX(exportRows, { fileName: `Laporan-Tren-Pengadaan-PO-${distName}-${new Date().toISOString().slice(0, 10)}.xlsx` });
     } else if (activeSubTab === 'customer') {
-      const exportRows = filteredCustomerTrends.map((c: any) => ({
-        'Nama Perusahaan Customer': c.name,
-        'Total Belanja Akumulasi (IDR)': c.totalSpent,
-        'Frekuensi Pesanan': `${c.totalOrders} Transaksi`,
-        'Rata-rata Nilai Order (IDR)': c.avgOrderValue,
-      }));
-      exportToXLSX(exportRows, { fileName: `Laporan-Tren-Customer-${new Date().toISOString().slice(0, 10)}.xlsx` });
+      const exportRows = filteredCustomerTrends.map((c: any) => {
+        const row: any = {
+          'Nama Customer B2B': c.name,
+          'Total Akumulasi Belanja (IDR)': c.totalSpent,
+          'Total Pesanan SO': c.totalOrders,
+          'Rata-Rata Belanja (IDR)': c.avgOrderValue,
+        };
+        (c.history || []).forEach((h: any) => {
+          row[`Belanja ${h.monthLabel} (IDR)`] = h.amount || 0;
+        });
+        return row;
+      });
+      exportToXLSX(exportRows, { fileName: `Laporan-Tren-Transaksi-Customer-B2B-${new Date().toISOString().slice(0, 10)}.xlsx` });
     }
   };
 
-  if (isLoading && !data) {
+  if (isLoading) {
     return (
       <div className="bg-white border border-gray-200 rounded-2xl p-12 flex flex-col items-center justify-center gap-3 text-slate-500 shadow-sm">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -409,6 +461,9 @@ export default function MonthlyTrendsView({
 
   const maxPOAmount = Math.max(...filteredPoTrends.map((p: any) => p.totalPOAmount), 1);
   const maxPOVolume = Math.max(...filteredPoTrends.map((p: any) => p.totalVolumeKg), 1);
+
+  const maxCustomerRevenue = Math.max(...filteredMonthlyCustomerTrends.map((c: any) => c.totalAmount), 1);
+  const maxCustomerOrders = Math.max(...filteredMonthlyCustomerTrends.map((c: any) => c.totalOrders), 1);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -1235,6 +1290,220 @@ export default function MonthlyTrendsView({
       {/* ========================================================= */}
       {activeSubTab === 'customer' && (
         <div className="space-y-6">
+          {/* 3 Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Akumulasi Belanja Customer</div>
+                <div className="text-xl font-bold font-mono text-emerald-800 mt-0.5">
+                  {formatIDR(filteredCustomerTrends.reduce((sum: number, c: any) => sum + c.totalSpent, 0))}
+                </div>
+                <div className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Dari {filteredCustomerTrends.length} Customer B2B Terfilter
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Total Frekuensi Pesanan SO</div>
+                <div className="text-xl font-bold font-mono text-blue-700 mt-0.5">
+                  {filteredCustomerTrends.reduce((sum: number, c: any) => sum + c.totalOrders, 0)} Pesanan
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Seluruh Transaksi Penjualan B2B</div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-400 font-medium">Rata-Rata Nilai Transaksi</div>
+                <div className="text-xl font-bold font-mono text-slate-800 mt-0.5">
+                  {formatIDR(
+                    filteredCustomerTrends.reduce((sum: number, c: any) => sum + c.totalOrders, 0) > 0
+                      ? Math.round(
+                          filteredCustomerTrends.reduce((sum: number, c: any) => sum + c.totalSpent, 0) /
+                            filteredCustomerTrends.reduce((sum: number, c: any) => sum + c.totalOrders, 0)
+                        )
+                      : 0
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Per order Sales Order (AOV)</div>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Bar Chart Visualizer for Customer B2B */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
+              <div>
+                <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-emerald-600" />
+                  Grafik Perkembangan Transaksi Customer B2B ({monthKeys.length} Bulan Analisis)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Visualisasi grafik batang bertumpuk rincian nama customer B2B di dalam batang{' '}
+                  {metricUnit === 'currency'
+                    ? 'nilai rupiah belanja'
+                    : metricUnit === 'volume'
+                    ? 'volume pesanan'
+                    : 'jumlah pesanan SO'}{' '}
+                  tiap bulan.
+                </p>
+              </div>
+
+              {filteredCustomerTrends.length > 0 && (
+                <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg self-start sm:self-auto flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>{filteredCustomerTrends.length} Customer Aktif</span>
+                </div>
+              )}
+            </div>
+
+            {/* CSS Stacked Bar Chart with Customer Names Inside */}
+            <div className="h-80 flex items-end gap-3 sm:gap-4 pt-10 pb-2 px-2 overflow-x-auto">
+              {filteredMonthlyCustomerTrends.map((mt: any) => {
+                const val = metricUnit === 'count' ? mt.totalOrders : mt.totalAmount;
+                const maxVal = metricUnit === 'count' ? maxCustomerOrders : maxCustomerRevenue;
+                const heightPercent = maxVal > 0 ? Math.max((val / maxVal) * 100, 6) : 6;
+                const segments: any[] = mt.customerSegments || [];
+
+                return (
+                  <div key={mt.monthKey} className="flex-1 min-w-[70px] max-w-[160px] flex flex-col items-center h-full justify-end group relative">
+                    {/* Rich Floating Tooltip on Hover */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-28 z-30 pointer-events-none bg-slate-950/95 text-white text-[11px] py-2.5 px-3 rounded-xl shadow-2xl min-w-[220px] border border-slate-700 backdrop-blur-xs">
+                      <div className="font-bold text-emerald-300 border-b border-slate-700 pb-1 mb-1.5 flex justify-between items-center">
+                        <span>{mt.monthLabel}</span>
+                        <span className="text-slate-400 font-mono text-[10px]">{mt.totalOrders} Transaksi</span>
+                      </div>
+                      <div className="text-slate-200 font-bold text-xs mb-1.5">
+                        Total Belanja: {formatIDR(mt.totalAmount)}
+                      </div>
+                      {segments.length > 0 && (
+                        <div className="space-y-1 border-t border-slate-800 pt-1.5 max-h-36 overflow-y-auto">
+                          {segments.map((cs: any, idx: number) => {
+                            const colorObj = PRODUCT_COLOR_PALETTE[customerColorsMap[cs.customerId] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+                            const pct = mt.totalAmount > 0 ? ((cs.amount / mt.totalAmount) * 100).toFixed(0) : 0;
+                            return (
+                              <div key={cs.customerId} className="flex items-center justify-between text-[10px] gap-2">
+                                <span className="flex items-center gap-1.5 text-slate-200 truncate max-w-[130px]">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${colorObj.dot}`} />
+                                  {cs.name}
+                                </span>
+                                <span className="font-mono font-bold text-white shrink-0">
+                                  {formatIDR(cs.amount)} ({pct}%)
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stacked Bar Container */}
+                    <div
+                      style={{ height: `${heightPercent}%` }}
+                      className={`w-full rounded-t-xl transition-all duration-300 relative flex flex-col-reverse justify-start overflow-hidden border shadow-sm ${
+                        val > 0
+                          ? 'border-emerald-400/40 bg-slate-100'
+                          : 'border-slate-200 bg-slate-100'
+                      }`}
+                    >
+                      {/* Top Total Badge */}
+                      {val > 0 && (
+                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono font-black text-emerald-900 whitespace-nowrap bg-white/90 px-1.5 py-0.2 rounded border border-emerald-200 shadow-2xs z-10">
+                          {metricUnit === 'count'
+                            ? `${mt.totalOrders} SO`
+                            : mt.totalAmount >= 1000000
+                            ? `${(mt.totalAmount / 1000000).toFixed(1)}Jt`
+                            : formatIDR(mt.totalAmount)}
+                        </span>
+                      )}
+
+                      {/* Segments with Customer Names Inside */}
+                      {val > 0 && segments.length > 0 ? (
+                        segments.map((cs: any, idx: number) => {
+                          const segVal = metricUnit === 'count' ? cs.orderCount : cs.amount;
+                          const totalBase = metricUnit === 'count' ? mt.totalOrders : mt.totalAmount;
+                          const segPct = totalBase > 0 ? (segVal / totalBase) * 100 : 100 / segments.length;
+                          const colorObj = PRODUCT_COLOR_PALETTE[customerColorsMap[cs.customerId] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+
+                          return (
+                            <div
+                              key={cs.customerId}
+                              style={{ height: `${segPct}%` }}
+                              className={`w-full ${colorObj.bg} border-t border-white/25 transition-all hover:brightness-110 flex flex-col items-center justify-center p-1 relative group/seg overflow-hidden min-h-[26px]`}
+                              title={`${cs.name}: ${formatIDR(cs.amount)} (${cs.orderCount} Transaksi)`}
+                            >
+                              {/* Customer Name Printed Directly Inside the Bar */}
+                              <span className="text-[10px] font-black text-white leading-tight truncate w-full text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] px-0.5 tracking-tight uppercase">
+                                {cs.name}
+                              </span>
+                              {segPct >= 18 && (
+                                <span className="text-[9px] font-mono text-white/95 font-bold leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] mt-0.5">
+                                  {metricUnit === 'count'
+                                    ? `${cs.orderCount} SO`
+                                    : cs.amount >= 1000000
+                                    ? `${(cs.amount / 1000000).toFixed(1)}Jt`
+                                    : formatIDR(cs.amount)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : val > 0 ? (
+                        <div className="w-full h-full bg-gradient-to-t from-emerald-600 to-teal-600 flex items-center justify-center p-1">
+                          <span className="text-[10px] font-extrabold text-white truncate w-full text-center">
+                            {formatIDR(mt.totalAmount)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {/* Month Label */}
+                    <div className="text-[11px] font-bold text-slate-600 mt-2 truncate w-full text-center">
+                      {mt.monthLabel}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Customer Color Legend */}
+            {filteredCustomerTrends.length > 0 && (
+              <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                  Legenda Customer:
+                </span>
+                {filteredCustomerTrends.map((c: any, idx: number) => {
+                  const colorObj = PRODUCT_COLOR_PALETTE[customerColorsMap[c.id] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+                  return (
+                    <span
+                      key={c.id}
+                      className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs"
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${colorObj.dot} shrink-0`} />
+                      <span className="font-bold">{c.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500 font-normal">
+                        ({formatIDR(c.totalSpent)})
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Matriks Pembelian Customer B2B Table */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-gray-200 flex items-center justify-between">
               <div>
