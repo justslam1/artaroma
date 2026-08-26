@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -58,6 +59,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
 

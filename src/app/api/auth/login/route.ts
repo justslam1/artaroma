@@ -46,9 +46,8 @@ export async function POST(req: NextRequest) {
           }
 
           const isSuperAdmin =
-            u.role === 'ADMIN' ||
             u.role === 'SUPER_ADMIN' ||
-            cleanIdentifier.includes('admin') ||
+            u.role === 'ADMIN' ||
             cleanIdentifier === 'boss@artaroma.com' ||
             cleanIdentifier === 'bossanova';
 

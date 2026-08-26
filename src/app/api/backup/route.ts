@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery, executeTransaction } from '@/lib/db';
 import { ensurePushTableExists } from '@/lib/push-notifications';
+import { verifyApiAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -30,6 +31,9 @@ const BACKUP_TABLES = [
  * GET: Export full database snapshot as JSON archive
  */
 export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     await ensurePushTableExists();
 
@@ -80,6 +84,9 @@ export async function GET(req: NextRequest) {
  * POST: Restore / Import data from backup JSON payload
  */
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { backupData, mode = 'merge', selectedTables } = body;
@@ -91,9 +98,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tablesToRestore = Array.isArray(selectedTables) && selectedTables.length > 0
+    const requestedTables = Array.isArray(selectedTables) && selectedTables.length > 0
       ? selectedTables
       : Object.keys(backupData.data);
+
+    // Strict whitelist verification against allowed backup tables
+    const tablesToRestore = requestedTables.filter((t: any) =>
+      (BACKUP_TABLES as readonly string[]).includes(String(t))
+    );
 
     const restoreSummary: Record<string, { inserted: number; errors: number }> = {};
     let totalRestored = 0;

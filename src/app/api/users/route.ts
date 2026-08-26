@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialAppUsers } from '@/lib/mock-data';
 import { ensurePushTableExists } from '@/lib/push-notifications';
+import { verifyApiAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     await ensurePushTableExists();
 
@@ -99,6 +103,9 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { id, name, email, role, linked_entity_name, is_active, notification_preferences } = body;
@@ -141,6 +148,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { id, is_active } = body;
@@ -169,6 +179,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const action = searchParams.get('action');

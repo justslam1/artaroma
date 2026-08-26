@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
+import { NextRequest, NextResponse } from 'next/server';
 import { UserRole } from './types';
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -136,3 +137,50 @@ export function canUserExportXLSX(user: any): boolean {
   }
   return false;
 }
+
+/**
+ * Extract and verify JWT payload from a NextRequest
+ */
+export async function getAuthenticatedUser(req: NextRequest): Promise<JWTPayload | null> {
+  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
+  if (!token) return null;
+  return await verifyJWT(token);
+}
+
+/**
+ * Check if the user is authenticated and optionally has one of the required modules / admin rights
+ */
+export async function verifyApiAuth(
+  req: NextRequest,
+  requiredModules?: string[]
+): Promise<{ user: JWTPayload; error?: undefined } | { user?: undefined; error: NextResponse }> {
+  const user = await getAuthenticatedUser(req);
+  if (!user) {
+    return {
+      error: NextResponse.json(
+        { success: false, message: 'Akses ditolak. Sesi autentikasi tidak ditemukan atau kedaluwarsa.' },
+        { status: 401 }
+      ),
+    };
+  }
+
+  if (user.is_super_admin || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+    return { user };
+  }
+
+  if (requiredModules && requiredModules.length > 0) {
+    const userModules = user.allowed_modules || [];
+    const hasModule = requiredModules.some((mod) => userModules.includes(mod));
+    if (!hasModule) {
+      return {
+        error: NextResponse.json(
+          { success: false, message: 'Akses ditolak. Anda tidak memiliki izin hak akses untuk tindakan ini.' },
+          { status: 403 }
+        ),
+      };
+    }
+  }
+
+  return { user };
+}
+
