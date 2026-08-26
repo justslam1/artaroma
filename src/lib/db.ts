@@ -177,7 +177,7 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
         console.warn('[Schema Migration Couriers Warning]:', e.message);
       }
 
-      // 2d. Check & Add missing currency columns in purchase_orders & po_items
+      // 2d. Check & Add missing currency & payment columns in purchase_orders & po_items
       try {
         const [poCols]: any = await conn.query('SHOW COLUMNS FROM purchase_orders');
         const poColNames = new Set(poCols.map((c: any) => c.Field.toLowerCase()));
@@ -186,6 +186,15 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
           { col: 'currency', sql: "ALTER TABLE purchase_orders ADD COLUMN currency VARCHAR(10) DEFAULT 'IDR'" },
           { col: 'exchange_rate', sql: "ALTER TABLE purchase_orders ADD COLUMN exchange_rate DECIMAL(15,2) DEFAULT 1.00" },
           { col: 'foreign_total_amount', sql: "ALTER TABLE purchase_orders ADD COLUMN foreign_total_amount DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'paid_amount', sql: "ALTER TABLE purchase_orders ADD COLUMN paid_amount DECIMAL(15,2) DEFAULT 0.00" },
+          { col: 'payment_status', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_status VARCHAR(50) DEFAULT 'UNPAID'" },
+          { col: 'payment_proof_url', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_proof_url LONGTEXT DEFAULT NULL" },
+          { col: 'payment_reference_no', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_reference_no VARCHAR(255) DEFAULT NULL" },
+          { col: 'payment_bank_id', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_bank_id VARCHAR(100) DEFAULT NULL" },
+          { col: 'payment_bank_name', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_bank_name VARCHAR(255) DEFAULT NULL" },
+          { col: 'payment_history', sql: "ALTER TABLE purchase_orders ADD COLUMN payment_history JSON DEFAULT NULL" },
+          { col: 'last_payment_date', sql: "ALTER TABLE purchase_orders ADD COLUMN last_payment_date VARCHAR(50) DEFAULT NULL" },
+          { col: 'created_at', sql: "ALTER TABLE purchase_orders ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" },
         ];
 
         for (const m of poMigrations) {
