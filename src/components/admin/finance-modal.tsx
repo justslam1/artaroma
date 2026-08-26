@@ -53,7 +53,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
   const [paymentDate, setPaymentDate] = useState<string>('');
   const [financeProofUrl, setFinanceProofUrl] = useState<string>('');
   const [previewImageModal, setPreviewImageModal] = useState<string | null>(null);
-  const [showLunasConfirm, setShowLunasConfirm] = useState<boolean>(false);
+  const [showPaymentConfirm, setShowPaymentConfirm] = useState<boolean>(false);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [selectedBankId, setSelectedBankId] = useState<string>('acc-bca');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -76,7 +76,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       setPaymentNotes(invoice.payment_notes || '');
       setPaymentDate(new Date().toISOString().split('T')[0]);
       setFinanceProofUrl(invoice.payment_proof_url || '');
-      setShowLunasConfirm(false);
+      setShowPaymentConfirm(false);
     }
   }, [invoice]);
 
@@ -144,12 +144,8 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       return;
     }
 
-    // Jika pelunasan penuh, munculkan konfirmasi terlebih dahulu
-    if (isLunas) {
-      setShowLunasConfirm(true);
-    } else {
-      executeVerify();
-    }
+    // Munculkan dialog konfirmasi sebelum memproses (baik lunas maupun sebagian)
+    setShowPaymentConfirm(true);
   };
 
   const executeVerify = () => {
@@ -165,7 +161,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       selectedBankId,
       bankName
     );
-    setShowLunasConfirm(false);
+    setShowPaymentConfirm(false);
     onClose();
   };
 
@@ -603,26 +599,44 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
         </div>
       </div>
 
-      {/* Confirmation Modal before marking as LUNAS */}
-      {showLunasConfirm && (
+      {/* Confirmation Modal before marking as LUNAS or Partial Payment */}
+      {showPaymentConfirm && (
         <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-emerald-300 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+          <div className={`bg-white border rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150 ${
+            isLunas ? 'border-emerald-300' : 'border-blue-300'
+          }`}>
             <div className="flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
-                <CheckCircle2 className="w-6 h-6" />
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${
+                isLunas
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : 'bg-blue-100 text-blue-700 border-blue-200'
+              }`}>
+                {isLunas ? <CheckCircle2 className="w-6 h-6" /> : <Calculator className="w-6 h-6" />}
               </div>
               <div className="flex-1">
                 <h4 className="text-base font-bold text-slate-800">
-                  Konfirmasi Status &quot;Lunas Penuh&quot;
+                  {isLunas ? 'Konfirmasi Status "Lunas Penuh"' : 'Konfirmasi Pembayaran Sebagian (Termin)'}
                 </h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Apakah Anda yakin ingin memverifikasi pembayaran ini dan mengubah status invoice menjadi <strong className="text-emerald-700 font-bold">LUNAS PENUH</strong>?
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  {isLunas ? (
+                    <>
+                      Apakah Anda yakin ingin memverifikasi pembayaran ini dan mengubah status invoice menjadi{' '}
+                      <strong className="text-emerald-700 font-bold">LUNAS PENUH</strong>?
+                    </>
+                  ) : (
+                    <>
+                      Apakah Anda yakin ingin mencatat pembayaran sebagian sebesar{' '}
+                      <strong className="text-blue-700 font-bold">{formatIDR(parsedInput)}</strong> untuk tagihan ini?
+                    </>
+                  )}
                 </p>
               </div>
             </div>
 
             {/* Summary Details Box */}
-            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className={`border rounded-xl p-3.5 space-y-2 text-xs ${
+              isLunas ? 'bg-emerald-50/70 border-emerald-200' : 'bg-blue-50/70 border-blue-200'
+            }`}>
               <div className="flex justify-between items-center text-slate-600">
                 <span>No. Invoice:</span>
                 <span className="font-bold font-mono text-blue-700">{invoice.invoice_number}</span>
@@ -635,16 +649,34 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
                 <span>Total Nilai Tagihan:</span>
                 <span className="font-mono font-semibold text-slate-700">{formatIDR(totalBill)}</span>
               </div>
-              <div className="flex justify-between items-center text-slate-600 border-t border-emerald-200/60 pt-1.5">
-                <span>Nominal Pelunasan:</span>
-                <span className="font-bold font-mono text-emerald-700 text-sm">{formatIDR(parsedInput)}</span>
+              <div className="flex justify-between items-center text-slate-600 border-t border-slate-200/80 pt-1.5">
+                <span>{isLunas ? 'Nominal Pelunasan:' : 'Nominal Transfer Masuk:'}</span>
+                <span className={`font-bold font-mono text-sm ${isLunas ? 'text-emerald-700' : 'text-blue-700'}`}>
+                  {formatIDR(parsedInput)}
+                </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
+                <span>Sisa Piutang Setelah Bayar:</span>
+                <span className={`font-mono font-bold ${sisaSetelahBayar === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {formatIDR(sisaSetelahBayar)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Status Tagihan:</span>
+                <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                  isLunas ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {isLunas ? '✓ LUNAS PENUH (PAID)' : '⏳ SEBAGIAN (PARTIAL)'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600 border-t border-slate-200/80 pt-1.5">
                 <span>Rekening Penerima:</span>
-                <span className="font-semibold text-slate-700 text-right truncate max-w-[210px]">{getSelectedBankDisplayName()}</span>
+                <span className="font-semibold text-slate-700 text-right truncate max-w-[200px]">
+                  {getSelectedBankDisplayName()}
+                </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
-                <span>Tanggal Bayar:</span>
+                <span>Tanggal Pembayaran:</span>
                 <span className="font-semibold text-slate-700">{formatDate(paymentDate)}</span>
               </div>
             </div>
@@ -660,7 +692,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setShowLunasConfirm(false)}
+                onClick={() => setShowPaymentConfirm(false)}
                 className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
               >
                 Batal / Cek Kembali
@@ -668,9 +700,12 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
               <button
                 type="button"
                 onClick={executeVerify}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                className={`px-5 py-2.5 rounded-xl text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer ${
+                  isLunas ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                <CheckCircle className="w-4 h-4" /> Ya, Set Jadi Lunas
+                <CheckCircle className="w-4 h-4" />
+                {isLunas ? 'Ya, Set Jadi Lunas' : 'Ya, Konfirmasi Pembayaran'}
               </button>
             </div>
           </div>
