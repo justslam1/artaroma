@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { DEFAULT_DISPOSAL_REASONS, DisposalReason } from '@/lib/disposal-reason-store';
+import { verifyApiAuth } from '@/lib/auth';
 
 async function initDisposalReasonsTable() {
   try {
@@ -50,6 +51,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data', 'Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { name, description } = body;
@@ -84,6 +88,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data', 'Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { id, name, description, is_active } = body;
@@ -117,6 +124,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data', 'Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

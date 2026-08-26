@@ -7,6 +7,7 @@ import {
   ensurePushTableExists,
 } from '@/lib/push-notifications';
 import { executeQuery } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'test') {
+      const auth = await verifyApiAuth(req, ['Master Data']);
+      if (auth.error) return auth.error;
+
       const result = await sendPushNotificationToAll({
         title: payload?.title || '🔔 Uji Coba Notifikasi Artaroma',
         body:

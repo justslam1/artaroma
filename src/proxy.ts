@@ -76,6 +76,14 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
   }
 
+  if (pathname.startsWith('/admin/transactions') && !allowed.includes('Log Transaksi')) {
+    return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
+  }
+
+  if (pathname.startsWith('/admin/diagnostics') && !allowed.includes('Master Data')) {
+    return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
+  }
+
   if (pathname.startsWith('/courier') && !allowed.includes('Aplikasi Kurir')) {
     return NextResponse.redirect(new URL(getRedirectPath(payload), req.url));
   }
