@@ -135,10 +135,10 @@ export function exportProductsToXLSX(products: Product[], customFileName?: strin
           'Nama Produk / Varian': v.variant_name || p.name,
           'Kategori Aplikasi': appStr,
           'Ukuran Kemasan (Kg)': v.pack_size_kg ?? '-',
-          'Harga Jual / Kg (IDR)': v.selling_price_per_kg || p.selling_price_per_kg || 0,
-          'Harga Jual / Kg (USD)': v.selling_price_usd_per_kg ? `$${v.selling_price_usd_per_kg}` : '-',
-          'Stok Aktif (Kg)': Math.round(v.total_stock_kg || 0),
-          'Min. Stok Alert (Kg)': v.min_stock_kg ?? p.min_stock_kg ?? 0,
+          'Harga Jual / Kg (IDR)': Number(Number(v.selling_price_per_kg || p.selling_price_per_kg || 0).toFixed(2)),
+          'Harga Jual / Kg (USD)': v.selling_price_usd_per_kg ? `$${Number(v.selling_price_usd_per_kg).toFixed(2)}` : '-',
+          'Stok Aktif (Kg)': Number(Number(v.total_stock_kg || 0).toFixed(2)),
+          'Min. Stok Alert (Kg)': Number(Number(v.min_stock_kg ?? p.min_stock_kg ?? 0).toFixed(2)),
           'Top Notes': p.top_notes || '-',
           'Middle Notes': p.middle_notes || '-',
           'Base Notes': p.base_notes || '-',
@@ -151,10 +151,10 @@ export function exportProductsToXLSX(products: Product[], customFileName?: strin
         'Nama Produk / Varian': p.name,
         'Kategori Aplikasi': appStr,
         'Ukuran Kemasan (Kg)': (p.pack_sizes || []).join(', ') || '-',
-        'Harga Jual / Kg (IDR)': p.selling_price_per_kg || 0,
+        'Harga Jual / Kg (IDR)': Number(Number(p.selling_price_per_kg || 0).toFixed(2)),
         'Harga Jual / Kg (USD)': '-',
-        'Stok Aktif (Kg)': Math.round(p.total_stock_kg || 0),
-        'Min. Stok Alert (Kg)': p.min_stock_kg || 0,
+        'Stok Aktif (Kg)': Number(Number(p.total_stock_kg || 0).toFixed(2)),
+        'Min. Stok Alert (Kg)': Number(Number(p.min_stock_kg || 0).toFixed(2)),
         'Top Notes': p.top_notes || '-',
         'Middle Notes': p.middle_notes || '-',
         'Base Notes': p.base_notes || '-',
@@ -450,9 +450,9 @@ export function exportPurchaseOrdersToXLSX(pos: PurchaseOrder[], customFileName?
       'TOP (Hari)': po.payment_terms_days || 30,
       'Mata Uang': po.currency || 'IDR',
       'Kurs Khusus (IDR)': po.exchange_rate || 1,
-      'Total Nilai (Valas)': po.foreign_total_amount || (po.currency && po.currency !== 'IDR' ? (po.total_amount / (po.exchange_rate || 1)) : '-'),
-      'Total Item (Kg)': totalQty,
-      'Total Nilai PO (IDR)': po.total_amount || 0,
+      'Total Nilai (Valas)': po.foreign_total_amount ? Number(Number(po.foreign_total_amount).toFixed(2)) : (po.currency && po.currency !== 'IDR' ? Number((po.total_amount / (po.exchange_rate || 1)).toFixed(2)) : '-'),
+      'Total Item (Kg)': Number(Number(totalQty).toFixed(2)),
+      'Total Nilai PO (IDR)': Number(Number(po.total_amount || 0).toFixed(2)),
       'Rincian Produk': itemNames,
     };
   });
@@ -523,10 +523,10 @@ export function exportSalesOrdersToXLSX(
       'Metode Bayar': so.payment_method || '-',
       'Tipe Kirim': so.shipping_type || 'FRANCO',
       'Kurir Pengantar': so.courier_name || '-',
-      'Total Berat (Kg)': totalQty,
-      'Subtotal Barang (IDR)': so.total_goods_amount || 0,
-      'Biaya Ongkir (IDR)': so.shipping_cost || 0,
-      'Grand Total (IDR)': so.grand_total || 0,
+      'Total Berat (Kg)': Number(Number(totalQty).toFixed(2)),
+      'Subtotal Barang (IDR)': Number(Number(so.total_goods_amount || 0).toFixed(2)),
+      'Biaya Ongkir (IDR)': Number(Number(so.shipping_cost || 0).toFixed(2)),
+      'Grand Total (IDR)': Number(Number(so.grand_total || 0).toFixed(2)),
       'Rincian Produk': itemNames,
     };
   });
@@ -553,12 +553,12 @@ export function exportStockInventoryToXLSX(batches: StockBatch[], customFileName
     'SKU Varian': b.variant_sku || '-',
     'Nama Produk': b.product_name || '-',
     'Ukuran Kemasan': b.pack_size_kg ? `${b.pack_size_kg} Kg` : '-',
-    'Sisa Stok (Kg)': Math.round(b.current_qty_kg || 0),
+    'Sisa Stok (Kg)': Number(Number(b.current_qty_kg || 0).toFixed(2)),
     'Unit / Jerigen': b.unit_count || 1,
     'Tgl Produksi': b.production_date || '-',
     'Expired Date': b.expiry_date || '-',
     'Status Expired': b.is_expired ? 'EXPIRED' : 'AKTIF',
-    'Biaya Pokok (HPP) / Kg': b.unit_cost_per_kg || 0,
+    'Biaya Pokok (HPP) / Kg': Number(Number(b.unit_cost_per_kg || 0).toFixed(2)),
   }));
 
   const timestamp = new Date().toISOString().split('T')[0];
@@ -602,7 +602,7 @@ export function exportInvoicesToXLSX(invoices: any[], customFileName?: string): 
       'Tanggal Invoice': inv.invoice_date || inv.issue_date || inv.order_date || '-',
       'Jatuh Tempo': inv.due_date || '-',
       'Sisa Hari / Status Overdue': sisaHariText,
-      'Total Tagihan (IDR)': inv.total_amount || inv.grand_total || 0,
+      'Total Tagihan (IDR)': Number(Number(inv.total_amount || inv.grand_total || 0).toFixed(2)),
       'Status Pembayaran': inv.payment_status || inv.status || 'BELUM LUNAS',
     };
   });
@@ -642,9 +642,9 @@ export function exportPayablesToXLSX(payables: any[], customFileName?: string): 
       'Nama Suplier': p.distributor_name || '-',
       'Tanggal Order': p.order_date || '-',
       'Jatuh Tempo': p.due_date || '-',
-      'Total Tagihan (IDR)': total,
-      'Sudah Dibayar (IDR)': paid,
-      'Sisa Hutang (IDR)': remaining,
+      'Total Tagihan (IDR)': Number(total.toFixed(2)),
+      'Sudah Dibayar (IDR)': Number(paid.toFixed(2)),
+      'Sisa Hutang (IDR)': Number(remaining.toFixed(2)),
       'Status Pembayaran': statusText,
       'Status Alur PO': p.status || '-',
     };
@@ -673,7 +673,7 @@ export function exportTransactionsToXLSX(transactions: any[], customFileName?: s
     'No Dokumen / Referensi': t.reference_number || t.doc_no || '-',
     'Keterangan': t.description || t.notes || '-',
     'User Pelaksana': t.user_name || t.actor || '-',
-    'Perubahan Stok (Kg)': t.qty_change ?? '-',
+    'Perubahan Stok (Kg)': t.qty_change !== undefined && t.qty_change !== null && !isNaN(Number(t.qty_change)) ? Number(Number(t.qty_change).toFixed(2)) : (t.qty_change ?? '-'),
   }));
 
   const timestamp = new Date().toISOString().split('T')[0];
@@ -710,9 +710,9 @@ export function exportCashLedgerToXLSX(
       'No Referensi': t.reference_number || '-',
       'Pihak Pembayar / Penerima': t.recipient_or_payer || '-',
       'Keterangan': t.notes || '-',
-      'Kas Masuk / Debit (IDR)': isMasuk ? Number(t.amount) : 0,
-      'Kas Keluar / Kredit (IDR)': isKeluar ? Number(t.amount) : 0,
-      'Saldo Akhir (IDR)': Number(t.balance_after) || 0,
+      'Kas Masuk / Debit (IDR)': Number((isMasuk ? Number(t.amount) : 0).toFixed(2)),
+      'Kas Keluar / Kredit (IDR)': Number((isKeluar ? Number(t.amount) : 0).toFixed(2)),
+      'Saldo Akhir (IDR)': Number((Number(t.balance_after) || 0).toFixed(2)),
       'User / PIC': t.created_by || '-',
       'Status': t.status || 'VERIFIED',
     };
