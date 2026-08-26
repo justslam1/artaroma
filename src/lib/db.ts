@@ -102,6 +102,7 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
           { col: 'cancellation_reason', sql: 'ALTER TABLE sales_orders ADD COLUMN cancellation_reason TEXT DEFAULT NULL' },
           { col: 'cancelled_at', sql: 'ALTER TABLE sales_orders ADD COLUMN cancelled_at DATETIME DEFAULT NULL' },
           { col: 'cancelled_by', sql: 'ALTER TABLE sales_orders ADD COLUMN cancelled_by VARCHAR(100) DEFAULT NULL' },
+          { col: 'created_at', sql: 'ALTER TABLE sales_orders ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP' },
         ];
 
         for (const m of soMigrations) {
