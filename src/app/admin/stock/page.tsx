@@ -830,7 +830,7 @@ export default function StockInventoryPage() {
                 href="/admin/procurement"
                 className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
               >
-                <Package className="w-4 h-4" /> 1. Terima Stok PO Vendor
+                <Package className="w-4 h-4" /> 1. Terima Stok PO Suplier
               </Link>
               <button
                 type="button"
@@ -1180,7 +1180,7 @@ export default function StockInventoryPage() {
                                       <Link
                                         href={`/admin/procurement`}
                                         className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
-                                        title="Lanjut buat PO Pembelian Vendor untuk Varian Ini"
+                                        title="Ajukan PO Suplier"
                                       >
                                         <Package className="w-3 h-3 text-emerald-700" />
                                         Ajukan PO
@@ -1395,7 +1395,7 @@ export default function StockInventoryPage() {
                             }}
                             className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1"
                           >
-                            <Plus className="w-3.5 h-3.5" /> Terima Batch PO Vendor
+                            <Plus className="w-3.5 h-3.5" /> Terima Batch PO Suplier
                           </button>
                         )}
                       </div>
@@ -1698,7 +1698,7 @@ export default function StockInventoryPage() {
                                               <Link
                                                 href={`/admin/procurement`}
                                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2 py-1 rounded-lg transition-all cursor-pointer"
-                                                title="Buat PO Vendor untuk Varian Ini"
+                                                title="Buat PO Suplier untuk Varian Ini"
                                               >
                                                 <Package className="w-3 h-3 text-emerald-700" />
                                                 Order PO
