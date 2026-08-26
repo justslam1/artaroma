@@ -3859,6 +3859,29 @@ export default function MasterDataPage() {
                       placeholder="Contoh: Max 7 Hari setelah PO diterbitkan"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Batas Waktu Auto Logout saat Tidak Aktif (Inactivity Timeout) <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={companyConfig.auto_logout_minutes || 240}
+                      onChange={(e) => setCompanyConfig({ ...companyConfig, auto_logout_minutes: parseInt(e.target.value, 10) })}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 font-medium cursor-pointer"
+                    >
+                      <option value={15}>15 Menit</option>
+                      <option value={30}>30 Menit</option>
+                      <option value={60}>1 Jam (60 Menit)</option>
+                      <option value={120}>2 Jam (120 Menit)</option>
+                      <option value={240}>4 Jam (240 Menit — Default Rekomendasi)</option>
+                      <option value={480}>8 Jam (480 Menit)</option>
+                      <option value={720}>12 Jam (720 Menit)</option>
+                      <option value={1440}>24 Jam (1440 Menit)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Sesi pengguna di seluruh tab browser akan otomatis logout jika tidak ada interaksi mouse/keyboard. Peringatan 60 detik akan muncul sebelum logout.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex justify-end">

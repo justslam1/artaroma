@@ -198,6 +198,19 @@ function LoginContent() {
             </p>
           </div>
 
+          {/* Inactivity Timeout Banner */}
+          {searchParams.get('reason') === 'idle_timeout' && !errorMessage && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl flex items-start gap-2.5 text-xs animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">Sesi Berakhir Otomatis</div>
+                <div className="text-[11px] text-amber-700 mt-0.5">
+                  Sesi Anda telah berakhir secara otomatis karena tidak ada aktivitas. Silakan login kembali demi keamanan akun.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Error Banner */}
           {errorMessage && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl flex items-start gap-2.5 text-xs animate-shake">

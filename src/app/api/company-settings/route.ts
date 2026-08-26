@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
         nib: '1234567890123',
         legal_name: 'PT Artaroma Jayatama',
         address: 'Jl. Elang Raya, Perum Kampoeng Elang Blok A5 Semarang – 50272'
-      }
+      },
+      auto_logout_minutes: settings.auto_logout_minutes ? parseInt(settings.auto_logout_minutes, 10) : 240,
     };
 
     return NextResponse.json({
