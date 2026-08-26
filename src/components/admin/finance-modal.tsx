@@ -53,6 +53,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
   const [paymentDate, setPaymentDate] = useState<string>('');
   const [financeProofUrl, setFinanceProofUrl] = useState<string>('');
   const [previewImageModal, setPreviewImageModal] = useState<string | null>(null);
+  const [showLunasConfirm, setShowLunasConfirm] = useState<boolean>(false);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [selectedBankId, setSelectedBankId] = useState<string>('acc-bca');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -75,6 +76,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       setPaymentNotes(invoice.payment_notes || '');
       setPaymentDate(new Date().toISOString().split('T')[0]);
       setFinanceProofUrl(invoice.payment_proof_url || '');
+      setShowLunasConfirm(false);
     }
   }, [invoice]);
 
@@ -115,6 +117,23 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
     reader.readAsDataURL(file);
   };
 
+  const getSelectedBankDisplayName = () => {
+    const matchedBank = bankAccounts.find((b: any) => {
+      const cleanBank = (b.bank || '').toLowerCase();
+      if (selectedBankId === 'acc-bca' && cleanBank.includes('bca')) return true;
+      if (selectedBankId === 'acc-mandiri' && cleanBank.includes('mandiri')) return true;
+      if (selectedBankId === 'acc-bni' && cleanBank.includes('bni')) return true;
+      return false;
+    });
+    return matchedBank
+      ? `${matchedBank.bank} - ${matchedBank.no} (${matchedBank.holder || 'PT Artaroma Jayatama'})`
+      : selectedBankId === 'acc-mandiri'
+      ? 'Bank Mandiri - 156-00-1928374-1 (PT Artaroma Jayatama)'
+      : selectedBankId === 'acc-bni'
+      ? 'Bank BNI - 009-445-8876 (PT Artaroma Jayatama)'
+      : 'Bank Central Asia (BCA) - 882-019-3881 (PT Artaroma Jayatama)';
+  };
+
   const handleConfirm = () => {
     if (parsedInput <= 0) {
       alert('Masukkan nominal transfer pembayaran yang valid (minimal lebih dari Rp 0).');
@@ -125,20 +144,16 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       return;
     }
 
-    const matchedBank = bankAccounts.find((b: any) => {
-      const cleanBank = (b.bank || '').toLowerCase();
-      if (selectedBankId === 'acc-bca' && cleanBank.includes('bca')) return true;
-      if (selectedBankId === 'acc-mandiri' && cleanBank.includes('mandiri')) return true;
-      if (selectedBankId === 'acc-bni' && cleanBank.includes('bni')) return true;
-      return false;
-    });
-    const bankName = matchedBank
-      ? `${matchedBank.bank} (${matchedBank.no})`
-      : selectedBankId === 'acc-mandiri'
-      ? 'Bank Mandiri (156-00-1928374-1)'
-      : selectedBankId === 'acc-bni'
-      ? 'Bank BNI (009-445-8876)'
-      : 'Bank Central Asia (BCA)';
+    // Jika pelunasan penuh, munculkan konfirmasi terlebih dahulu
+    if (isLunas) {
+      setShowLunasConfirm(true);
+    } else {
+      executeVerify();
+    }
+  };
+
+  const executeVerify = () => {
+    const bankName = getSelectedBankDisplayName();
 
     onVerify(
       invoice.id,
@@ -150,6 +165,7 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
       selectedBankId,
       bankName
     );
+    setShowLunasConfirm(false);
     onClose();
   };
 
@@ -586,6 +602,80 @@ export function VerifyPaymentModal({ isOpen, onClose, invoice, onVerify }: Verif
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal before marking as LUNAS */}
+      {showLunasConfirm && (
+        <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-emerald-300 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-slate-800">
+                  Konfirmasi Status &quot;Lunas Penuh&quot;
+                </h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Apakah Anda yakin ingin memverifikasi pembayaran ini dan mengubah status invoice menjadi <strong className="text-emerald-700 font-bold">LUNAS PENUH</strong>?
+                </p>
+              </div>
+            </div>
+
+            {/* Summary Details Box */}
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-600">
+                <span>No. Invoice:</span>
+                <span className="font-bold font-mono text-blue-700">{invoice.invoice_number}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Customer B2B:</span>
+                <span className="font-bold text-slate-800 truncate max-w-[200px]">{invoice.customer_name}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Total Nilai Tagihan:</span>
+                <span className="font-mono font-semibold text-slate-700">{formatIDR(totalBill)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600 border-t border-emerald-200/60 pt-1.5">
+                <span>Nominal Pelunasan:</span>
+                <span className="font-bold font-mono text-emerald-700 text-sm">{formatIDR(parsedInput)}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Rekening Penerima:</span>
+                <span className="font-semibold text-slate-700 text-right truncate max-w-[210px]">{getSelectedBankDisplayName()}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Tanggal Bayar:</span>
+                <span className="font-semibold text-slate-700">{formatDate(paymentDate)}</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                Penerimaan dana ini akan otomatis dicatat sebagai <strong>Bukti Kas Masuk (BKM)</strong> pada Manajemen Kas dan menambah saldo rekening terkait.
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLunasConfirm(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Batal / Cek Kembali
+              </button>
+              <button
+                type="button"
+                onClick={executeVerify}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer"
+              >
+                <CheckCircle className="w-4 h-4" /> Ya, Set Jadi Lunas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox / Zoom Image Modal */}
       {previewImageModal && (
