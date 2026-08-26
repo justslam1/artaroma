@@ -377,7 +377,7 @@ export default function CashManagementPage() {
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Besar (Treasury)</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Besar</span>
                 <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
                   <CreditCard className="w-3.5 h-3.5" />
                 </div>
@@ -401,7 +401,7 @@ export default function CashManagementPage() {
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Kantor (OpEx)</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Kantor</span>
                 <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
                   <Building2 className="w-3.5 h-3.5" />
                 </div>
