@@ -33,6 +33,17 @@ interface MonthlyTrendsViewProps {
   activeSubTab?: 'sales' | 'procurement' | 'customer';
 }
 
+const PRODUCT_COLOR_PALETTE = [
+  { name: 'Blue', bg: 'bg-gradient-to-t from-blue-600 to-indigo-600', dot: 'bg-blue-600', text: 'text-blue-700', border: 'border-blue-500' },
+  { name: 'Purple', bg: 'bg-gradient-to-t from-purple-600 to-fuchsia-600', dot: 'bg-purple-600', text: 'text-purple-700', border: 'border-purple-500' },
+  { name: 'Emerald', bg: 'bg-gradient-to-t from-emerald-600 to-teal-600', dot: 'bg-emerald-600', text: 'text-emerald-700', border: 'border-emerald-500' },
+  { name: 'Amber', bg: 'bg-gradient-to-t from-amber-500 to-orange-600', dot: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-500' },
+  { name: 'Rose', bg: 'bg-gradient-to-t from-rose-600 to-pink-600', dot: 'bg-rose-600', text: 'text-rose-700', border: 'border-rose-500' },
+  { name: 'Cyan', bg: 'bg-gradient-to-t from-cyan-600 to-sky-600', dot: 'bg-cyan-600', text: 'text-cyan-700', border: 'border-cyan-500' },
+  { name: 'Violet', bg: 'bg-gradient-to-t from-violet-600 to-indigo-700', dot: 'bg-violet-600', text: 'text-violet-700', border: 'border-violet-500' },
+  { name: 'Lime', bg: 'bg-gradient-to-t from-lime-600 to-emerald-700', dot: 'bg-lime-600', text: 'text-lime-700', border: 'border-lime-500' },
+];
+
 export default function MonthlyTrendsView({
   initialSubTab = 'sales',
   activeSubTab: propSubTab,
@@ -103,6 +114,16 @@ export default function MonthlyTrendsView({
     const date = new Date(parseInt(year), parseInt(month) - 1, 1);
     return date.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
   };
+
+  // Map product IDs to consistent color indices
+  const productColorsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    availableProducts.forEach((p, idx) => {
+      map[String(p.id)] = idx % PRODUCT_COLOR_PALETTE.length;
+      if (p.name) map[p.name.toLowerCase()] = idx % PRODUCT_COLOR_PALETTE.length;
+    });
+    return map;
+  }, [availableProducts]);
 
   // =========================================================================
   // DYNAMIC COMPUTATION FOR PRODUCT SALES TRENDS (WITH PRODUCT & PAYMENT FILTERS)
@@ -180,6 +201,21 @@ export default function MonthlyTrendsView({
         uniqueCustomers = new Set(ordersInMonth.map((so) => so.customer_id || so.customer_name).filter(Boolean)).size;
       }
 
+      // Generate product segments breakdown inside this month
+      const productBreakdownMap: Record<string, { productId: string; name: string; volumeKg: number; revenue: number; count: number }> = {};
+      itemsInMonth.forEach((it) => {
+        const pId = String(it.product_id || 'unknown');
+        const pName = it.product_name || 'Produk Lainnya';
+        if (!productBreakdownMap[pId]) {
+          productBreakdownMap[pId] = { productId: pId, name: pName, volumeKg: 0, revenue: 0, count: 0 };
+        }
+        productBreakdownMap[pId].volumeKg += Number(it.qty_kg || 0);
+        productBreakdownMap[pId].revenue += Number(it.subtotal || 0);
+        productBreakdownMap[pId].count += 1;
+      });
+
+      const productSegments = Object.values(productBreakdownMap).sort((a, b) => b.revenue - a.revenue);
+
       return {
         monthKey: key,
         monthLabel: formatMonthLabel(key),
@@ -187,6 +223,7 @@ export default function MonthlyTrendsView({
         totalVolumeKg,
         totalOrders,
         uniqueCustomers,
+        productSegments,
       };
     }).map((st, idx, arr) => {
       let growthPercent = 0;
@@ -198,7 +235,22 @@ export default function MonthlyTrendsView({
         growthPercent,
       };
     });
-  }, [data, monthKeys, selectedProductId, salesPaymentStatusFilter]);
+  }, [data, monthKeys, selectedProductId, salesPaymentStatusFilter, productColorsMap]);
+
+  // All active distinct products in the filtered range
+  const allActiveProductsInPeriod = useMemo(() => {
+    const map: Record<string, { id: string; name: string; totalRevenue: number; totalVolumeKg: number }> = {};
+    filteredSalesTrends.forEach((st: any) => {
+      (st.productSegments || []).forEach((ps: any) => {
+        if (!map[ps.productId]) {
+          map[ps.productId] = { id: ps.productId, name: ps.name, totalRevenue: 0, totalVolumeKg: 0 };
+        }
+        map[ps.productId].totalRevenue += ps.revenue;
+        map[ps.productId].totalVolumeKg += ps.volumeKg;
+      });
+    });
+    return Object.values(map).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [filteredSalesTrends]);
 
   // =========================================================================
   // DYNAMIC COMPUTATION FOR PURCHASE ORDER TRENDS (WITH DISTRIBUTOR & PAYMENT FILTERS)
@@ -247,6 +299,20 @@ export default function MonthlyTrendsView({
       const totalVolumeKg = itemsInMonth.reduce((sum, pi) => sum + Number(pi.qty_ordered_kg || 0), 0);
       const totalPOs = posInMonth.length;
 
+      // Group by product in this PO month
+      const poProductMap: Record<string, { productId: string; name: string; volumeKg: number; cost: number }> = {};
+      itemsInMonth.forEach((it) => {
+        const pId = String(it.product_id || 'unknown');
+        const pName = it.product_name || 'Bahan Baku';
+        if (!poProductMap[pId]) {
+          poProductMap[pId] = { productId: pId, name: pName, volumeKg: 0, cost: 0 };
+        }
+        poProductMap[pId].volumeKg += Number(it.qty_ordered_kg || 0);
+        poProductMap[pId].cost += Number(it.subtotal || 0);
+      });
+
+      const poProductSegments = Object.values(poProductMap).sort((a, b) => b.cost - a.cost);
+
       return {
         monthKey: key,
         monthLabel: formatMonthLabel(key),
@@ -255,6 +321,7 @@ export default function MonthlyTrendsView({
         totalSisaHutang,
         totalVolumeKg,
         totalPOs,
+        poProductSegments,
       };
     });
   }, [data, monthKeys, selectedDistributorId, poPaymentStatusFilter]);
@@ -712,16 +779,16 @@ export default function MonthlyTrendsView({
             </div>
           </div>
 
-          {/* Monthly Bar Chart Visualizer */}
+          {/* Monthly Bar Chart Visualizer with Product Names Inside */}
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
               <div>
                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-blue-600" />
                   Grafik Perkembangan Penjualan Produk ({monthKeys.length} Bulan Analisis)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Visualisasi grafik batang{' '}
+                  Visualisasi grafik batang bertumpuk dengan rincian nama produk di dalam batang{' '}
                   {metricUnit === 'currency'
                     ? 'nilai rupiah omset'
                     : metricUnit === 'volume'
@@ -730,10 +797,17 @@ export default function MonthlyTrendsView({
                   tiap bulan.
                 </p>
               </div>
+
+              {allActiveProductsInPeriod.length > 0 && (
+                <div className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg self-start sm:self-auto flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  <span>{allActiveProductsInPeriod.length} Produk Aktif Terjual</span>
+                </div>
+              )}
             </div>
 
-            {/* CSS Bar Chart */}
-            <div className="h-64 flex items-end gap-2 sm:gap-3 pt-8 pb-2 px-2 overflow-x-auto">
+            {/* CSS Stacked Bar Chart with Product Names */}
+            <div className="h-80 flex items-end gap-3 sm:gap-4 pt-10 pb-2 px-2 overflow-x-auto">
               {filteredSalesTrends.map((st: any) => {
                 const val =
                   metricUnit === 'currency'
@@ -749,48 +823,135 @@ export default function MonthlyTrendsView({
                     ? maxSalesVolume
                     : maxSalesCount;
 
-                const heightPercent = maxVal > 0 ? Math.max((val / maxVal) * 100, 4) : 4;
+                const heightPercent = maxVal > 0 ? Math.max((val / maxVal) * 100, 6) : 6;
+                const segments: any[] = st.productSegments || [];
 
                 return (
-                  <div key={st.monthKey} className="flex-1 min-w-[50px] flex flex-col items-center h-full justify-end group relative">
-                    {/* Tooltip on Hover */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-14 z-20 pointer-events-none bg-slate-900 text-white text-[10px] py-1.5 px-2.5 rounded-lg shadow-lg whitespace-nowrap">
-                      <div className="font-bold text-blue-300">{st.monthLabel}</div>
-                      <div>Omset: {formatIDR(st.totalOmset)}</div>
-                      <div>Volume: {formatKg(st.totalVolumeKg)} ({st.totalOrders} SO)</div>
-                      <div>Customer Aktif: {st.uniqueCustomers}</div>
-                    </div>
-
-                    {/* Bar */}
-                    <div
-                      style={{ height: `${heightPercent}%` }}
-                      className={`w-full rounded-t-lg transition-all duration-300 relative ${
-                        val > 0
-                          ? 'bg-gradient-to-t from-blue-600 to-indigo-500 group-hover:from-blue-700 group-hover:to-indigo-600'
-                          : 'bg-slate-100'
-                      }`}
-                    >
-                      {val > 0 && (
-                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-mono font-bold text-slate-600 whitespace-nowrap">
-                          {metricUnit === 'currency'
-                            ? st.totalOmset >= 1000000
-                              ? `${(st.totalOmset / 1000000).toFixed(0)}Jt`
-                              : formatIDR(st.totalOmset)
-                            : metricUnit === 'volume'
-                            ? `${st.totalVolumeKg}kg`
-                            : `${st.totalOrders} SO`}
-                        </span>
+                  <div key={st.monthKey} className="flex-1 min-w-[70px] max-w-[160px] flex flex-col items-center h-full justify-end group relative">
+                    {/* Rich Floating Tooltip on Hover */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-28 z-30 pointer-events-none bg-slate-950/95 text-white text-[11px] py-2.5 px-3 rounded-xl shadow-2xl min-w-[210px] border border-slate-700 backdrop-blur-xs">
+                      <div className="font-bold text-blue-300 border-b border-slate-700 pb-1 mb-1.5 flex justify-between items-center">
+                        <span>{st.monthLabel}</span>
+                        <span className="text-slate-400 font-mono text-[10px]">{st.totalOrders} Transaksi</span>
+                      </div>
+                      <div className="text-slate-200 font-bold text-xs mb-1.5">
+                        Total: {formatIDR(st.totalOmset)} • {formatKg(st.totalVolumeKg)}
+                      </div>
+                      {segments.length > 0 && (
+                        <div className="space-y-1 border-t border-slate-800 pt-1.5 max-h-36 overflow-y-auto">
+                          {segments.map((ps: any, idx: number) => {
+                            const colorObj = PRODUCT_COLOR_PALETTE[productColorsMap[ps.productId] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+                            const pct = st.totalOmset > 0 ? ((ps.revenue / st.totalOmset) * 100).toFixed(0) : 0;
+                            return (
+                              <div key={ps.productId} className="flex items-center justify-between text-[10px] gap-2">
+                                <span className="flex items-center gap-1.5 text-slate-200 truncate max-w-[130px]">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${colorObj.dot}`} />
+                                  {ps.name}
+                                </span>
+                                <span className="font-mono font-bold text-white shrink-0">
+                                  {metricUnit === 'currency' ? formatIDR(ps.revenue) : formatKg(ps.volumeKg)} ({pct}%)
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
 
-                    {/* Label */}
-                    <div className="text-[10px] font-medium text-slate-500 mt-2 truncate w-full text-center">
+                    {/* Stacked Bar Container */}
+                    <div
+                      style={{ height: `${heightPercent}%` }}
+                      className={`w-full rounded-t-xl transition-all duration-300 relative flex flex-col-reverse justify-start overflow-hidden border shadow-sm ${
+                        val > 0
+                          ? 'border-blue-400/40 bg-slate-100'
+                          : 'border-slate-200 bg-slate-100'
+                      }`}
+                    >
+                      {/* Top Total Badge */}
+                      {val > 0 && (
+                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono font-black text-slate-700 whitespace-nowrap bg-white/90 px-1.5 py-0.2 rounded border border-slate-200 shadow-2xs z-10">
+                          {metricUnit === 'currency'
+                            ? st.totalOmset >= 1000000
+                              ? `${(st.totalOmset / 1000000).toFixed(1)}Jt`
+                              : formatIDR(st.totalOmset)
+                            : metricUnit === 'volume'
+                            ? formatKg(st.totalVolumeKg)
+                            : `${st.totalOrders} SO`}
+                        </span>
+                      )}
+
+                      {/* Segments with Product Names Inside */}
+                      {val > 0 && segments.length > 0 ? (
+                        segments.map((ps: any, idx: number) => {
+                          const prodVal = metricUnit === 'currency' ? ps.revenue : ps.volumeKg;
+                          const totalBase = metricUnit === 'currency' ? st.totalOmset : st.totalVolumeKg;
+                          const segPct = totalBase > 0 ? (prodVal / totalBase) * 100 : 100 / segments.length;
+                          const colorObj = PRODUCT_COLOR_PALETTE[productColorsMap[ps.productId] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+
+                          return (
+                            <div
+                              key={ps.productId}
+                              style={{ height: `${segPct}%` }}
+                              className={`w-full ${colorObj.bg} border-t border-white/25 transition-all hover:brightness-110 flex flex-col items-center justify-center p-1 relative group/seg overflow-hidden min-h-[26px]`}
+                              title={`${ps.name}: ${formatIDR(ps.revenue)} (${formatKg(ps.volumeKg)})`}
+                            >
+                              {/* Product Name Printed Directly Inside the Bar */}
+                              <span className="text-[10px] font-black text-white leading-tight truncate w-full text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] px-0.5 tracking-tight uppercase">
+                                {ps.name}
+                              </span>
+                              {segPct >= 18 && (
+                                <span className="text-[9px] font-mono text-white/95 font-bold leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] mt-0.5">
+                                  {metricUnit === 'currency'
+                                    ? ps.revenue >= 1000000
+                                      ? `${(ps.revenue / 1000000).toFixed(1)}Jt`
+                                      : formatIDR(ps.revenue)
+                                    : `${ps.volumeKg}kg`}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : val > 0 ? (
+                        <div className="w-full h-full bg-gradient-to-t from-blue-600 to-indigo-600 flex items-center justify-center p-1">
+                          <span className="text-[10px] font-extrabold text-white truncate w-full text-center">
+                            {formatIDR(st.totalOmset)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {/* Month Label */}
+                    <div className="text-[11px] font-bold text-slate-600 mt-2 truncate w-full text-center">
                       {st.monthLabel}
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* Product Color Legend */}
+            {allActiveProductsInPeriod.length > 0 && (
+              <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                  Legenda Produk:
+                </span>
+                {allActiveProductsInPeriod.map((prod: any, idx: number) => {
+                  const colorObj = PRODUCT_COLOR_PALETTE[productColorsMap[prod.id] ?? (idx % PRODUCT_COLOR_PALETTE.length)];
+                  return (
+                    <span
+                      key={prod.id}
+                      className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs"
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${colorObj.dot} shrink-0`} />
+                      <span className="font-bold">{prod.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500 font-normal">
+                        ({formatIDR(prod.totalRevenue)})
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Monthly Breakdown Table */}
@@ -858,35 +1019,38 @@ export default function MonthlyTrendsView({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
               <div>
-                <div className="text-xs text-slate-400 font-medium">Total Belanja PO Periode Terpilih</div>
-                <div className="text-xl font-bold font-mono text-purple-700 mt-0.5">
+                <div className="text-xs text-slate-400 font-medium">Total Belanja PO Terpilih</div>
+                <div className="text-xl font-bold font-mono text-purple-800 mt-0.5">
                   {formatIDR(filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalPOAmount, 0))}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  Dari {filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalPOs, 0)} Total Tagihan PO
+                <div className="text-[10px] text-purple-600 font-medium mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {selectedDistributorId !== 'ALL' ? 'Suplier Terpilih' : 'Akumulasi Semua Suplier'}
                 </div>
               </div>
               <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                <Building2 className="w-5 h-5" />
+                <DollarSign className="w-5 h-5" />
               </div>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
               <div>
-                <div className="text-xs text-slate-400 font-medium">Total Pembayaran Terbayar</div>
-                <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">
-                  {formatIDR(filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalPaidAmount, 0))}
+                <div className="text-xs text-slate-400 font-medium">Sisa Hutang Berjalan</div>
+                <div className="text-xl font-bold font-mono text-rose-600 mt-0.5">
+                  {formatIDR(filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalSisaHutang, 0))}
                 </div>
-                <div className="text-[10px] text-emerald-600 font-medium mt-0.5">Tercatat di Buku Kas Keluar</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Terbayar: {formatIDR(filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalPaidAmount, 0))}
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                <CreditCard className="w-5 h-5" />
               </div>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
               <div>
-                <div className="text-xs text-slate-400 font-medium">Total Volume Pengadaan Suplier</div>
+                <div className="text-xs text-slate-400 font-medium">Total Bahan Baku Masuk</div>
                 <div className="text-xl font-bold font-mono text-slate-800 mt-0.5">
                   {formatKg(filteredPoTrends.reduce((sum: number, p: any) => sum + p.totalVolumeKg, 0))}
                 </div>
@@ -907,7 +1071,7 @@ export default function MonthlyTrendsView({
                   Grafik Perkembangan Belanja Purchase Order ({monthKeys.length} Bulan Analisis)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Visualisasi grafik{' '}
+                  Visualisasi grafik batang bertumpuk rincian produk{' '}
                   {metricUnit === 'currency'
                     ? 'nominal belanja pengadaan PO'
                     : 'volume pengadaan bahan baku (kg)'}{' '}
@@ -917,45 +1081,103 @@ export default function MonthlyTrendsView({
             </div>
 
             {/* CSS Bar Chart */}
-            <div className="h-64 flex items-end gap-2 sm:gap-3 pt-8 pb-2 px-2 overflow-x-auto">
+            <div className="h-80 flex items-end gap-3 sm:gap-4 pt-10 pb-2 px-2 overflow-x-auto">
               {filteredPoTrends.map((pt: any) => {
                 const val = metricUnit === 'currency' ? pt.totalPOAmount : pt.totalVolumeKg;
                 const maxVal = metricUnit === 'currency' ? maxPOAmount : maxPOVolume;
-                const heightPercent = maxVal > 0 ? Math.max((val / maxVal) * 100, 4) : 4;
+                const heightPercent = maxVal > 0 ? Math.max((val / maxVal) * 100, 6) : 6;
+                const poSegments: any[] = pt.poProductSegments || [];
 
                 return (
-                  <div key={pt.monthKey} className="flex-1 min-w-[50px] flex flex-col items-center h-full justify-end group relative">
+                  <div key={pt.monthKey} className="flex-1 min-w-[70px] max-w-[160px] flex flex-col items-center h-full justify-end group relative">
                     {/* Tooltip on Hover */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-14 z-20 pointer-events-none bg-slate-900 text-white text-[10px] py-1.5 px-2.5 rounded-lg shadow-lg whitespace-nowrap">
-                      <div className="font-bold text-purple-300">{pt.monthLabel}</div>
-                      <div>Total PO: {formatIDR(pt.totalPOAmount)}</div>
-                      <div>Terbayar: {formatIDR(pt.totalPaidAmount)}</div>
-                      <div>Sisa Hutang: {formatIDR(pt.totalSisaHutang)}</div>
-                      <div>Volume: {formatKg(pt.totalVolumeKg)} ({pt.totalPOs} PO)</div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-28 z-30 pointer-events-none bg-slate-950/95 text-white text-[11px] py-2.5 px-3 rounded-xl shadow-2xl min-w-[210px] border border-slate-700 backdrop-blur-xs">
+                      <div className="font-bold text-purple-300 border-b border-slate-700 pb-1 mb-1.5 flex justify-between items-center">
+                        <span>{pt.monthLabel}</span>
+                        <span className="text-slate-400 font-mono text-[10px]">{pt.totalPOs} PO</span>
+                      </div>
+                      <div className="text-slate-200 font-bold mb-1">Total: {formatIDR(pt.totalPOAmount)} • {formatKg(pt.totalVolumeKg)}</div>
+                      <div className="text-slate-400 text-[10px]">Terbayar: {formatIDR(pt.totalPaidAmount)}</div>
+                      <div className="text-rose-300 text-[10px] mb-1.5">Sisa Hutang: {formatIDR(pt.totalSisaHutang)}</div>
+                      {poSegments.length > 0 && (
+                        <div className="space-y-1 border-t border-slate-800 pt-1.5 max-h-36 overflow-y-auto">
+                          {poSegments.map((seg: any, sIdx: number) => {
+                            const colorObj = PRODUCT_COLOR_PALETTE[sIdx % PRODUCT_COLOR_PALETTE.length];
+                            return (
+                              <div key={seg.productId} className="flex items-center justify-between text-[10px] gap-2">
+                                <span className="flex items-center gap-1.5 text-slate-200 truncate max-w-[130px]">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${colorObj.dot}`} />
+                                  {seg.name}
+                                </span>
+                                <span className="font-mono font-bold text-white shrink-0">
+                                  {metricUnit === 'currency' ? formatIDR(seg.cost) : formatKg(seg.volumeKg)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Bar */}
+                    {/* Stacked Bar */}
                     <div
                       style={{ height: `${heightPercent}%` }}
-                      className={`w-full rounded-t-lg transition-all duration-300 relative ${
+                      className={`w-full rounded-t-xl transition-all duration-300 relative flex flex-col-reverse justify-start overflow-hidden border shadow-sm ${
                         val > 0
-                          ? 'bg-gradient-to-t from-purple-600 to-indigo-500 group-hover:from-purple-700 group-hover:to-indigo-600'
-                          : 'bg-slate-100'
+                          ? 'border-purple-400/40 bg-slate-100'
+                          : 'border-slate-200 bg-slate-100'
                       }`}
                     >
                       {val > 0 && (
-                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-mono font-bold text-purple-800 whitespace-nowrap">
+                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono font-black text-purple-900 whitespace-nowrap bg-white/90 px-1.5 py-0.2 rounded border border-purple-200 shadow-2xs z-10">
                           {metricUnit === 'currency'
                             ? pt.totalPOAmount >= 1000000
-                              ? `${(pt.totalPOAmount / 1000000).toFixed(0)}Jt`
+                              ? `${(pt.totalPOAmount / 1000000).toFixed(1)}Jt`
                               : formatIDR(pt.totalPOAmount)
                             : `${pt.totalVolumeKg}kg`}
                         </span>
                       )}
+
+                      {val > 0 && poSegments.length > 0 ? (
+                        poSegments.map((seg: any, sIdx: number) => {
+                          const segVal = metricUnit === 'currency' ? seg.cost : seg.volumeKg;
+                          const totalBase = metricUnit === 'currency' ? pt.totalPOAmount : pt.totalVolumeKg;
+                          const segPct = totalBase > 0 ? (segVal / totalBase) * 100 : 100 / poSegments.length;
+                          const colorObj = PRODUCT_COLOR_PALETTE[sIdx % PRODUCT_COLOR_PALETTE.length];
+
+                          return (
+                            <div
+                              key={seg.productId}
+                              style={{ height: `${segPct}%` }}
+                              className={`w-full ${colorObj.bg} border-t border-white/25 transition-all hover:brightness-110 flex flex-col items-center justify-center p-1 relative group/seg overflow-hidden min-h-[26px]`}
+                              title={`${seg.name}: ${formatIDR(seg.cost)} (${formatKg(seg.volumeKg)})`}
+                            >
+                              <span className="text-[10px] font-black text-white leading-tight truncate w-full text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] px-0.5 tracking-tight uppercase">
+                                {seg.name}
+                              </span>
+                              {segPct >= 18 && (
+                                <span className="text-[9px] font-mono text-white/95 font-bold leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)] mt-0.5">
+                                  {metricUnit === 'currency'
+                                    ? seg.cost >= 1000000
+                                      ? `${(seg.cost / 1000000).toFixed(1)}Jt`
+                                      : formatIDR(seg.cost)
+                                    : `${seg.volumeKg}kg`}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : val > 0 ? (
+                        <div className="w-full h-full bg-gradient-to-t from-purple-600 to-indigo-600 flex items-center justify-center p-1">
+                          <span className="text-[10px] font-extrabold text-white truncate w-full text-center">
+                            {formatIDR(pt.totalPOAmount)}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* Label */}
-                    <div className="text-[10px] font-medium text-slate-500 mt-2 truncate w-full text-center">
+                    <div className="text-[11px] font-bold text-slate-600 mt-2 truncate w-full text-center">
                       {pt.monthLabel}
                     </div>
                   </div>
