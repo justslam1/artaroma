@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialCustomers } from '@/lib/mock-data';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
 
     // Parse JSON strings if they exist & calculate live piutang and credit status
     for (let i = 0; i < customers.length; i++) {
-      const c = customers[i];
+      const c = { ...customers[i] };
+      // Strip sensitive password field from API response
+      delete c.password;
+
       let specPrices = c.special_prices;
       if (typeof specPrices === 'string') {
         try {
@@ -84,6 +88,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {
@@ -205,6 +212,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {
@@ -313,6 +323,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { id, is_active } = body;

@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function PUT(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -70,9 +74,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     
