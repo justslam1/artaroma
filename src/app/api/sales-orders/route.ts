@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { generateNextSONumber } from '@/lib/sequences';
 import { initialCustomers, initialInvoices, initialSalesOrders } from '@/lib/mock-data';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req);
+  if (auth.error) return auth.error;
+  const user = auth.user;
+
   try {
     const body = await req.json();
     const { customer_id, items, payment_method, courier_id, shipping_type, shipping_cost } = body;
@@ -53,6 +58,40 @@ export async function POST(req: NextRequest) {
         { success: false, message: 'customer_id and non-empty items array are required' },
         { status: 400 }
       );
+    }
+
+    // BOLA / IDOR protection for Customer role
+    if (user.role === 'CUSTOMER') {
+      const isSelf = user.customer_id === customer_id || user.id === customer_id || user.id === `usr-cust-${customer_id}`;
+      if (!isSelf) {
+        return NextResponse.json(
+          { success: false, message: 'Akses ditolak. Anda tidak berhak membuat pesanan atas nama customer lain.' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Query products table to get authoritative price map
+    const productPriceMap: Record<string, { name: string; price: number; variantPrices: Record<string, number> }> = {};
+    try {
+      const pRows = await executeQuery<any[]>('SELECT id, name, price_idr, variant_prices FROM products');
+      if (Array.isArray(pRows)) {
+        pRows.forEach((p) => {
+          let varPrices: Record<string, number> = {};
+          if (typeof p.variant_prices === 'string') {
+            try { varPrices = JSON.parse(p.variant_prices); } catch {}
+          } else if (p.variant_prices && typeof p.variant_prices === 'object') {
+            varPrices = p.variant_prices;
+          }
+          productPriceMap[p.id] = {
+            name: p.name,
+            price: parseFloat(p.price_idr) || 0,
+            variantPrices: varPrices,
+          };
+        });
+      }
+    } catch (err: any) {
+      console.warn('Price lookup warning:', err.message);
     }
 
     // 1. Fetch Customer details & calculate Current Piutang & Overdue status
@@ -101,18 +140,31 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // Calculate total order amount
+    // Calculate total order amount with authoritative server-side price validation
     let totalGoodsAmount = 0;
     const processedItems = items.map((item: any, idx: number) => {
-      const qty = parseFloat(item.qty_kg) || 0;
-      const unitPrice = parseFloat(item.unit_price_per_kg) || 0;
-      const subtotal = qty * unitPrice;
+      const qty = Math.max(0.1, parseFloat(item.qty_kg) || 1);
+      
+      // Determine authentic unit price
+      let unitPrice = parseFloat(item.unit_price_per_kg) || 0;
+      const dbProduct = productPriceMap[item.product_id];
+      if (dbProduct) {
+        const packSizeKey = item.variant_sku?.includes('-25K') ? '25' : item.variant_sku?.includes('-5K') ? '5' : '1';
+        const officialVariantPrice = dbProduct.variantPrices[packSizeKey];
+        if (officialVariantPrice && officialVariantPrice > 0) {
+          unitPrice = officialVariantPrice;
+        } else if (dbProduct.price > 0) {
+          unitPrice = dbProduct.price;
+        }
+      }
+
+      const subtotal = Math.round(qty * unitPrice);
       totalGoodsAmount += subtotal;
 
       return {
         id: `so-item-${Date.now()}-${idx}`,
         product_id: item.product_id,
-        product_name: item.product_name,
+        product_name: dbProduct?.name || item.product_name || 'Varian Produk',
         qty_kg: qty,
         unit_price_per_kg: unitPrice,
         subtotal,

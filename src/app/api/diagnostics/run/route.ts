@@ -3,6 +3,7 @@ import { executeQuery, executeTransaction } from '@/lib/db';
 import { VAPID_PUBLIC_KEY, ensurePushTableExists } from '@/lib/push-notifications';
 import { generateNextSONumber, generateNextPONumber } from '@/lib/sequences';
 import { convertUsdToIdr, getUsdExchangeRate } from '@/lib/currency-store';
+import { verifyApiAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -18,6 +19,9 @@ export interface TestResultItem {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Master Data']);
+  if (auth.error) return auth.error;
+
   const startTime = Date.now();
   const results: TestResultItem[] = [];
 
