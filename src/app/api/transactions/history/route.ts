@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Log Transaksi', 'Master Data']);
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const categoryFilter = searchParams.get('category') || 'ALL';

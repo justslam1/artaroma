@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialInvoices, initialSalesOrders } from '@/lib/mock-data';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Dashboard', 'Manajemen Kas']);
+  if (auth.error) return auth.error;
+
   try {
     let financeData: any = null;
 

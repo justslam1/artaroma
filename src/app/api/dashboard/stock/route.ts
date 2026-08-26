@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialProducts, initialBatches } from '@/lib/mock-data';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Dashboard', 'Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     let stockData: any = null;
 

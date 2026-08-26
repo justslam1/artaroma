@@ -1,9 +1,7 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { StockOpnameDraft } from '@/lib/types';
+import { verifyApiAuth } from '@/lib/auth';
 
 // In-memory fallback cache for drafts
 let inMemoryDrafts: StockOpnameDraft[] = [];
@@ -69,6 +67,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     await ensureDraftsTable();
     const body = await req.json();
@@ -149,6 +150,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     await ensureDraftsTable();
     const body = await req.json();

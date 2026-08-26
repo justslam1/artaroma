@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/db';
 import { initialBatches, initialProducts } from '@/lib/mock-data';
+import { verifyApiAuth } from '@/lib/auth';
 
 async function initStockBatchesSampleColumns() {
   try {
@@ -84,6 +85,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {
@@ -199,6 +203,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { id, sample_status, sample_notes, current_qty_kg } = body;

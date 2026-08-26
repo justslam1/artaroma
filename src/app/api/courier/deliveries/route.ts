@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery, executeTransaction } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Pengiriman Kurir', 'Sales Order (SO)']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {

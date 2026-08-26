@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery, executeTransaction } from '@/lib/db';
+import { verifyApiAuth } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await verifyApiAuth(req);
+  if (auth.error) return auth.error;
+  const user = auth.user;
+
   const { id: soId } = await params;
   try {
     const orders: any[] = await executeQuery(
@@ -20,6 +25,18 @@ export async function GET(
     }
 
     const order = orders[0];
+
+    // BOLA / IDOR Protection: Customer can only view their own sales order
+    if (user.role === 'CUSTOMER') {
+      const isOwner = user.customer_id === order.customer_id || user.id === order.customer_id || user.id === `usr-cust-${order.customer_id}`;
+      if (!isOwner) {
+        return NextResponse.json(
+          { success: false, message: 'Akses ditolak. Anda tidak memiliki izin untuk melihat pesanan ini.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const items = await executeQuery(
       'SELECT * FROM so_items WHERE so_id = ?',
       [order.id]
@@ -64,6 +81,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await verifyApiAuth(req, ['Sales Order (SO)', 'Pengiriman Kurir', 'Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
   const { id: soId } = await params;
 
   if (!soId) {
