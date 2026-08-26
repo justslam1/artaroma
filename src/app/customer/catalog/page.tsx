@@ -287,7 +287,7 @@ export default function CustomerCatalogPage() {
 
         {/* PRODUCT GRID VIEW (TAMPILAN MODERN E-COMMERCE CARD GRID) */}
         {!isLoading && !error && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => {
               const rawPackSizes = product.pack_sizes && product.pack_sizes.length > 0 ? product.pack_sizes : [25, 5, 1, 0.1];
               const packSizes = Array.from(new Set([...rawPackSizes, 0.1])).sort((a, b) => b - a);
@@ -362,63 +362,84 @@ export default function CustomerCatalogPage() {
                       return (
                         <div
                           key={kg}
-                          className={`flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all ${
+                          className={`p-3 rounded-xl border transition-all space-y-2 ${
                             currentQtyInCart > 0
-                              ? 'border-blue-300 bg-blue-50/50 shadow-xs'
-                              : 'border-slate-100 hover:border-slate-200 bg-slate-50/40'
+                              ? 'border-blue-300 bg-blue-50/60 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
                           }`}
                         >
-                          {/* Scent size & USD equivalent */}
-                          <div className="space-y-0.5 min-w-[95px]">
-                            <div className="flex items-center gap-1.5">
-                              <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-2 py-0.5 rounded">
+                          {/* Top Row: Kemasan badge & Harga /Kg */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-2 py-0.5 rounded shadow-2xs">
                                 {kg < 1 ? `${Math.round(kg * 1000)} gr (${kg} Kg)` : `${kg} Kg`} / Kemasan
                               </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                (${Number(variantUsd).toFixed(2)} USD/Kg)
+                              </span>
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              (${Number(variantUsd).toFixed(2)} USD/Kg)
+                            <div className="text-right">
+                              <span className="text-xs font-black text-slate-800 font-mono">
+                                {formatIDR(variantIdr)}<span className="text-[10px] text-slate-500 font-normal">/Kg</span>
+                              </span>
                             </div>
                           </div>
 
-                          {/* Price Display & Weight indicator */}
-                          <div className="text-right flex-1 pr-1.5">
-                            <span className="text-sm font-black text-slate-800 font-mono block">
-                              {formatIDR(variantIdr)}<span className="text-[10px] text-slate-500 font-normal">/Kg</span>
-                            </span>
-                            {currentQtyInCart > 0 ? (
-                              <span className="text-[10px] font-bold text-blue-700 font-mono block">
-                                Terpilih: {formatKg(selectedWeightKg)} ({currentQtyInCart} unit)
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 block font-mono">
-                                Total: {formatIDR(variantIdr * kg)}/{kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Add to Cart Actions */}
-                          <div className="flex items-center gap-1">
-                            {variantInCart ? (
-                              <>
-                                <button
-                                  onClick={() => handleReduceFromCart(product, kg)}
-                                  className="w-6 h-6 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg flex items-center justify-center font-black text-sm transition-colors cursor-pointer"
-                                  title="Kurangi 1 Unit"
-                                >
-                                  -
-                                </button>
-                                <span className="font-mono text-xs font-bold text-slate-850 px-1 min-w-[18px] text-center">
-                                  {variantInCart.quantity}
+                          {/* Bottom Row: Selected Status / Total per kemasan & Action Button */}
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
+                            <div className="text-left flex-1 min-w-0">
+                              {currentQtyInCart > 0 ? (
+                                <div>
+                                  <span className="text-[11px] font-bold text-blue-700 font-mono block truncate">
+                                    Terpilih: {formatKg(selectedWeightKg)} ({currentQtyInCart} unit)
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-mono block truncate">
+                                    Subtotal: {formatIDR(variantIdr * selectedWeightKg)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 block font-mono truncate">
+                                  Total: {formatIDR(variantIdr * kg)}/{kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`}
                                 </span>
-                              </>
-                            ) : null}
-                            <button
-                              onClick={() => handleAddToCart(product, kg)}
-                              className="w-6 h-6 rounded-lg flex items-center justify-center font-black text-sm transition-colors cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
-                              title="Tambah ke Pesanan"
-                            >
-                              +
-                            </button>
+                              )}
+                            </div>
+
+                            {/* Quantity Adjust Controls */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {variantInCart ? (
+                                <div className="flex items-center bg-white border border-blue-200 rounded-lg p-0.5 shadow-2xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReduceFromCart(product, kg)}
+                                    className="w-6 h-6 bg-red-50 hover:bg-red-100 text-red-600 rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer"
+                                    title="Kurangi 1 Unit"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="font-mono text-xs font-bold text-blue-700 px-2 min-w-[20px] text-center">
+                                    {variantInCart.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddToCart(product, kg)}
+                                    className="w-6 h-6 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer shadow-2xs"
+                                    title="Tambah 1 Unit"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddToCart(product, kg)}
+                                  className="h-7 px-3 rounded-lg flex items-center gap-1 font-bold text-xs transition-all cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                                  title="Tambah ke Pesanan"
+                                >
+                                  <span>+</span>
+                                  <span className="text-[11px]">Pesan</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
