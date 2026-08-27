@@ -1649,9 +1649,9 @@ export default function OrderDetailPage() {
 
           <button
             onClick={() => setIsShippingAddressModalOpen(true)}
-            className="bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+            className="bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           >
-            <MapPin className="w-3.5 h-3.5 text-blue-600" /> Cetak Alamat Pengiriman
+            <MapPin className="w-3.5 h-3.5 text-blue-600" /> Cetak Stiker Alamat Pengiriman
           </button>
         </div>
 

@@ -32,11 +32,13 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Tag,
+  MapPin,
 } from 'lucide-react';
 import { exportSalesOrdersToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
 import { VerifyPaymentModal, UploadTaxInvoiceModal } from '@/components/admin/finance-modal';
 import { PrintLabelModal } from '@/components/common/print-label-modal';
+import { PrintShippingAddressModal } from '@/components/common/print-shipping-address-modal';
 import DateRangePicker from '@/components/ui/date-range-picker';
 import TablePagination from '@/components/ui/table-pagination';
 import {
@@ -59,6 +61,7 @@ export default function SalesOrdersPage() {
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
   const [selectedInvoiceForTax, setSelectedInvoiceForTax] = useState<Invoice | null>(null);
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState<SalesOrder | null>(null);
+  const [selectedOrderForShipping, setSelectedOrderForShipping] = useState<SalesOrder | null>(null);
   const [companyConfig, setCompanyConfig] = useState<any>(null);
 
   const handleUploadTaxInvoice = (invoiceId: string, pdfUrl: string) => {
@@ -990,14 +993,24 @@ export default function SalesOrdersPage() {
                         <div className="text-[11px] text-slate-400">
                           {so.order_date ? new Date(so.order_date).toLocaleString('id-ID') : '-'}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedOrderForLabel(so)}
-                          className="text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 mt-1 transition-all cursor-pointer shadow-2xs"
-                          title="Cetak Stiker Label Kemasan Siap Tempel untuk pesanan ini"
-                        >
-                          <Tag className="w-3 h-3 text-amber-600" /> Cetak Label
-                        </button>
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForLabel(so)}
+                            className="text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="Cetak Stiker Label Kemasan Siap Tempel untuk pesanan ini"
+                          >
+                            <Tag className="w-3 h-3 text-amber-600" /> Label Produk
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForShipping(so)}
+                            className="text-[10px] font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="Cetak Stiker Label Alamat Pengiriman Cargo / Dus Siap Tempel"
+                          >
+                            <MapPin className="w-3 h-3 text-blue-600" /> Label Alamat
+                          </button>
+                        </div>
                       </td>
 
                       <td className="px-6 py-3.5">
@@ -1246,6 +1259,14 @@ export default function SalesOrdersPage() {
         isOpen={!!selectedOrderForLabel}
         onClose={() => setSelectedOrderForLabel(null)}
         order={selectedOrderForLabel}
+        companyConfig={companyConfig}
+      />
+
+      {/* Print Shipping Address Sticker Modal */}
+      <PrintShippingAddressModal
+        isOpen={!!selectedOrderForShipping}
+        onClose={() => setSelectedOrderForShipping(null)}
+        order={selectedOrderForShipping}
         companyConfig={companyConfig}
       />
     </div>
