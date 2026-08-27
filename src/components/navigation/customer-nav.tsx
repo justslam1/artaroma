@@ -83,7 +83,7 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(false);
 
-  // Helper to format WhatsApp chat URL
+  // Helper to format WhatsApp direct chat URL
   const getWhatsAppLink = () => {
     let clean = (whatsappNumber || '').replace(/[^0-9]/g, '');
     if (clean.startsWith('0')) clean = '62' + clean.slice(1);
@@ -91,7 +91,7 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
     const msg = encodeURIComponent(
       `Halo CS Artaroma, saya ${currentCustomer.company_name || currentCustomer.pic_name || 'Customer B2B'}, ingin bertanya terkait produk / pemesanan bibit parfum.`
     );
-    return `https://wa.me/${clean}?text=${msg}`;
+    return `https://api.whatsapp.com/send?phone=${clean}&text=${msg}`;
   };
 
   // 1. Fetch Company Settings (Tagline & WhatsApp Number)
@@ -673,47 +673,20 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
             <a
               href={getWhatsAppLink()}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               title={`Hubungi WhatsApp Customer Support (${whatsappCsName})`}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs transition-all hover:scale-102"
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition-all hover:shadow-md cursor-pointer"
             >
-              <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
                 <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.634.079-1.895-.445-1.503-.623-2.45-2.146-2.525-2.247-.075-.101-.606-.807-.606-1.539 0-.733.385-1.093.522-1.242.137-.149.3-.186.4-.186.1 0 .2.002.288.006.094.004.22-.036.344.262.128.307.436 1.066.475 1.144.039.078.065.17.013.273-.052.103-.078.167-.156.257-.078.091-.164.203-.235.272-.078.077-.16.16-.069.316.091.156.404.667.868 1.08 1.018.907 1.874 1.189 2.138 1.32.264.13.419.11.575-.07.156-.18.667-.777.844-1.043.177-.267.354-.222.593-.133.24.089 1.52.716 1.781.846.261.13.435.195.499.305.064.11.064.638-.08 1.043z" />
                 <path d="M12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.662 1.442 5.178L2 22l4.981-1.399A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18.2a8.168 8.168 0 0 1-4.222-1.176l-.303-.18-2.962.833.844-2.887-.197-.314A8.16 8.16 0 0 1 3.8 12c0-4.522 3.678-8.2 8.2-8.2 4.522 0 8.2 3.678 8.2 8.2 0 4.522-3.678 8.2-8.2 8.2z" />
               </svg>
-              <span className="hidden sm:inline">WhatsApp CS:</span>
-              <span className="font-mono">{whatsappNumber}</span>
+              <span className="hidden sm:inline font-bold">WhatsApp CS:</span>
+              <span className="font-mono font-extrabold">{whatsappNumber}</span>
             </a>
           </div>
         </div>
       </nav>
-
-      {/* Floating WhatsApp Contact Widget on Bottom Right */}
-      <div className="fixed bottom-5 right-5 z-40 animate-in fade-in slide-in-from-bottom-5 duration-300">
-        <a
-          href={getWhatsAppLink()}
-          target="_blank"
-          rel="noreferrer"
-          title={`Chat WhatsApp Customer Support (${whatsappNumber})`}
-          className="group flex items-center gap-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2.5 rounded-full shadow-lg hover:shadow-2xl transition-all duration-200 transform hover:scale-105 border-2 border-white/90"
-        >
-          <div className="relative">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.634.079-1.895-.445-1.503-.623-2.45-2.146-2.525-2.247-.075-.101-.606-.807-.606-1.539 0-.733.385-1.093.522-1.242.137-.149.3-.186.4-.186.1 0 .2.002.288.006.094.004.22-.036.344.262.128.307.436 1.066.475 1.144.039.078.065.17.013.273-.052.103-.078.167-.156.257-.078.091-.164.203-.235.272-.078.077-.16.16-.069.316.091.156.404.667.868 1.08 1.018.907 1.874 1.189 2.138 1.32.264.13.419.11.575-.07.156-.18.667-.777.844-1.043.177-.267.354-.222.593-.133.24.089 1.52.716 1.781.846.261.13.435.195.499.305.064.11.064.638-.08 1.043z" />
-              <path d="M12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.662 1.442 5.178L2 22l4.981-1.399A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18.2a8.168 8.168 0 0 1-4.222-1.176l-.303-.18-2.962.833.844-2.887-.197-.314A8.16 8.16 0 0 1 3.8 12c0-4.522 3.678-8.2 8.2-8.2 4.522 0 8.2 3.678 8.2 8.2 0 4.522-3.678 8.2-8.2 8.2z" />
-            </svg>
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-200 border-2 border-emerald-600 animate-ping" />
-          </div>
-          <div className="flex flex-col text-left">
-            <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-tight leading-none">
-              Hubungi WhatsApp CS
-            </span>
-            <span className="text-xs font-black text-white font-mono leading-tight mt-0.5">
-              {whatsappNumber}
-            </span>
-          </div>
-        </a>
-      </div>
 
       {/* Customer Change Password Modal */}
       {currentCustomer && (
