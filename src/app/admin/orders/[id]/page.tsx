@@ -1642,9 +1642,9 @@ export default function OrderDetailPage() {
 
           <button
             onClick={() => setIsLabelModalOpen(true)}
-            className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+            className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           >
-            <Tag className="w-3.5 h-3.5 text-amber-600" /> Cetak Label Produk
+            <Tag className="w-3.5 h-3.5 text-amber-600" /> Cetak Stiker Label Kemasan
           </button>
 
           <button

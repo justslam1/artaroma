@@ -37,9 +37,11 @@ import {
   FlaskConical,
   Sparkles,
   Filter,
+  Tag,
 } from 'lucide-react';
 import { exportStockInventoryToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
+import { PrintLabelModal } from '@/components/common/print-label-modal';
 import {
   getStoredDisposalReasons,
   DisposalReason,
@@ -51,6 +53,8 @@ export default function StockInventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<StockBatch[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
+  const [selectedBatchForLabel, setSelectedBatchForLabel] = useState<any | null>(null);
+  const [companyConfig, setCompanyConfig] = useState<any>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +84,15 @@ export default function StockInventoryPage() {
         }
       })
       .catch((err) => console.warn('Failed to load user info in stock page:', err));
+
+    fetch('/api/company-settings', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          setCompanyConfig(json.data);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Determine permission to access warehouse operations & Stok Opname
@@ -1558,6 +1571,26 @@ export default function StockInventoryPage() {
                                             {canEditBatch && (
                                               <td className="px-4 py-3 text-center">
                                                 <div className="flex items-center justify-center gap-1.5">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setSelectedBatchForLabel({
+                                                        ...b,
+                                                        product_name: p.name,
+                                                        product_code: b.variant_sku || variantSku,
+                                                        pack_size_kg: sizeKg,
+                                                        top_note: (p as any).top_note || p.top_notes,
+                                                        middle_note: (p as any).middle_note || p.middle_notes,
+                                                        base_note: (p as any).base_note || p.base_notes,
+                                                        application: p.applications?.join(', ') || 'Fine Fragrance',
+                                                      })
+                                                    }
+                                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                    title="Cetak Stiker Label Siap Tempel untuk Batch ini"
+                                                  >
+                                                    <Tag className="w-3 h-3 text-amber-600" />
+                                                    Label
+                                                  </button>
                                                   <button
                                                     type="button"
                                                     onClick={() => handleOpenEditBatch(b)}
@@ -3423,6 +3456,14 @@ export default function StockInventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Print Packaging Sticker Label Modal */}
+      <PrintLabelModal
+        isOpen={!!selectedBatchForLabel}
+        onClose={() => setSelectedBatchForLabel(null)}
+        batchItem={selectedBatchForLabel}
+        companyConfig={companyConfig}
+      />
     </div>
   );
 }
