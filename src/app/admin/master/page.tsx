@@ -163,7 +163,10 @@ export default function MasterDataPage() {
       nib: '1234567890123',
       legal_name: 'PT Artaroma Jayatama',
       address: 'Jl. Elang Raya, Perum Kampoeng Elang Blok A5 Semarang – 50272'
-    }
+    },
+    whatsapp_number: '+62 852-2518-4422',
+    whatsapp_cs_name: 'Customer Support Artaroma',
+    auto_logout_minutes: 240,
   });
   const [configSaving, setConfigSaving] = useState(false);
 
@@ -3881,6 +3884,64 @@ export default function MasterDataPage() {
                     <p className="text-[11px] text-slate-400 mt-1">
                       Sesi pengguna di seluruh tab browser akan otomatis logout jika tidak ada interaksi mouse/keyboard. Peringatan 60 detik akan muncul sebelum logout.
                     </p>
+                  </div>
+                </div>
+
+                {/* WhatsApp Customer Support Settings Card */}
+                <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-4 space-y-3 mt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        💬
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-800">Kontak WhatsApp Customer Support (CS)</h4>
+                        <p className="text-[11px] text-slate-500">Nomor ini tampil di seluruh portal customer (Katalog &amp; Riwayat Pesanan) untuk mempermudah komunikasi instan.</p>
+                      </div>
+                    </div>
+
+                    {companyConfig.whatsapp_number && (
+                      <a
+                        href={`https://wa.me/${(companyConfig.whatsapp_number || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Halo CS Artaroma, tes pesan dari Master Data.')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs"
+                      >
+                        Tes Buka WA
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-emerald-200/80">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Nomor WhatsApp CS / Admin <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={companyConfig.whatsapp_number || '+62 852-2518-4422'}
+                        onChange={(e) => setCompanyConfig({ ...companyConfig, whatsapp_number: e.target.value })}
+                        className="w-full bg-white border border-emerald-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-600 font-mono font-bold"
+                        placeholder="+62 852-2518-4422"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Format bebas: Contoh <strong>+62 852-2518-4422</strong> atau <strong>085225184422</strong>
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Nama Label / CS PIC (Tampil di Tooltip Customer)
+                      </label>
+                      <input
+                        type="text"
+                        value={companyConfig.whatsapp_cs_name || 'Customer Support Artaroma'}
+                        onChange={(e) => setCompanyConfig({ ...companyConfig, whatsapp_cs_name: e.target.value })}
+                        className="w-full bg-white border border-emerald-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-600 font-medium"
+                        placeholder="Contoh: Customer Support Artaroma"
+                      />
+                    </div>
                   </div>
                 </div>
 

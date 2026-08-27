@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
         legal_name: 'PT Artaroma Jayatama',
         address: 'Jl. Elang Raya, Perum Kampoeng Elang Blok A5 Semarang – 50272'
       },
+      whatsapp_number: settings.whatsapp_number || '+62 852-2518-4422',
+      whatsapp_cs_name: settings.whatsapp_cs_name || 'Customer Support Artaroma',
       auto_logout_minutes: settings.auto_logout_minutes ? parseInt(settings.auto_logout_minutes, 10) : 240,
     };
 
