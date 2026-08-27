@@ -390,26 +390,27 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
           )}
 
           {/* Credit Limit Widget */}
-          <div className="hidden lg:flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
-            <div>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                Plafon Tempo:
+          <div className="hidden lg:flex items-center gap-2.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1 text-xs shrink-0 max-h-11">
+            <div className="flex flex-col justify-center">
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium leading-tight">
+                <span>Plafon Tempo:</span>
                 {currentCustomer.has_overdue ? (
-                  <span className="bg-red-50 text-red-600 text-[10px] px-1.5 rounded font-bold border border-red-200 flex items-center gap-0.5">
-                    <ShieldAlert className="w-3 h-3" /> BLOCKED
+                  <span className="bg-red-50 text-red-600 text-[9px] px-1 rounded font-bold border border-red-200 flex items-center gap-0.5">
+                    <ShieldAlert className="w-2.5 h-2.5" /> BLOCKED
                   </span>
                 ) : (
-                  <span className="bg-emerald-50 text-emerald-600 text-[10px] px-1.5 rounded font-bold border border-emerald-200 flex items-center gap-0.5">
-                    <CheckCircle2 className="w-3 h-3" /> OK
+                  <span className="bg-emerald-50 text-emerald-600 text-[9px] px-1 rounded font-bold border border-emerald-200 flex items-center gap-0.5">
+                    <CheckCircle2 className="w-2.5 h-2.5" /> OK
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 text-xs">
+              <div className="flex items-center gap-1 text-[11px] font-mono leading-tight mt-0.5 whitespace-nowrap">
                 <span className="font-bold text-blue-700">{formatIDR(currentPiutang)}</span>
-                <span className="text-slate-400">/ {formatIDR(creditLimit)}</span>
+                <span className="text-slate-400 font-normal">/</span>
+                <span className="text-slate-500">{formatIDR(creditLimit)}</span>
               </div>
             </div>
-            <div className="w-14 bg-gray-200 h-2 rounded-full overflow-hidden">
+            <div className="w-12 bg-gray-200 h-1.5 rounded-full overflow-hidden shrink-0">
               <div
                 className={`h-full transition-all ${creditUsedPercent > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
                 style={{ width: `${creditUsedPercent}%` }}
