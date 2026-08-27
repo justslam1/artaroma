@@ -70,6 +70,7 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
   const [companyTagline, setCompanyTagline] = useState('B2B Fragrance Oil Supplier & Management Hub');
   const [whatsappNumber, setWhatsappNumber] = useState('+62 852-2518-4422');
   const [whatsappCsName, setWhatsappCsName] = useState('Customer Support Artaroma');
+  const [authRole, setAuthRole] = useState<string>('CUSTOMER');
 
   // Notification States
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -82,6 +83,18 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
   const [isPushSupported, setIsPushSupported] = useState(false);
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(false);
+
+  // Check Auth Role
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setAuthRole(json.user.role || 'CUSTOMER');
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Helper to format WhatsApp direct chat URL
   const getWhatsAppLink = () => {
@@ -371,14 +384,21 @@ export function CustomerNav({ currentCustomer, onCustomerChange, allCustomers = 
             </div>
           </Link>
 
-          {/* Customer Switcher */}
-          {allCustomers.length > 0 && onCustomerChange && (
+          {/* Akun Login B2B (Static badge for logged-in Customer, Dropdown only for Admin simulation) */}
+          {authRole === 'CUSTOMER' || allCustomers.length <= 1 ? (
             <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs hidden md:block">
-              <span className="text-slate-400 block text-[10px] mb-0.5">Akun Login B2B:</span>
+              <span className="text-slate-400 block text-[10px] mb-0.5 font-medium">Akun Login B2B:</span>
+              <span className="text-slate-800 font-bold text-sm block truncate max-w-[240px]">
+                {currentCustomer.company_name}
+              </span>
+            </div>
+          ) : (
+            <div className="bg-amber-50/80 border border-amber-300 rounded-lg px-3 py-1.5 text-xs hidden md:block">
+              <span className="text-amber-800 font-bold block text-[10px] mb-0.5">👑 Simulasi B2B:</span>
               <select
                 value={currentCustomer.id}
-                onChange={(e) => onCustomerChange(e.target.value)}
-                className="bg-transparent text-slate-700 font-semibold focus:outline-none cursor-pointer pr-1 text-sm"
+                onChange={(e) => onCustomerChange?.(e.target.value)}
+                className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer pr-1 text-sm"
               >
                 {allCustomers.map((cust) => (
                   <option key={cust.id} value={cust.id}>

@@ -81,14 +81,40 @@ export default function CustomerOrdersPage() {
 
   const fetchCustomers = async () => {
     try {
+      // 1. Check logged-in user session
+      let authUser: any = null;
+      try {
+        const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
+        const meJson = await meRes.json();
+        if (meJson.success && meJson.user) {
+          authUser = meJson.user;
+        }
+      } catch {}
+
       const res = await fetch('/api/customers', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-        setCustomers(json.data);
-        const savedId = localStorage.getItem('artaroma_customer_id');
-        const matched = json.data.find((c: any) => c.id === savedId) || json.data[0];
-        if (matched) {
+        if (authUser && authUser.role === 'CUSTOMER') {
+          // If logged in as Customer, strictly filter & lock to their own account only
+          const matched =
+            json.data.find(
+              (c: any) =>
+                c.id === authUser.customer_id ||
+                c.company_name === authUser.name ||
+                c.pic_name === authUser.name ||
+                c.company_name === authUser.linked_entity_name
+            ) || json.data[0];
+
           setCurrentCustomer(matched);
+          setCustomers([matched]);
+        } else {
+          // Admin viewing / simulating customer orders
+          setCustomers(json.data);
+          const savedId = localStorage.getItem('artaroma_customer_id');
+          const matched = json.data.find((c: any) => c.id === savedId) || json.data[0];
+          if (matched) {
+            setCurrentCustomer(matched);
+          }
         }
       }
     } catch (err) {
