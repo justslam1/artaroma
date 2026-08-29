@@ -611,13 +611,42 @@ export interface POPaymentCashStatus {
 }
 
 export function calculatePODueDateInfo(po: PurchaseOrder): PODueDateInfo {
+  // Find earliest / primary Surat Jalan date from distributor shipments
+  const primaryShipment = Array.isArray(po.shipments) && po.shipments.length > 0 ? po.shipments[0] : undefined;
+  const sjDateStr = primaryShipment?.shipment_date;
+
+  const isCash = po.payment_method === 'TUNAI';
+  const terms = isCash ? 0 : Number(po.payment_terms_days) || 30;
+
   let dueDateStr = po.due_date;
-  if (!dueDateStr) {
-    const orderD = po.order_date ? new Date(po.order_date) : new Date();
-    const terms = Number(po.payment_terms_days) || 30;
-    const d = new Date(orderD);
+
+  if (sjDateStr) {
+    // If Surat Jalan exists from distributor, calculate due date strictly starting from Surat Jalan date!
+    const sjD = new Date(sjDateStr);
+    const d = new Date(sjD);
     d.setDate(d.getDate() + terms);
     dueDateStr = d.toISOString().split('T')[0];
+  } else if (!dueDateStr) {
+    if (po.status !== 'BUAT_EMAIL' && po.order_date) {
+      const orderD = new Date(po.order_date);
+      const d = new Date(orderD);
+      d.setDate(d.getDate() + terms);
+      dueDateStr = d.toISOString().split('T')[0];
+    } else {
+      dueDateStr = '';
+    }
+  } else if (isCash && po.order_date) {
+    dueDateStr = po.order_date.split('T')[0];
+  }
+
+  if (!dueDateStr) {
+    return {
+      dueDateStr: '',
+      diffDays: 0,
+      isOverdue: false,
+      isDueToday: false,
+      displayText: 'Menunggu Surat Jalan',
+    };
   }
 
   const dueD = new Date(dueDateStr);

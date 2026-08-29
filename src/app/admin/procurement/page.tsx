@@ -980,13 +980,21 @@ export default function ProcurementPage() {
 
                       {/* Kolom Jatuh Tempo */}
                       <td className="px-6 py-3.5 whitespace-nowrap text-xs">
-                        <div className="font-medium text-slate-800 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{formatDate(dueInfo.dueDateStr)}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          TOP: {po.payment_terms_days || 30} Hari
-                        </div>
+                        {dueInfo.dueDateStr ? (
+                          <>
+                            <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{formatDate(dueInfo.dueDateStr)}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {po.payment_method === 'TUNAI'
+                                ? 'Tunai (H+0)'
+                                : `TOP: ${po.payment_terms_days || 30} Hari (SJ)`}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Menunggu Surat Jalan</span>
+                        )}
                       </td>
 
                       {/* Kolom Sisa Hari */}
@@ -997,6 +1005,8 @@ export default function ProcurementPage() {
                           </span>
                         ) : po.status === 'DIBATALKAN' || po.status === 'CANCELLED' ? (
                           <span className="text-slate-400 text-xs">-</span>
+                        ) : !dueInfo.dueDateStr ? (
+                          <span className="text-slate-400 text-xs italic">Menunggu Surat Jalan</span>
                         ) : dueInfo.isOverdue ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300 animate-pulse">
                             <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}

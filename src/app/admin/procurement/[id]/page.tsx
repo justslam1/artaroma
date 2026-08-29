@@ -622,11 +622,18 @@ export default function PODetailPage() {
     }
 
     const currentUserName = currentUser?.name || currentUser?.username || 'Super Admin HQ';
+    const isCash = po.payment_method === 'TUNAI';
+    const terms = isCash ? 0 : Number(po.payment_terms_days) || 30;
+    const finalSJDateStr = sjDate || suratJalanDate || new Date().toISOString().split('T')[0];
+    const sjDateObj = new Date(finalSJDateStr);
+    const calculatedDueDate = new Date(sjDateObj.getTime() + terms * 86400000).toISOString().split('T')[0];
+
     const updatedPO: PurchaseOrder = {
       ...po,
       status: 'DIKIRIM' as const,
       shipped_by: currentUserName,
       total_amount: newTotalAmount,
+      due_date: calculatedDueDate,
       items: updatedPOItems,
       shipments: updatedShipments
     };
