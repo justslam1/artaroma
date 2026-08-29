@@ -238,9 +238,17 @@ export function syncCashTransactionsFromOrders(
 ): CashTransaction[] {
   const txMap = new Map<string, CashTransaction>();
 
-  // 1. Keep existing manual transactions (e.g. transfers, manual operational expenses)
+  // 1. Keep genuine manual transactions only (exclude stale auto-generated order txs)
   for (const tx of existingTxs) {
-    if (tx && tx.id) {
+    if (
+      tx &&
+      tx.id &&
+      !tx.id.startsWith('tx-po-') &&
+      !tx.id.startsWith('tx-so-') &&
+      !tx.id.startsWith('po-pay-') &&
+      !tx.id.startsWith('so-pay-') &&
+      !tx.id.startsWith('hist-')
+    ) {
       txMap.set(tx.id, tx);
     }
   }
@@ -718,39 +726,29 @@ export function getPOPaymentStatusFromCash(
     };
   }
 
-  const txs = cashTxs || getStoredCashTransactions();
-  const poNumClean = (po.po_number || '').trim().toLowerCase();
-
-  // Find all OUT / PEMBELIAN_PO transactions matching this PO
-  const matchingTxs = txs.filter((tx) => {
-    if (tx.status !== 'VERIFIED') return false;
-    if (tx.tx_type !== 'OUT' && tx.category !== 'PEMBELIAN_PO') return false;
-    const ref = (tx.reference_number || '').toLowerCase();
-    const notes = (tx.notes || '').toLowerCase();
-    return poNumClean ? ref.includes(poNumClean) || notes.includes(poNumClean) : false;
-  });
-
-  const totalPaidFromTx = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-  const poPaidAmount = Number(po.paid_amount || 0);
-  const totalPaid = Math.max(totalPaidFromTx, poPaidAmount);
   const poTotal = Number(po.total_amount) || 0;
+  const history: any[] = Array.isArray(po.payment_history)
+    ? po.payment_history
+    : typeof po.payment_history === 'string'
+    ? (() => { try { return JSON.parse(po.payment_history); } catch { return []; } })()
+    : [];
 
-  const isExplicitlyPaid = po.payment_status === 'PAID';
-  const isFullyPaid = (totalPaid >= poTotal && poTotal > 0) || isExplicitlyPaid;
-  const isPartial = !isFullyPaid && (totalPaid > 0 || po.payment_status === 'PARTIALLY_PAID');
+  const historyPaid = history.reduce((sum, h) => sum + Number(h.amount || 0), 0);
+  const explicitPaid = Number(po.paid_amount || 0);
+  const totalPaid = Math.max(historyPaid, explicitPaid);
 
-  const sortedTxs = [...matchingTxs].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const latestTx = sortedTxs[0];
+  const isExplicitlyPaid = po.payment_status === 'PAID' || (totalPaid >= poTotal && poTotal > 0);
+  const isPartial = !isExplicitlyPaid && (totalPaid > 0 || po.payment_status === 'PARTIALLY_PAID');
+
+  const latestHistory = history.length > 0 ? history[history.length - 1] : undefined;
 
   return {
-    status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
-    totalPaid: isFullyPaid ? (poTotal > 0 ? poTotal : totalPaid) : totalPaid,
-    remaining: isFullyPaid ? 0 : Math.max(0, poTotal - totalPaid),
-    bankName: latestTx?.account_name || po.payment_bank_name,
-    lastPayDate: latestTx?.date || po.last_payment_date,
-    txNumbers: matchingTxs.map((t) => t.tx_number),
+    status: isExplicitlyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
+    totalPaid: isExplicitlyPaid ? (poTotal > 0 ? poTotal : totalPaid) : totalPaid,
+    remaining: isExplicitlyPaid ? 0 : Math.max(0, poTotal - totalPaid),
+    bankName: latestHistory?.bank_name || po.payment_bank_name,
+    lastPayDate: latestHistory?.payment_date || po.last_payment_date,
+    txNumbers: history.map((h: any) => h.reference_no || h.id).filter(Boolean),
   };
 }
 
@@ -887,37 +885,27 @@ export function getSOPaymentStatusFromCash(
     };
   }
 
-  const txs = cashTxs || getStoredCashTransactions();
-  const soNumClean = (so.so_number || '').trim().toLowerCase();
-  const invNumClean = (inv?.invoice_number || '').trim().toLowerCase();
+  // Check SO payment history / status
+  const soHistory: any[] = Array.isArray((so as any).payment_history)
+    ? (so as any).payment_history
+    : typeof (so as any).payment_history === 'string'
+    ? (() => { try { return JSON.parse((so as any).payment_history); } catch { return []; } })()
+    : [];
 
-  // Find all IN / PENJUALAN_SO transactions matching this SO or Invoice
-  const matchingTxs = txs.filter((tx) => {
-    if (tx.status !== 'VERIFIED') return false;
-    if (tx.tx_type !== 'IN' && tx.category !== 'PENJUALAN_SO') return false;
-    const ref = (tx.reference_number || '').toLowerCase();
-    const notes = (tx.notes || '').toLowerCase();
-    return (
-      (soNumClean && (ref.includes(soNumClean) || notes.includes(soNumClean))) ||
-      (invNumClean && (ref.includes(invNumClean) || notes.includes(invNumClean)))
-    );
-  });
+  const historyPaid = soHistory.reduce((sum, h) => sum + Number(h.amount || 0), 0);
+  const explicitPaid = Number((so as any).paid_amount || 0);
+  const totalPaid = Math.max(historyPaid, explicitPaid);
 
-  const totalPaid = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-  const isFullyPaid = (totalPaid >= soTotal && soTotal > 0) || so.status === 'DIBAYAR';
-  const isPartial = totalPaid > 0 && totalPaid < soTotal;
-
-  const sortedTxs = [...matchingTxs].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const latestTx = sortedTxs[0];
+  const isFullyPaid = (totalPaid >= soTotal && soTotal > 0) || so.status === 'DIBAYAR' || so.payment_status === 'PAID';
+  const isPartial = !isFullyPaid && (totalPaid > 0 || so.payment_status === 'PARTIALLY_PAID');
+  const latestHist = soHistory.length > 0 ? soHistory[soHistory.length - 1] : undefined;
 
   return {
     status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
-    totalPaid: totalPaid > 0 ? totalPaid : (isFullyPaid ? soTotal : 0),
+    totalPaid: isFullyPaid ? (soTotal > 0 ? soTotal : totalPaid) : totalPaid,
     remaining: isFullyPaid ? 0 : Math.max(0, soTotal - totalPaid),
-    bankName: latestTx?.account_name,
-    lastPayDate: latestTx?.date,
-    txNumbers: matchingTxs.map((t) => t.tx_number),
+    bankName: latestHist?.bank_name || 'Bank Central Asia (BCA)',
+    lastPayDate: latestHist?.payment_date,
+    txNumbers: soHistory.map((h: any) => h.reference_no || h.id).filter(Boolean),
   };
 }
