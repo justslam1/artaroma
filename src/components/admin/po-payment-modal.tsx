@@ -58,6 +58,7 @@ export function POPaymentModal({
 
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [selectedSourceBankId, setSelectedSourceBankId] = useState<string>('acc-bca');
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export function POPaymentModal({
       setPaymentDate(new Date().toISOString().split('T')[0]);
       setTransferRef(po.payment_reference_no || '');
       setProofUrl(po.payment_proof_url || '');
+      setShowConfirmModal(false);
     }
   }, [po, totalBill]);
 
@@ -131,7 +133,12 @@ export function POPaymentModal({
       alert('Silakan pilih tanggal pembayaran.');
       return;
     }
+    // Open confirmation step to allow user to re-check or cancel before submitting
+    setShowConfirmModal(true);
+  };
 
+  const executeConfirmPayment = () => {
+    setShowConfirmModal(false);
     const matchedBank = bankAccounts.find((b: any) => {
       const cleanBank = (b.bank || '').toLowerCase();
       if (selectedSourceBankId === 'acc-bca' && cleanBank.includes('bca')) return true;
@@ -553,6 +560,103 @@ export function POPaymentModal({
           </form>
         </div>
       </div>
+
+      {/* Confirmation Modal before committing payment */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-[65] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className={`p-2.5 rounded-xl ${isLunas ? 'bg-emerald-100 text-emerald-700' : 'bg-purple-100 text-purple-700'}`}>
+                {isLunas ? <CheckCircle2 className="w-6 h-6" /> : <CreditCard className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-800">
+                  {isLunas ? 'Konfirmasi Pelunasan PO' : 'Konfirmasi Pembayaran PO'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Periksa kembali rincian transaksi sebelum disimpan ke Buku Kas.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3.5 space-y-2 text-xs border border-slate-200/80">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">No. Purchase Order:</span>
+                <span className="font-mono font-bold text-slate-800">{po.po_number}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Suplier / Vendor:</span>
+                <span className="font-bold text-slate-800 text-right">{po.distributor_name}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Jenis Pembayaran:</span>
+                <span className={`font-extrabold ${isLunas ? 'text-emerald-700' : 'text-purple-700'}`}>
+                  {isLunas ? '✓ PELUNASAN PENUH' : '• TERMIN / CICILAN'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Nominal yang Dibayarkan:</span>
+                <span className="font-mono font-extrabold text-emerald-700 text-sm">{formatIDR(parsedInput)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Rekening Kas Keluar (BKK):</span>
+                <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">
+                  {selectedSourceBankId === 'acc-mandiri'
+                    ? 'Mandiri (156-00-1928374-1)'
+                    : selectedSourceBankId === 'acc-bni'
+                    ? 'BNI (009-445-8876)'
+                    : 'BCA (882-019-3881)'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Tanggal Bayar:</span>
+                <span className="font-medium text-slate-700">{formatDate(paymentDate)}</span>
+              </div>
+              {transferRef && (
+                <div className="flex justify-between py-1 border-b border-slate-200/60">
+                  <span className="text-slate-500">No. Referensi:</span>
+                  <span className="font-mono font-bold text-slate-700">{transferRef}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-1">
+                <span className="text-slate-500">Sisa Hutang Setelah Bayar:</span>
+                <span className={`font-mono font-extrabold ${sisaSetelahBayar === 0 ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {formatIDR(sisaSetelahBayar)}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                Pengeluaran dana ini akan otomatis dicatat sebagai <strong>Bukti Kas Keluar (BKK)</strong> pada Manajemen Kas dan memotong saldo kas bank terkait.
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                ↩ Batal / Cek Ulang
+              </button>
+              <button
+                type="button"
+                onClick={executeConfirmPayment}
+                disabled={isSubmitting}
+                className={`px-5 py-2.5 rounded-xl text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer ${
+                  isLunas ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-700 hover:bg-purple-800'
+                }`}
+              >
+                <CheckCircle className="w-4 h-4" />
+                {isSubmitting ? 'Memproses...' : isLunas ? '✓ Ya, Proses Pelunasan' : '✓ Ya, Proses Pembayaran'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Image Preview Modal */}
       {previewImageModal && (
