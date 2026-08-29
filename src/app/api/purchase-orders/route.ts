@@ -33,13 +33,13 @@ export async function GET(req: NextRequest) {
             foreign_total_amount: po.foreign_total_amount !== null ? parseFloat(po.foreign_total_amount) : undefined,
             order_date: po.order_date,
             total_amount: parseFloat(po.total_amount) || 0,
-            paid_amount: po.paid_amount !== null && po.paid_amount !== undefined ? parseFloat(po.paid_amount) : (po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? parseFloat(po.total_amount) : 0),
+            paid_amount: po.paid_amount !== null && po.paid_amount !== undefined ? parseFloat(po.paid_amount) : 0,
             payment_status: po.payment_status || (
-              parseFloat(po.paid_amount) >= parseFloat(po.total_amount) && parseFloat(po.total_amount) > 0
+              parseFloat(po.paid_amount || 0) >= parseFloat(po.total_amount || 0) && parseFloat(po.total_amount || 0) > 0
                 ? 'PAID'
-                : parseFloat(po.paid_amount) > 0
+                : parseFloat(po.paid_amount || 0) > 0
                 ? 'PARTIALLY_PAID'
-                : (po.status === 'DIKIRIM' || po.status === 'DITERIMA' ? 'PAID' : 'UNPAID')
+                : 'UNPAID'
             ),
             payment_proof_url: po.payment_proof_url || undefined,
             payment_reference_no: po.payment_reference_no || undefined,
