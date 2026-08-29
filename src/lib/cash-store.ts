@@ -708,13 +708,56 @@ export function calculateSODueDateInfo(
   inv?: Invoice,
   defaultTermsDays: number = 30
 ): PODueDateInfo {
+  const isCashTransfer =
+    so.payment_method === 'LUNAS_TRANSFER' ||
+    (so.payment_method as string) === 'TUNAI' ||
+    (so.payment_method as string) === 'CASH';
+
+  // Check if invoice exists
+  const hasInvoice = Boolean(inv || (so as any).invoice_id || (so as any).invoice_number || (so as any).due_date);
+
   let dueDateStr = inv?.due_date || (so as any).due_date;
+
+  if (isCashTransfer) {
+    // For Cash / Lunas Transfer, due date is the invoice issue date itself (H+0)
+    if (inv?.issue_date) {
+      dueDateStr = inv.issue_date.split('T')[0];
+    } else if (hasInvoice && dueDateStr) {
+      dueDateStr = dueDateStr.split('T')[0];
+    } else if (so.order_date) {
+      dueDateStr = so.order_date.split('T')[0];
+    } else {
+      dueDateStr = new Date().toISOString().split('T')[0];
+    }
+  } else {
+    // For TEMPO (Kredit): Due date runs strictly from invoice creation (issue_date + TOP terms)
+    if (!dueDateStr) {
+      if (inv?.issue_date) {
+        const terms = Number((so as any).payment_terms_days) || Number(defaultTermsDays) || 30;
+        const d = new Date(inv.issue_date);
+        d.setDate(d.getDate() + terms);
+        dueDateStr = d.toISOString().split('T')[0];
+      } else if (hasInvoice) {
+        const terms = Number((so as any).payment_terms_days) || Number(defaultTermsDays) || 30;
+        const orderD = so.order_date ? new Date(so.order_date) : new Date();
+        const d = new Date(orderD);
+        d.setDate(d.getDate() + terms);
+        dueDateStr = d.toISOString().split('T')[0];
+      } else {
+        // Invoice has not been created yet
+        dueDateStr = '';
+      }
+    }
+  }
+
   if (!dueDateStr) {
-    const orderD = so.order_date ? new Date(so.order_date) : new Date();
-    const terms = Number((so as any).payment_terms_days) || Number(defaultTermsDays) || 30;
-    const d = new Date(orderD);
-    d.setDate(d.getDate() + terms);
-    dueDateStr = d.toISOString().split('T')[0];
+    return {
+      dueDateStr: '',
+      diffDays: 0,
+      isOverdue: false,
+      isDueToday: false,
+      displayText: 'Menunggu Invoice',
+    };
   }
 
   const dueD = new Date(dueDateStr);

@@ -944,7 +944,8 @@ export default function OrderDetailPage() {
     const ppn = Math.round(calculatedGoodsTotal * 0.11);
     const grandTotal = calculatedGoodsTotal + ppn + finalShippingCost;
 
-    const termsDays = Number(customer?.credit_terms_days || (order.payment_method === 'TEMPO' ? 30 : 0));
+    const isCashTransfer = order.payment_method === 'LUNAS_TRANSFER' || (order.payment_method as string) === 'TUNAI';
+    const termsDays = isCashTransfer ? 0 : Number(customer?.credit_terms_days || 30);
     const issueDateObj = new Date();
     const dueDateObj = new Date(issueDateObj.getTime() + termsDays * 86400000);
     const issueDateStr = issueDateObj.toISOString().split('T')[0];

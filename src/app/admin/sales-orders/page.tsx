@@ -1058,13 +1058,21 @@ export default function SalesOrdersPage() {
 
                       {/* Kolom Jatuh Tempo */}
                       <td className="px-6 py-3.5 whitespace-nowrap text-xs">
-                        <div className="font-medium text-slate-800 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{formatDate(dueInfo.dueDateStr)}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : `TOP: ${customerTopDays} Hari`}
-                        </div>
+                        {dueInfo.dueDateStr ? (
+                          <>
+                            <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{formatDate(dueInfo.dueDateStr)}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {so.payment_method === 'LUNAS_TRANSFER'
+                                ? 'Transfer Lunas'
+                                : `TOP: ${customerTopDays} Hari`}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Menunggu Invoice</span>
+                        )}
                       </td>
 
                       {/* Kolom Sisa Hari */}
@@ -1075,6 +1083,8 @@ export default function SalesOrdersPage() {
                           </span>
                         ) : so.status === 'CANCELLED' || (so as any).status === 'DIBATALKAN' ? (
                           <span className="text-slate-400 text-xs">-</span>
+                        ) : !dueInfo.dueDateStr ? (
+                          <span className="text-slate-400 text-xs italic">Menunggu Invoice</span>
                         ) : dueInfo.isOverdue ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300 animate-pulse">
                             <AlertTriangle className="w-3 h-3 text-rose-600" /> {dueInfo.displayText}
