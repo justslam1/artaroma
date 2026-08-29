@@ -22,6 +22,8 @@ import {
   Trash2,
   ShieldAlert,
   Undo2,
+  Lock,
+  KeyRound,
 } from 'lucide-react';
 
 interface POPaymentModalProps {
@@ -73,6 +75,13 @@ export function POPaymentModal({
   const [showSuperAdminRequiredModal, setShowSuperAdminRequiredModal] = useState<boolean>(false);
   const [showVoidConfirmModal, setShowVoidConfirmModal] = useState<boolean>(false);
   const [isVoiding, setIsVoiding] = useState<boolean>(false);
+
+  // On-the-spot Super Admin authorization state
+  const [superAdminEmail, setSuperAdminEmail] = useState('');
+  const [superAdminPassword, setSuperAdminPassword] = useState('');
+  const [isAuthorizingSuperAdmin, setIsAuthorizingSuperAdmin] = useState(false);
+  const [superAdminAuthError, setSuperAdminAuthError] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -212,6 +221,37 @@ export function POPaymentModal({
       alert('Gagal membatalkan transaksi pembayaran: ' + (err?.message || 'Terjadi kesalahan.'));
     } finally {
       setIsVoiding(false);
+    }
+  };
+
+  const handleAuthorizeSuperAdminOnSpot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!superAdminEmail.trim() || !superAdminPassword) {
+      setSuperAdminAuthError('Email/Username dan Password Super Admin wajib diisi.');
+      return;
+    }
+    setIsAuthorizingSuperAdmin(true);
+    setSuperAdminAuthError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: superAdminEmail.trim(), password: superAdminPassword }),
+      });
+      const json = await res.json();
+      if (json.success && (json.user?.is_super_admin || json.user?.role === 'SUPER_ADMIN')) {
+        setSuperAdminAuthError('');
+        setShowSuperAdminRequiredModal(false);
+        setShowVoidConfirmModal(true);
+      } else if (json.success && !(json.user?.is_super_admin || json.user?.role === 'SUPER_ADMIN')) {
+        setSuperAdminAuthError('Akun yang dimasukkan bukan akun berlevel Super Admin.');
+      } else {
+        setSuperAdminAuthError(json.message || 'Kredensial Super Admin tidak valid.');
+      }
+    } catch (err: any) {
+      setSuperAdminAuthError('Gagal memverifikasi Super Admin: ' + err.message);
+    } finally {
+      setIsAuthorizingSuperAdmin(false);
     }
   };
 
@@ -748,23 +788,62 @@ export function POPaymentModal({
                   <div>• Tanggal: {formatDate(voidTargetItem.payment_date)}</div>
                 </div>
               )}
-              <p className="text-[11px] text-slate-600 pt-1">
-                Silakan hubungi <strong>Super Admin</strong> untuk membatalkan atau merevisi transaksi pembayaran ini.
-              </p>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSuperAdminRequiredModal(false);
-                  setVoidTargetItem(null);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition-colors cursor-pointer"
-              >
-                Saya Mengerti
-              </button>
-            </div>
+            {/* Otorisasi On-The-Spot Super Admin */}
+            <form onSubmit={handleAuthorizeSuperAdminOnSpot} className="space-y-3 pt-1 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                <KeyRound className="w-3.5 h-3.5 text-rose-600" />
+                <span>Otorisasi di Tempat (Super Admin):</span>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Email / Username Super Admin"
+                    value={superAdminEmail}
+                    onChange={(e) => setSuperAdminEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="password"
+                    placeholder="Password Super Admin"
+                    value={superAdminPassword}
+                    onChange={(e) => setSuperAdminPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white"
+                  />
+                </div>
+                {superAdminAuthError && (
+                  <p className="text-[11px] text-red-600 font-semibold">{superAdminAuthError}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuperAdminRequiredModal(false);
+                    setVoidTargetItem(null);
+                    setSuperAdminEmail('');
+                    setSuperAdminPassword('');
+                    setSuperAdminAuthError('');
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  ✕ Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAuthorizingSuperAdmin}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  {isAuthorizingSuperAdmin ? 'Memverifikasi...' : '🔑 Otorisasi & Lanjutkan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
