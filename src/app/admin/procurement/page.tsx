@@ -1020,11 +1020,7 @@ export default function ProcurementPage() {
                       <td className="px-6 py-3.5 whitespace-nowrap text-xs">
                         {(() => {
                           const total = Number(po.total_amount || 0);
-                          const paid = Number(po.paid_amount || 0);
-                          const remaining = Math.max(0, total - paid);
                           const isCancelled = po.status === 'DIBATALKAN' || po.status === 'CANCELLED';
-                          const isFullyPaid = !isCancelled && (remaining === 0 && total > 0);
-                          const isPartial = !isCancelled && (paid > 0 && !isFullyPaid);
 
                           if (isCancelled) {
                             return (
@@ -1034,7 +1030,7 @@ export default function ProcurementPage() {
                             );
                           }
 
-                          if (isFullyPaid) {
+                          if (payStatus.status === 'PAID') {
                             return (
                               <button
                                 type="button"
@@ -1045,16 +1041,16 @@ export default function ProcurementPage() {
                                 <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200 px-2.5 py-1 rounded-full border border-emerald-300 transition-colors shadow-2xs">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LUNAS
                                 </span>
-                                {po.payment_bank_name && (
+                                {payStatus.bankName && (
                                   <div className="text-[10px] text-slate-500 font-semibold mt-1 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
-                                    <Building2 className="w-3 h-3 text-blue-600" /> {po.payment_bank_name}
+                                    <Building2 className="w-3 h-3 text-blue-600" /> {payStatus.bankName}
                                   </div>
                                 )}
                               </button>
                             );
                           }
 
-                          if (isPartial) {
+                          if (payStatus.status === 'PARTIAL') {
                             return (
                               <button
                                 type="button"
@@ -1066,7 +1062,7 @@ export default function ProcurementPage() {
                                   <Clock className="w-3 h-3 text-amber-600" /> SEBAGIAN • Cicil &rarr;
                                 </span>
                                 <div className="text-[10px] text-amber-900 font-mono mt-0.5 group-hover:underline">
-                                  {formatIDR(paid)} / {formatIDR(total)}
+                                  {formatIDR(payStatus.totalPaid)} / {formatIDR(total)}
                                 </div>
                               </button>
                             );
@@ -1083,7 +1079,7 @@ export default function ProcurementPage() {
                                 <CreditCard className="w-3 h-3 text-rose-500" /> BELUM BAYAR • Bayar &rarr;
                               </span>
                               <div className="text-[10px] text-rose-600 font-mono mt-0.5 group-hover:underline">
-                                Sisa: {formatIDR(total)}
+                                Sisa: {formatIDR(payStatus.remaining || total)}
                               </div>
                             </button>
                           );

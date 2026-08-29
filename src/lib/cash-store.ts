@@ -670,13 +670,14 @@ export function getPOPaymentStatusFromCash(
     return poNumClean ? ref.includes(poNumClean) || notes.includes(poNumClean) : false;
   });
 
-  const totalPaid = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalPaidFromTx = matchingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const poPaidAmount = Number(po.paid_amount || 0);
+  const totalPaid = Math.max(totalPaidFromTx, poPaidAmount);
   const poTotal = Number(po.total_amount) || 0;
 
-  // Fallback: If PO status itself is DIKIRIM / DITERIMA, it is marked paid
-  const isPaidByStatus = po.status === 'DIKIRIM' || po.status === 'DITERIMA';
-  const isFullyPaid = (totalPaid >= poTotal && poTotal > 0) || (totalPaid === 0 && isPaidByStatus);
-  const isPartial = totalPaid > 0 && totalPaid < poTotal;
+  const isExplicitlyPaid = po.payment_status === 'PAID';
+  const isFullyPaid = (totalPaid >= poTotal && poTotal > 0) || isExplicitlyPaid;
+  const isPartial = !isFullyPaid && (totalPaid > 0 || po.payment_status === 'PARTIALLY_PAID');
 
   const sortedTxs = [...matchingTxs].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -685,10 +686,10 @@ export function getPOPaymentStatusFromCash(
 
   return {
     status: isFullyPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID',
-    totalPaid: totalPaid > 0 ? totalPaid : isPaidByStatus ? poTotal : 0,
+    totalPaid: isFullyPaid ? (poTotal > 0 ? poTotal : totalPaid) : totalPaid,
     remaining: isFullyPaid ? 0 : Math.max(0, poTotal - totalPaid),
-    bankName: latestTx?.account_name,
-    lastPayDate: latestTx?.date,
+    bankName: latestTx?.account_name || po.payment_bank_name,
+    lastPayDate: latestTx?.date || po.last_payment_date,
     txNumbers: matchingTxs.map((t) => t.tx_number),
   };
 }
