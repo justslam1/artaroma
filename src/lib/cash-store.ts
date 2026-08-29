@@ -491,6 +491,37 @@ export function recordCashTransaction(
 }
 
 /**
+ * Void/Rollback a cash transaction by reference number or notes (e.g. when payment is voided/revisied)
+ */
+export function voidCashTransactionByReference(
+  refNumber: string,
+  amount?: number,
+  txType?: 'IN' | 'OUT'
+): boolean {
+  const accounts = getStoredCashAccounts();
+  const txs = getStoredCashTransactions();
+  const cleanRef = (refNumber || '').trim().toLowerCase();
+
+  const targetIdx = txs.findIndex((t) => {
+    if (txType && t.tx_type !== txType) return false;
+    if (amount !== undefined && Math.abs(Number(t.amount) - amount) > 1) return false;
+    const ref = (t.reference_number || '').toLowerCase();
+    const notes = (t.notes || '').toLowerCase();
+    return ref.includes(cleanRef) || notes.includes(cleanRef);
+  });
+
+  if (targetIdx === -1) return false;
+
+  // Remove transaction and recalculate balances
+  const updatedTxs = txs.filter((_, idx) => idx !== targetIdx);
+  const updatedAccs = recalculateBalances(accounts, updatedTxs);
+
+  saveStoredCashTransactions(updatedTxs);
+  saveStoredCashAccounts(updatedAccs);
+  return true;
+}
+
+/**
  * Inter-Account Transfer (e.g. Kas Besar -> Kas Kantor / Kas Kecil / Kas Sales, or Setor Balik)
  */
 export function transferCashBetweenAccounts(params: {

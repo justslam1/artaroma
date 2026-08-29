@@ -19,6 +19,9 @@ import {
   FileText,
   Clock,
   Sparkles,
+  Trash2,
+  ShieldAlert,
+  Undo2,
 } from 'lucide-react';
 
 interface POPaymentModalProps {
@@ -35,6 +38,11 @@ interface POPaymentModalProps {
     paymentNotes?: string,
     proofUrl?: string
   ) => Promise<void> | void;
+  onVoidPayment?: (
+    poId: string,
+    paymentRecordId: string,
+    amount: number
+  ) => Promise<void> | void;
   isSubmitting?: boolean;
 }
 
@@ -43,6 +51,7 @@ export function POPaymentModal({
   onClose,
   po,
   onConfirmPayment,
+  onVoidPayment,
   isSubmitting = false,
 }: POPaymentModalProps) {
   const totalBill = Number(po?.total_amount || 0);
@@ -59,9 +68,23 @@ export function POPaymentModal({
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [selectedSourceBankId, setSelectedSourceBankId] = useState<string>('acc-bca');
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [voidTargetItem, setVoidTargetItem] = useState<POPaymentRecord | null>(null);
+  const [showSuperAdminRequiredModal, setShowSuperAdminRequiredModal] = useState<boolean>(false);
+  const [showVoidConfirmModal, setShowVoidConfirmModal] = useState<boolean>(false);
+  const [isVoiding, setIsVoiding] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.user) {
+          setCurrentUser(json.user);
+        }
+      })
+      .catch(() => {});
+
     fetch('/api/company-settings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((json) => {
@@ -165,6 +188,31 @@ export function POPaymentModal({
       paymentNotes,
       proofUrl
     );
+  };
+
+  const handleInitiateVoidPayment = (item: POPaymentRecord) => {
+    const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+    if (!isSuperAdmin) {
+      setVoidTargetItem(item);
+      setShowSuperAdminRequiredModal(true);
+      return;
+    }
+    setVoidTargetItem(item);
+    setShowVoidConfirmModal(true);
+  };
+
+  const handleExecuteVoidPayment = async () => {
+    if (!voidTargetItem || !onVoidPayment || !po) return;
+    try {
+      setIsVoiding(true);
+      await onVoidPayment(po.id, voidTargetItem.id || `hist-legacy-${po.id}`, voidTargetItem.amount);
+      setShowVoidConfirmModal(false);
+      setVoidTargetItem(null);
+    } catch (err: any) {
+      alert('Gagal membatalkan transaksi pembayaran: ' + (err?.message || 'Terjadi kesalahan.'));
+    } finally {
+      setIsVoiding(false);
+    }
   };
 
   const paymentHistory: POPaymentRecord[] =
@@ -324,15 +372,27 @@ export function POPaymentModal({
                           {item.created_by && <span>• 👤 {item.created_by}</span>}
                         </div>
                       </div>
-                      {item.payment_proof_url && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewImageModal(item.payment_proof_url || null)}
-                          className="text-purple-600 hover:text-purple-800 flex items-center gap-1 text-[10px] font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg shrink-0 cursor-pointer"
-                        >
-                          <Eye className="w-3 h-3" /> Bukti
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {item.payment_proof_url && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImageModal(item.payment_proof_url || null)}
+                            className="text-purple-600 hover:text-purple-800 flex items-center gap-1 text-[10px] font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg shrink-0 cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" /> Bukti
+                          </button>
+                        )}
+                        {onVoidPayment && (
+                          <button
+                            type="button"
+                            onClick={() => handleInitiateVoidPayment(item)}
+                            className="text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg text-[10px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Batalkan / Koreksi transaksi pembayaran ini (Diperlukan Persetujuan Super Admin)"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-600" /> Batalkan
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -652,6 +712,133 @@ export function POPaymentModal({
               >
                 <CheckCircle className="w-4 h-4" />
                 {isSubmitting ? 'Memproses...' : isLunas ? '✓ Ya, Proses Pelunasan' : '✓ Ya, Proses Pembayaran'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Required Notice Modal */}
+      {showSuperAdminRequiredModal && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700">
+                <ShieldAlert className="w-6 h-6 text-rose-600 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-800">
+                  Persetujuan Super Admin Diperlukan
+                </h3>
+                <p className="text-xs text-rose-600 font-semibold">
+                  Akses Dibatasi (Hanya untuk Super Admin)
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-4 space-y-2 text-xs text-rose-950">
+              <p className="leading-relaxed">
+                Pembatalan transaksi pembayaran kas keluar (BKK) dan pemulihan status hutang PO merupakan aksi finansial kritis yang <strong>hanya dapat disetujui & diproses oleh akun Super Admin</strong>.
+              </p>
+              {voidTargetItem && (
+                <div className="bg-white rounded-lg p-2.5 border border-rose-200 space-y-1 font-mono text-[11px] mt-2">
+                  <div className="text-slate-600 font-sans font-bold">Rincian Transaksi:</div>
+                  <div>• Nominal: <strong className="text-rose-700">{formatIDR(voidTargetItem.amount)}</strong></div>
+                  <div>• Rekening: {voidTargetItem.bank_name || '-'}</div>
+                  <div>• Tanggal: {formatDate(voidTargetItem.payment_date)}</div>
+                </div>
+              )}
+              <p className="text-[11px] text-slate-600 pt-1">
+                Silakan hubungi <strong>Super Admin</strong> untuk membatalkan atau merevisi transaksi pembayaran ini.
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuperAdminRequiredModal(false);
+                  setVoidTargetItem(null);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition-colors cursor-pointer"
+              >
+                Saya Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Void Confirmation Modal */}
+      {showVoidConfirmModal && voidTargetItem && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-300">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700">
+                <Trash2 className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-800">
+                  Batalkan Pembayaran PO (Super Admin)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Koreksi & Rollback Transaksi Kas Keluar
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/60 border border-rose-200 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-rose-200/60">
+                <span className="text-slate-600">No. PO:</span>
+                <span className="font-mono font-bold text-slate-800">{po.po_number}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-rose-200/60">
+                <span className="text-slate-600">Nominal Dibatalkan:</span>
+                <span className="font-mono font-extrabold text-rose-700 text-sm">{formatIDR(voidTargetItem.amount)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-rose-200/60">
+                <span className="text-slate-600">Rekening Kas:</span>
+                <span className="font-semibold text-slate-800 text-right truncate max-w-[200px]">{voidTargetItem.bank_name || '-'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-rose-200/60">
+                <span className="text-slate-600">Tanggal Bayar:</span>
+                <span className="font-medium text-slate-700">{formatDate(voidTargetItem.payment_date)}</span>
+              </div>
+              <div className="flex justify-between pt-1">
+                <span className="text-slate-600">Status Sisa Hutang:</span>
+                <span className="font-mono font-bold text-amber-700">
+                  Akan dipulihkan (+{formatIDR(voidTargetItem.amount)})
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-rose-800 bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+              <span>
+                <strong>Dampak Tindakan:</strong> Transaksi pengeluaran kas (BKK) terkait akan dibatalkan, saldo kas rekening bank akan dipulihkan, dan status PO dikembalikan ke belum lunas/sebagian.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVoidConfirmModal(false);
+                  setVoidTargetItem(null);
+                }}
+                disabled={isVoiding}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                ↩ Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteVoidPayment}
+                disabled={isVoiding}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isVoiding ? 'Membatalkan...' : 'Ya, Batalkan Transaksi Ini'}
               </button>
             </div>
           </div>

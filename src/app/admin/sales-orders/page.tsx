@@ -45,6 +45,7 @@ import {
   getStoredCashAccounts,
   getStoredCashTransactions,
   recordCashTransaction,
+  voidCashTransactionByReference,
   calculateSODueDateInfo,
   getSOPaymentStatusFromCash,
 } from '@/lib/cash-store';
@@ -307,6 +308,56 @@ export default function SalesOrdersPage() {
     syncFinanceData();
     fetchOrders();
     setSelectedInvoiceForPayment(null);
+  };
+
+  const handleVoidInvoicePayment = async (invoiceId: string, paymentRecordId: string, amount: number) => {
+    const currentInvs = getStoredInvoices();
+    const targetInv = currentInvs.find((i) => i.id === invoiceId || i.invoice_number === selectedInvoiceForPayment?.invoice_number);
+    if (!targetInv) return;
+
+    try {
+      const prevPaid = Number(targetInv.paid_amount || 0);
+      const newPaid = Math.max(0, prevPaid - amount);
+      const isFullyPaid = newPaid >= Number(targetInv.total_amount || 0) && Number(targetInv.total_amount || 0) > 0;
+      const newStatus = newPaid === 0 ? 'UNPAID' : isFullyPaid ? 'PAID' : 'PARTIALLY_PAID';
+
+      const existingHistory = Array.isArray(targetInv.payment_history) ? targetInv.payment_history : [];
+      const updatedHistory = existingHistory.filter((h, idx) => (h.id ? h.id !== paymentRecordId : idx.toString() !== paymentRecordId));
+
+      const updatedInvoices = currentInvs.map((inv) => {
+        if (inv.id !== targetInv.id && inv.invoice_number !== targetInv.invoice_number) return inv;
+        return {
+          ...inv,
+          paid_amount: newPaid,
+          status: newStatus as any,
+          payment_verification_status: (newPaid > 0 ? 'VERIFIED' : 'PENDING') as any,
+          payment_history: updatedHistory,
+          last_payment_date: updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1].payment_date : undefined,
+        };
+      });
+
+      saveStoredInvoices(updatedInvoices);
+      setInvoices(updatedInvoices);
+
+      // Rollback cash transaction in cash-store
+      try {
+        voidCashTransactionByReference(targetInv.invoice_number || targetInv.so_number || '', amount, 'IN');
+        setCashTxs(getStoredCashTransactions());
+      } catch (e) {
+        console.warn('Failed to rollback BKM in cash store:', e);
+      }
+
+      syncFinanceData();
+      fetchOrders();
+
+      const updatedInv = updatedInvoices.find((i) => i.id === targetInv.id || i.invoice_number === targetInv.invoice_number) || null;
+      setSelectedInvoiceForPayment(updatedInv);
+
+      alert(`✅ Penerimaan pembayaran Invoice ${targetInv.invoice_number || ''} sebesar ${formatIDR(amount)} berhasil dibatalkan.\nSaldo Kas Masuk (BKM) telah di-rollback.`);
+    } catch (err: any) {
+      console.error('Failed to void invoice payment:', err);
+      alert('Gagal membatalkan pembayaran: ' + err.message);
+    }
   };
 
   useEffect(() => {
@@ -1257,6 +1308,7 @@ export default function SalesOrdersPage() {
         onClose={() => setSelectedInvoiceForPayment(null)}
         invoice={selectedInvoiceForPayment}
         onVerify={handleVerifyPayment}
+        onVoidPayment={handleVoidInvoicePayment}
       />
 
       {/* Upload & View Tax Invoice PDF Modal */}

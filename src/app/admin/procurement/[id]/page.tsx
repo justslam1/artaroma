@@ -13,7 +13,7 @@ import {
 } from '@/lib/mock-data';
 import { PurchaseOrder, StockBatch, Distributor, POPaymentRecord } from '@/lib/types';
 import { formatIDR, formatKg, formatDate, formatDateTime } from '@/lib/utils';
-import { getStoredCashAccounts, recordCashTransaction } from '@/lib/cash-store';
+import { getStoredCashAccounts, recordCashTransaction, voidCashTransactionByReference } from '@/lib/cash-store';
 import {
   ArrowLeft,
   FileText,
@@ -262,6 +262,58 @@ export default function PODetailPage() {
       alert('Gagal mencatat pembayaran PO: ' + err.message);
     } finally {
       setIsPaymentSubmitting(false);
+    }
+  };
+
+  const handleVoidPOPayment = async (poId: string, paymentRecordId: string, amount: number) => {
+    const currentPO = purchaseOrders.find((p) => p.id === poId) || po;
+    if (!currentPO) return;
+
+    try {
+      const currentPaid = Number(currentPO.paid_amount || 0);
+      const newAccumulatedPaid = Math.max(0, currentPaid - amount);
+      const isLunas = newAccumulatedPaid >= Number(currentPO.total_amount || 0) && Number(currentPO.total_amount || 0) > 0;
+      const paymentStatus = newAccumulatedPaid === 0 ? 'UNPAID' : isLunas ? 'PAID' : 'PARTIALLY_PAID';
+
+      const existingHistory: POPaymentRecord[] = Array.isArray(currentPO.payment_history) ? currentPO.payment_history : [];
+      const updatedHistory = existingHistory.filter((h, idx) => (h.id ? h.id !== paymentRecordId : idx.toString() !== paymentRecordId));
+
+      await fetch('/api/purchase-orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentPO.id,
+          paid_amount: newAccumulatedPaid,
+          payment_status: paymentStatus,
+          payment_history: updatedHistory,
+          last_payment_date: updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1].payment_date : null,
+        }),
+      });
+
+      // Rollback cash transaction in cash-store
+      try {
+        voidCashTransactionByReference(currentPO.po_number, amount, 'OUT');
+      } catch (e) {
+        console.warn('Failed to rollback BKK in cash store:', e);
+      }
+
+      const updatedPO: PurchaseOrder = {
+        ...currentPO,
+        paid_amount: newAccumulatedPaid,
+        payment_status: paymentStatus,
+        payment_history: updatedHistory,
+        last_payment_date: updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1].payment_date : undefined,
+      };
+
+      setPurchaseOrders((prev) =>
+        prev.map((p) => (p.id === currentPO.id ? updatedPO : p))
+      );
+
+      savePOUpdate(updatedPO);
+      alert(`✅ Pembayaran PO ${currentPO.po_number} sebesar ${formatIDR(amount)} berhasil dibatalkan.\nSaldo Kas Keluar (BKK) telah dipulihkan.`);
+    } catch (err: any) {
+      console.error('Failed to void PO payment:', err);
+      alert('Gagal membatalkan pembayaran: ' + err.message);
     }
   };
 
@@ -2646,6 +2698,7 @@ export default function PODetailPage() {
         onClose={() => setIsPaymentModalOpen(false)}
         po={po}
         onConfirmPayment={handleConfirmPOPayment}
+        onVoidPayment={handleVoidPOPayment}
         isSubmitting={isPaymentSubmitting}
       />
     </div>
