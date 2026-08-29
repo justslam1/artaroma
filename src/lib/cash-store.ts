@@ -703,12 +703,17 @@ export interface SOPaymentCashStatus {
   txNumbers: string[];
 }
 
-export function calculateSODueDateInfo(so: SalesOrder, inv?: Invoice): PODueDateInfo {
+export function calculateSODueDateInfo(
+  so: SalesOrder,
+  inv?: Invoice,
+  defaultTermsDays: number = 30
+): PODueDateInfo {
   let dueDateStr = inv?.due_date || (so as any).due_date;
   if (!dueDateStr) {
     const orderD = so.order_date ? new Date(so.order_date) : new Date();
+    const terms = Number((so as any).payment_terms_days) || Number(defaultTermsDays) || 30;
     const d = new Date(orderD);
-    d.setDate(d.getDate() + 30);
+    d.setDate(d.getDate() + terms);
     dueDateStr = d.toISOString().split('T')[0];
   }
 

@@ -963,7 +963,10 @@ export default function SalesOrdersPage() {
                   const rowNumber = (currentPage - 1) * pageSize + idx + 1;
                   const isRead = readOrderIds.includes(so.id);
                   const matchingInv = invoices.find((i) => i.so_id === so.id || i.so_number === so.so_number);
-                  const dueInfo = calculateSODueDateInfo(so, matchingInv);
+                  const soCustomer = customers.find((c) => c.id === so.customer_id) ||
+                                     initialCustomers.find((c) => c.id === so.customer_id || c.company_name === so.customer_company);
+                  const customerTopDays = Number(soCustomer?.credit_terms_days) || Number((so as any).payment_terms_days) || 30;
+                  const dueInfo = calculateSODueDateInfo(so, matchingInv, customerTopDays);
                   const payStatus = getSOPaymentStatusFromCash(so, matchingInv, cashTxs);
 
                   return (
@@ -1060,7 +1063,7 @@ export default function SalesOrdersPage() {
                           <span>{formatDate(dueInfo.dueDateStr)}</span>
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : 'TOP: 30 Hari'}
+                          {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : `TOP: ${customerTopDays} Hari`}
                         </div>
                       </td>
 

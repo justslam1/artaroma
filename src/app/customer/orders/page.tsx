@@ -546,7 +546,8 @@ export default function CustomerOrdersPage() {
                 <tbody className="divide-y divide-gray-100">
                   {customerOrders.map((so) => {
                     const inv = invoices.find((i) => i.so_number === so.so_number || i.so_id === so.id);
-                    const dueInfo = calculateSODueDateInfo(so, inv);
+                    const custTopDays = Number(currentCustomer?.credit_terms_days) || Number((so as any).payment_terms_days) || 30;
+                    const dueInfo = calculateSODueDateInfo(so, inv, custTopDays);
                     const payStatus = getSOPaymentStatusFromCash(so, inv, cashTxs);
 
                     return (
@@ -611,7 +612,7 @@ export default function CustomerOrdersPage() {
                                 <span>{formatDate(dueInfo.dueDateStr)}</span>
                               </div>
                               <div className="text-[10px] text-slate-400">
-                                {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : 'TOP: 30 Hari'}
+                                {so.payment_method === 'LUNAS_TRANSFER' ? 'Transfer Lunas' : `TOP: ${custTopDays} Hari`}
                               </div>
                             </div>
                           ) : so.status === 'DIAJUKAN' || so.status === 'PENDING_APPROVAL' ? (
