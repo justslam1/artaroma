@@ -655,10 +655,10 @@ export default function CustomerCatalogPage() {
                   key={product.id}
                   className={`p-3.5 sm:p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                     hasAnyPackInCart
-                      ? 'bg-blue-100/90 hover:bg-blue-200/80 border-l-4 border-l-blue-600 shadow-2xs'
+                      ? 'bg-blue-200/95 hover:bg-blue-300/90 border-l-4 border-l-blue-700 shadow-xs'
                       : isEven
-                      ? 'bg-white hover:bg-slate-100/70 border-l-4 border-l-transparent'
-                      : 'bg-slate-100/70 hover:bg-slate-200/60 border-l-4 border-l-transparent'
+                      ? 'bg-white hover:bg-slate-100 border-l-4 border-l-transparent'
+                      : 'bg-slate-200/75 hover:bg-slate-300/75 border-l-4 border-l-transparent'
                   }`}
                 >
                   {/* Left: Product Info & Notes */}
