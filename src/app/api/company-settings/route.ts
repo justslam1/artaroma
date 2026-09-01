@@ -47,6 +47,14 @@ export async function GET(req: NextRequest) {
       whatsapp_number: settings.whatsapp_number || '+62 852-2518-4422',
       whatsapp_cs_name: settings.whatsapp_cs_name || 'Customer Support Artaroma',
       auto_logout_minutes: settings.auto_logout_minutes ? parseInt(settings.auto_logout_minutes, 10) : 240,
+
+      // WhatsApp Gateway Integration settings
+      wa_gateway_enabled: settings.wa_gateway_enabled !== 'false',
+      wa_gateway_provider: settings.wa_gateway_provider || 'fonnte',
+      wa_api_token: settings.wa_api_token || '',
+      wa_admin_phone: settings.wa_admin_phone || settings.whatsapp_number || '+62 852-2518-4422',
+      wa_notify_admin: settings.wa_notify_admin !== 'false',
+      wa_notify_customer: settings.wa_notify_customer !== 'false',
     };
 
     return NextResponse.json({

@@ -247,6 +247,76 @@ export async function POST(req: NextRequest) {
         url: `/admin/orders/${soId}`,
         tag: `so-${soId}`,
       }).catch((pushErr) => console.warn('[WebPush] Error on SO create:', pushErr));
+
+      // Send Automatic WhatsApp Notifications to Admin & Customer (Async / Non-blocking)
+      (async () => {
+        try {
+          const {
+            getWhatsAppConfig,
+            sendWhatsAppMessage,
+            formatNewSalesOrderWAMessage,
+            formatCustomerOrderConfirmationWAMessage,
+          } = await import('@/lib/whatsapp');
+
+          const waConfig = await getWhatsAppConfig();
+          if (!waConfig.enabled || !waConfig.apiToken) return;
+
+          const totalWeightKg = processedItems.reduce((s: number, it: any) => s + (it.qty_kg || 0), 0);
+          const originUrl = req.nextUrl.origin || 'https://artaroma.co.id';
+
+          // 1. Send Notification to Admin / Sales / Warehouse WhatsApp
+          if (waConfig.notifyAdmin && waConfig.adminPhone) {
+            const adminMsg = formatNewSalesOrderWAMessage({
+              soNumber,
+              customerName: customer?.pic_name || customer?.company_name || 'Customer B2B',
+              customerCompany: customer?.company_name,
+              customerPhone: customer?.pic_phone || customer?.phone,
+              paymentMethod: payment_method || 'LUNAS_TRANSFER',
+              orderDate: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+              items: processedItems.map((it: any) => ({
+                name: it.product_name,
+                qtyKg: it.qty_kg,
+                unitPrice: it.unit_price_per_kg,
+                subtotal: it.subtotal,
+              })),
+              totalWeightKg,
+              grandTotal,
+              originUrl,
+            });
+
+            await sendWhatsAppMessage({
+              target: waConfig.adminPhone,
+              message: adminMsg,
+              token: waConfig.apiToken,
+            });
+          }
+
+          // 2. Send Confirmation Notification to Customer WhatsApp
+          const customerPhone = customer?.pic_phone || customer?.phone;
+          if (waConfig.notifyCustomer && customerPhone) {
+            const customerMsg = formatCustomerOrderConfirmationWAMessage({
+              soNumber,
+              customerName: customer?.pic_name || customer?.company_name || 'Pelanggan Setia',
+              items: processedItems.map((it: any) => ({
+                name: it.product_name,
+                qtyKg: it.qty_kg,
+                unitPrice: it.unit_price_per_kg,
+                subtotal: it.subtotal,
+              })),
+              totalWeightKg,
+              grandTotal,
+            });
+
+            await sendWhatsAppMessage({
+              target: customerPhone,
+              message: customerMsg,
+              token: waConfig.apiToken,
+            });
+          }
+        } catch (waErr) {
+          console.warn('[WhatsApp] Async notification error on SO create:', waErr);
+        }
+      })();
     } catch (e: any) {
       console.error('DB insert SO error:', e.message);
       return NextResponse.json(

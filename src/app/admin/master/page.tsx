@@ -271,6 +271,43 @@ export default function MasterDataPage() {
     }
   };
 
+  // WhatsApp Gateway Testing states & handler
+  const [waTesting, setWaTesting] = useState(false);
+  const [waTestResult, setWaTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestWhatsApp = async () => {
+    const target = companyConfig.wa_admin_phone || companyConfig.whatsapp_number;
+    const token = companyConfig.wa_api_token;
+    if (!token) {
+      alert('Silakan isi kolom Fonnte API Token terlebih dahulu sebelum mengirim pesan tes.');
+      return;
+    }
+    if (!target) {
+      alert('Silakan isi Nomor WhatsApp Admin/Tujuan.');
+      return;
+    }
+
+    setWaTesting(true);
+    setWaTestResult(null);
+    try {
+      const res = await fetch('/api/notifications/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target, token }),
+      });
+      const json = await res.json();
+      setWaTestResult({
+        success: Boolean(json.success),
+        message: json.message || (json.success ? 'Pesan tes WhatsApp terkirim!' : 'Gagal mengirim pesan.'),
+      });
+      setTimeout(() => setWaTestResult(null), 7000);
+    } catch (err: any) {
+      setWaTestResult({ success: false, message: err.message || 'Koneksi ke server gagal.' });
+    } finally {
+      setWaTesting(false);
+    }
+  };
+
   React.useEffect(() => {
     const rate = getUsdExchangeRate();
     setUsdRate(rate);
@@ -3942,6 +3979,154 @@ export default function MasterDataPage() {
                         placeholder="Contoh: Customer Support Artaroma"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* WhatsApp Gateway Integration Card (Fonnte API & Auto-Notif Sales Order) */}
+                <div className="bg-gradient-to-br from-emerald-950/5 to-teal-950/10 border border-emerald-300/80 rounded-xl p-5 space-y-4 shadow-xs mt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-200/80">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                        📱
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-extrabold text-sm text-slate-800">
+                            WhatsApp Gateway API (Fonnte Auto-Notification)
+                          </h4>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
+                            FONNTE REST API
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Mengirim notifikasi instan secara otomatis ke WhatsApp Admin / Grup Sales &amp; Gudang saat pesanan baru diajukan customer.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <label className="text-xs font-bold text-slate-700 cursor-pointer">
+                        {companyConfig.wa_gateway_enabled !== false ? '🟢 Gateway Aktif' : '⚪ Gateway Nonaktif'}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCompanyConfig({
+                            ...companyConfig,
+                            wa_gateway_enabled: companyConfig.wa_gateway_enabled === false,
+                          })
+                        }
+                        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                          companyConfig.wa_gateway_enabled !== false ? 'bg-emerald-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-4 h-4 rounded-full bg-white shadow-md absolute top-1 transition-transform ${
+                            companyConfig.wa_gateway_enabled !== false ? 'left-6' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Result Alert of WA Test */}
+                  {waTestResult && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                        waTestResult.success
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-red-50 text-red-800 border-red-300'
+                      }`}
+                    >
+                      <span>{waTestResult.success ? '✅' : '⚠️'}</span>
+                      <span>{waTestResult.message}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700">
+                          Fonnte API Token
+                        </label>
+                        <a
+                          href="https://fonnte.com"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-blue-600 hover:text-blue-800 font-bold underline"
+                        >
+                          Daftar / Dapatkan Token di Fonnte.com &rarr;
+                        </a>
+                      </div>
+                      <input
+                        type="password"
+                        value={companyConfig.wa_api_token || ''}
+                        onChange={(e) => setCompanyConfig({ ...companyConfig, wa_api_token: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-600 font-mono text-xs"
+                        placeholder="Contoh: vQ9s...Xz9Y"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Masukkan API Token Fonnte yang terhubung dengan nomor WhatsApp kantor Anda.
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Nomor WA Admin / Sales / ID Grup Tujuan Notifikasi
+                      </label>
+                      <input
+                        type="text"
+                        value={companyConfig.wa_admin_phone || companyConfig.whatsapp_number || '+62 852-2518-4422'}
+                        onChange={(e) => setCompanyConfig({ ...companyConfig, wa_admin_phone: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:border-emerald-600 font-mono font-bold text-xs"
+                        placeholder="Contoh: 085225184422 atau ID Grup"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Nomor tujuan penerima rincian Sales Order masuk.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Checkbox Options & Test Button */}
+                  <div className="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={companyConfig.wa_notify_admin !== false}
+                          onChange={(e) =>
+                            setCompanyConfig({ ...companyConfig, wa_notify_admin: e.target.checked })
+                          }
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-semibold text-slate-700">Kirim Notif ke Admin</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={companyConfig.wa_notify_customer !== false}
+                          onChange={(e) =>
+                            setCompanyConfig({ ...companyConfig, wa_notify_customer: e.target.checked })
+                          }
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-semibold text-slate-700">Kirim Konfirmasi ke Customer</span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={waTesting}
+                      onClick={handleTestWhatsApp}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 self-start sm:self-center"
+                    >
+                      {waTesting ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Mengirim Tes...</>
+                      ) : (
+                        <><span>✉️</span> <span>Kirim Pesan Tes WhatsApp</span></>
+                      )}
+                    </button>
                   </div>
                 </div>
 
