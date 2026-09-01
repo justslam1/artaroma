@@ -648,16 +648,17 @@ export default function CustomerCatalogPage() {
                 (item) => item.product.id === product.id && Math.abs(item.packSizeKg - activeKg) < 0.01
               );
               const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
+              const hasAnyPackInCart = cartItems.some((item) => item.product.id === product.id);
 
               return (
                 <div
                   key={product.id}
-                  className={`p-3.5 sm:p-4 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    currentQtyInCart > 0
-                      ? 'bg-blue-50/60 hover:bg-blue-50/90'
+                  className={`p-3.5 sm:p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    hasAnyPackInCart
+                      ? 'bg-blue-100/90 hover:bg-blue-200/80 border-l-4 border-l-blue-600 shadow-2xs'
                       : isEven
-                      ? 'bg-white hover:bg-slate-100/70'
-                      : 'bg-slate-50/90 hover:bg-slate-100/90'
+                      ? 'bg-white hover:bg-slate-100/70 border-l-4 border-l-transparent'
+                      : 'bg-slate-100/70 hover:bg-slate-200/60 border-l-4 border-l-transparent'
                   }`}
                 >
                   {/* Left: Product Info & Notes */}
