@@ -451,30 +451,34 @@ export default function CustomerCatalogPage() {
                   key={product.id}
                   className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col group"
                 >
-                  {/* Scent Visual Header */}
-                  <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-3.5 sm:p-4 text-white relative overflow-hidden flex-shrink-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <span className="font-mono text-[9px] font-bold text-blue-400 tracking-wider bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded">
-                        {product.sku}
-                      </span>
-                      <div className="flex flex-wrap gap-1 justify-end max-w-[65%]">
-                        {(() => {
-                          const app = (product.applications && product.applications.length > 0 ? product.applications[0] : product.application) || 'Fine Fragrance';
-                          return (
-                            <span
-                              key={app}
-                              className="text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30 backdrop-blur-xs shadow-2xs"
-                            >
-                              {app}
-                            </span>
-                          );
-                        })()}
+                  {/* Scent Visual Header (Compact & Bright Dynamic Gradient) */}
+                  <div
+                    className="px-3.5 py-2.5 sm:px-4 sm:py-3 text-white relative overflow-hidden flex-shrink-0 shadow-2xs"
+                    style={{
+                      background: 'linear-gradient(135deg, var(--artaroma-primary, #1d4ed8) 0%, #4338ca 100%)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="font-mono text-[9px] font-extrabold text-blue-100 bg-white/20 border border-white/30 px-1.5 py-0.5 rounded shrink-0">
+                          {product.sku}
+                        </span>
+                        <h3 className="text-sm sm:text-base font-black text-white tracking-tight truncate group-hover:text-amber-200 transition-colors">
+                          {product.name}
+                        </h3>
                       </div>
+                      {(() => {
+                        const app = (product.applications && product.applications.length > 0 ? product.applications[0] : product.application) || 'Fine Fragrance';
+                        return (
+                          <span
+                            key={app}
+                            className="text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-2xs shrink-0"
+                          >
+                            {app}
+                          </span>
+                        );
+                      })()}
                     </div>
-
-                    <h3 className="text-base sm:text-lg font-black text-white mt-2 tracking-tight group-hover:text-amber-300 transition-colors">
-                      {product.name}
-                    </h3>
                   </div>
 
                   {/* Scent Profile Notes (Compact Bar with Toggle) */}
