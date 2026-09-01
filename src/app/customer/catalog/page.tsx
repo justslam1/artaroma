@@ -209,11 +209,11 @@ export default function CustomerCatalogPage() {
     );
 
     // 2. Application & Search filters
-    const prodApps = p.applications && p.applications.length > 0
-      ? p.applications
-      : [p.application || 'Fine Fragrance'];
+    const prodApp = (p.applications && p.applications.length > 0
+      ? p.applications[0]
+      : (p.application || 'Fine Fragrance'));
 
-    const matchesApplication = selectedApplication === 'ALL' || prodApps.includes(selectedApplication);
+    const matchesApplication = selectedApplication === 'ALL' || prodApp === selectedApplication;
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.top_notes && p.top_notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -458,17 +458,17 @@ export default function CustomerCatalogPage() {
                         {product.sku}
                       </span>
                       <div className="flex flex-wrap gap-1 justify-end max-w-[65%]">
-                        {(product.applications && product.applications.length > 0
-                          ? product.applications
-                          : [product.application || 'Fine Fragrance']
-                        ).map((app) => (
-                          <span
-                            key={app}
-                            className="text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider bg-white/10 text-white backdrop-blur-xs"
-                          >
-                            {app}
-                          </span>
-                        ))}
+                        {(() => {
+                          const app = (product.applications && product.applications.length > 0 ? product.applications[0] : product.application) || 'Fine Fragrance';
+                          return (
+                            <span
+                              key={app}
+                              className="text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider bg-purple-500/20 text-purple-200 border border-purple-400/30 backdrop-blur-xs shadow-2xs"
+                            >
+                              {app}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -670,11 +670,17 @@ export default function CustomerCatalogPage() {
                       <h4 className="font-bold text-sm text-slate-800 truncate">
                         {product.name}
                       </h4>
-                      {(product.applications || [product.application || 'Fine Fragrance']).map((app) => (
-                        <span key={app} className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
-                          {app}
-                        </span>
-                      ))}
+                      {(() => {
+                        const app = (product.applications && product.applications.length > 0 ? product.applications[0] : product.application) || 'Fine Fragrance';
+                        return (
+                          <span
+                            key={app}
+                            className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap shadow-2xs"
+                          >
+                            {app}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="text-[11px] text-slate-500 truncate">
                       <span className="font-medium text-amber-700">Aroma:</span> {product.top_notes || '-'} {product.middle_notes ? `• ${product.middle_notes}` : ''}
