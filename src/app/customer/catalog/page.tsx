@@ -21,6 +21,12 @@ import {
   Tag,
   Package,
   FileSpreadsheet,
+  LayoutGrid,
+  List,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
 } from 'lucide-react';
 import { exportPricelistToXLSX } from '@/lib/export-excel';
 
@@ -62,6 +68,13 @@ export default function CustomerCatalogPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [cartItems, setCartItems] = useState<{ product: Product; packSizeKg: number; quantity: number }[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+
+  // UX Optimization States
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedPackSizes, setSelectedPackSizes] = useState<Record<string, number>>({});
+  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'price-asc' | 'price-desc'>('name-asc');
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [visibleCount, setVisibleCount] = useState<number>(12);
 
   // Minimum purchase unit: 0.1 Kg (100 gram) increments
   const presets = [25, 5, 1, 0.1];
@@ -209,11 +222,32 @@ export default function CustomerCatalogPage() {
     return isAllowedForCustomer && matchesApplication && matchesSearch;
   });
 
+  const getBasePrice = (p: Product) => {
+    if (p.selling_price_per_kg) return Number(p.selling_price_per_kg);
+    if (p.variants && p.variants.length > 0) {
+      const v = p.variants[0];
+      if (v.selling_price_per_kg) return Number(v.selling_price_per_kg);
+      if (v.selling_price_usd_per_kg) return Number(v.selling_price_usd_per_kg) * usdRate;
+    }
+    if (p.selling_price_usd_per_kg) return Number(p.selling_price_usd_per_kg) * usdRate;
+    return 1000000;
+  };
+
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+    if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+    if (sortBy === 'price-asc') return getBasePrice(a) - getBasePrice(b);
+    if (sortBy === 'price-desc') return getBasePrice(b) - getBasePrice(a);
+    return 0;
+  });
+
+  const displayedProducts = sortedProducts.slice(0, visibleCount);
+
   const totalItemCount = cartItems.length;
   const totalWeightKg = cartItems.reduce((sum, item) => sum + (item.packSizeKg * item.quantity), 0);
 
   return (
-    <div className="bg-[#f5f7fa] min-h-screen pb-20">
+    <div className="bg-[#f5f7fa] min-h-screen pb-28 sm:pb-20">
       <CustomerNav
         currentCustomer={currentCustomer}
         onCustomerChange={(id) => {
@@ -228,61 +262,125 @@ export default function CustomerCatalogPage() {
         onOpenCart={() => setIsCheckoutOpen(true)}
       />
 
-      <main className="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
         {/* Header Title with Live DB & Currency Info */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              Katalog Produk
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2">
+              Katalog Bibit Parfum
             </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Menampilkan {displayedProducts.length} dari {filteredProducts.length} produk tersedia
+            </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
             <button
               onClick={() => exportPricelistToXLSX(products, usdRate, `Katalog_Pricelist_Artaroma_${new Date().toISOString().split('T')[0]}.xlsx`)}
-              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
               title="Ekspor Katalog & Pricelist ke File Excel (.xlsx)"
             >
-              <FileSpreadsheet className="w-4 h-4" /> Ekspor Pricelist (XLSX)
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Ekspor XLSX
             </button>
-            <span className="bg-blue-50 text-blue-800 border border-blue-200 text-xs font-mono font-bold px-3 py-1.5 rounded-lg">
-              Kurs Hari Ini: 1 USD = {formatIDR(usdRate)}
+            <span className="bg-blue-50 text-blue-800 border border-blue-200 text-xs font-mono font-bold px-2.5 py-1.5 rounded-lg">
+              1 USD = {formatIDR(usdRate)}
             </span>
             <button
               onClick={fetchProducts}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1 cursor-pointer ml-auto md:ml-0"
             >
-              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '↻ Refresh Data'}
+              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '↻ Refresh'}
             </button>
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {['ALL', ...applicationCategories].map((app) => (
-              <button
-                key={app}
-                onClick={() => setSelectedApplication(app)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap border ${
-                  selectedApplication === app
-                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                    : 'bg-white text-slate-600 border-gray-200 hover:border-purple-300 hover:text-purple-600'
-                }`}
-              >
-                {app === 'ALL' ? 'Semua Aplikasi' : app}
-              </button>
-            ))}
+        {/* Filter, Search & View Controls Bar (Sticky on Scroll) */}
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-xs p-3.5 sm:p-4 space-y-3 sticky top-14 z-20">
+          {/* Top Row: Categories & Search */}
+          <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+              {['ALL', ...applicationCategories].map((app) => (
+                <button
+                  key={app}
+                  onClick={() => {
+                    setSelectedApplication(app);
+                    setVisibleCount(12);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap border cursor-pointer ${
+                    selectedApplication === app
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                      : 'bg-white text-slate-600 border-gray-200 hover:border-purple-300 hover:text-purple-600'
+                  }`}
+                >
+                  {app === 'ALL' ? 'Semua Aplikasi' : app}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full md:w-72">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Cari nama aroma / notes..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setVisibleCount(12);
+                }}
+                className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+              />
+            </div>
           </div>
-          <div className="relative w-full md:w-64">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Cari varian / aroma notes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-            />
+
+          {/* Bottom Controls Row: View Mode Switcher & Sort By */}
+          <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-gray-100 text-xs">
+            {/* View Mode Toggle: Grid vs Compact List */}
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold text-xs transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-blue-700 shadow-2xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Tampilan Kartu Modern"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Kartu Grid</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold text-xs transition-all cursor-pointer ${
+                  viewMode === 'list'
+                    ? 'bg-white text-blue-700 shadow-2xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Tampilan List Ringkas (Hemat Ruang)"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Daftar Kompak</span>
+              </button>
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 text-[11px] font-medium hidden sm:inline">Urutkan:</span>
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-400 cursor-pointer pr-6 appearance-none"
+                >
+                  <option value="name-asc">Nama (A &rarr; Z)</option>
+                  <option value="name-desc">Nama (Z &rarr; A)</option>
+                  <option value="price-asc">Harga Termurah</option>
+                  <option value="price-desc">Harga Tertinggi</option>
+                </select>
+                <ArrowUpDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-2 pointer-events-none" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -290,7 +388,7 @@ export default function CustomerCatalogPage() {
         {isLoading && (
           <div className="py-16 text-center space-y-3 bg-white border border-gray-200 rounded-2xl shadow-sm">
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-            <p className="text-sm font-semibold text-slate-600">Mengambil Daftar Produk dari Database MySQL `fragrance_hub`...</p>
+            <p className="text-sm font-semibold text-slate-600">Mengambil Daftar Produk dari Database MySQL...</p>
           </div>
         )}
 
@@ -310,188 +408,410 @@ export default function CustomerCatalogPage() {
           </div>
         )}
 
+        {/* Empty Search State */}
+        {!isLoading && !error && displayedProducts.length === 0 && (
+          <div className="py-16 text-center space-y-3 bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+            <Package className="w-12 h-12 text-slate-300 mx-auto" />
+            <h3 className="font-bold text-slate-700 text-sm">Tidak ada produk yang cocok</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Coba gunakan kata kunci pencarian lain atau pilih kategori aplikasi "Semua Aplikasi".
+            </p>
+          </div>
+        )}
 
-        {/* PRODUCT GRID VIEW (TAMPILAN MODERN E-COMMERCE CARD GRID) */}
-        {!isLoading && !error && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-            {filteredProducts.map((product) => {
+        {/* 1. GRID VIEW: SLEEK COMPACT CARDS WITH HORIZONTAL PACK SELECTOR */}
+        {!isLoading && !error && viewMode === 'grid' && displayedProducts.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
+            {displayedProducts.map((product) => {
               const rawPackSizes = product.pack_sizes && product.pack_sizes.length > 0 ? product.pack_sizes : [25, 5, 1, 0.1];
               const packSizes = Array.from(new Set([...rawPackSizes, 0.1])).sort((a, b) => b - a);
+              const activeKg = selectedPackSizes[product.id] ?? packSizes[0];
+
+              const variant = product.variants?.find(
+                (v) => Math.abs(Number(v.pack_size_kg) - Number(activeKg)) < 0.01
+              );
+              const variantIdr = variant?.selling_price_per_kg 
+                ? Number(variant.selling_price_per_kg) 
+                : (product.selling_price_per_kg || (activeKg === 25 ? 1353000 : activeKg === 5 ? 1090000 : activeKg === 1 ? 1100000 : 1200000));
+              
+              const variantUsd = variant?.selling_price_usd_per_kg 
+                ? Number(variant.selling_price_usd_per_kg) 
+                : (product.selling_price_usd_per_kg || (variantIdr / usdRate));
+
+              const variantInCart = cartItems.find(
+                (item) => item.product.id === product.id && Math.abs(item.packSizeKg - activeKg) < 0.01
+              );
+              const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
+              const selectedWeightKg = currentQtyInCart * activeKg;
+
+              const isNotesOpen = Boolean(expandedNotes[product.id]);
 
               return (
-                <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:border-slate-350 transition-all flex flex-col group">
+                <div
+                  key={product.id}
+                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col group"
+                >
                   {/* Scent Visual Header */}
-                  <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-5 text-white relative overflow-hidden flex-shrink-0">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-                    <div className="flex justify-between items-start">
+                  <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-3.5 sm:p-4 text-white relative overflow-hidden flex-shrink-0">
+                    <div className="flex justify-between items-start gap-2">
                       <span className="font-mono text-[9px] font-bold text-blue-400 tracking-wider bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded">
                         {product.sku}
                       </span>
-                      <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                      <div className="flex flex-wrap gap-1 justify-end max-w-[65%]">
                         {(product.applications && product.applications.length > 0
                           ? product.applications
                           : [product.application || 'Fine Fragrance']
                         ).map((app) => (
-                          <span key={app} className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider bg-white/10 text-white backdrop-blur-xs">
+                          <span
+                            key={app}
+                            className="text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider bg-white/10 text-white backdrop-blur-xs"
+                          >
                             {app}
                           </span>
                         ))}
                       </div>
                     </div>
 
-                    <h3 className="text-lg font-black text-white mt-3.5 tracking-tight group-hover:text-amber-300 transition-colors">
+                    <h3 className="text-base sm:text-lg font-black text-white mt-2 tracking-tight group-hover:text-amber-300 transition-colors">
                       {product.name}
                     </h3>
                   </div>
 
-                  {/* Scent Pyramid Profile Label */}
-                  <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex-1 space-y-2 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-extrabold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">PROFIL AROMA</span>
+                  {/* Scent Profile Notes (Compact Bar with Toggle) */}
+                  <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 overflow-hidden">
+                        <span className="text-[9px] font-extrabold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">
+                          AROMA
+                        </span>
+                        <span className="text-[11px] text-slate-600 truncate font-medium">
+                          {product.top_notes ? `${product.top_notes}` : 'Fragrance Oil'}
+                          {product.middle_notes ? ` • ${product.middle_notes}` : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedNotes((prev) => ({ ...prev, [product.id]: !prev[product.id] }))}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-bold shrink-0 ml-1 flex items-center gap-0.5 cursor-pointer"
+                        title="Lihat detail piramida aroma"
+                      >
+                        {isNotesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-[11px] leading-relaxed">
-                      <div>
-                        <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Top Note</span>
-                        <span className="font-semibold text-slate-700 truncate block" title={product.top_notes || '-'}>{product.top_notes || '-'}</span>
+
+                    {/* Detailed Notes Drawer */}
+                    {isNotesOpen && (
+                      <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-slate-200/60 text-[10px] animate-in fade-in duration-150">
+                        <div>
+                          <span className="text-slate-400 font-bold block uppercase">Top Note</span>
+                          <span className="font-semibold text-slate-700 truncate block">{product.top_notes || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block uppercase">Mid Note</span>
+                          <span className="font-semibold text-slate-700 truncate block">{product.middle_notes || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block uppercase">Base Note</span>
+                          <span className="font-semibold text-slate-500 truncate block">{product.base_notes || '-'}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Mid Note</span>
-                        <span className="font-semibold text-slate-700 truncate block" title={product.middle_notes || '-'}>{product.middle_notes || '-'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Base Note</span>
-                        <span className="font-semibold text-slate-500 truncate block" title={product.base_notes || '-'}>{product.base_notes || '-'}</span>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Scent Pack Sizes Ordered Rows */}
-                  <div className="p-4 space-y-3 bg-white">
-                    {packSizes.map((kg) => {
-                      const variant = product.variants?.find(
-                        (v) => Math.abs(Number(v.pack_size_kg) - Number(kg)) < 0.01
-                      );
-                      const variantIdr = variant?.selling_price_per_kg 
-                        ? Number(variant.selling_price_per_kg) 
-                        : (product.selling_price_per_kg || (kg === 25 ? 1353000 : kg === 5 ? 1090000 : kg === 1 ? 1100000 : 1200000));
-                      
-                      const variantUsd = variant?.selling_price_usd_per_kg 
-                        ? Number(variant.selling_price_usd_per_kg) 
-                        : (product.selling_price_usd_per_kg || (variantIdr / usdRate));
+                  {/* Horizontal Segmented Pack Selector & Order Action */}
+                  <div className="p-3.5 sm:p-4 space-y-3 bg-white flex-1 flex flex-col justify-between">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                        Ukuran Kemasan:
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {packSizes.map((kg) => {
+                          const isSelected = Math.abs(activeKg - kg) < 0.01;
+                          const hasInCart = cartItems.some(
+                            (i) => i.product.id === product.id && Math.abs(i.packSizeKg - kg) < 0.01
+                          );
+                          return (
+                            <button
+                              key={kg}
+                              type="button"
+                              onClick={() => setSelectedPackSizes((prev) => ({ ...prev, [product.id]: kg }))}
+                              className={`py-1.5 px-1 rounded-lg text-center font-mono text-xs font-bold transition-all relative cursor-pointer ${
+                                isSelected
+                                  ? 'bg-slate-900 text-white shadow-xs ring-2 ring-slate-800'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                              }`}
+                            >
+                              {kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg} Kg`}
+                              {hasInCart && (
+                                <span className="w-2 h-2 rounded-full bg-blue-500 absolute -top-0.5 -right-0.5 ring-1 ring-white" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                      const variantInCart = cartItems.find(
-                        (item) => item.product.id === product.id && Math.abs(item.packSizeKg - kg) < 0.01
-                      );
-                      const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
-                      const selectedWeightKg = currentQtyInCart * kg;
-
-                      return (
-                        <div
-                          key={kg}
-                          className={`p-3 rounded-xl border transition-all space-y-2 ${
-                            currentQtyInCart > 0
-                              ? 'border-blue-300 bg-blue-50/60 shadow-xs'
-                              : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                          }`}
-                        >
-                          {/* Top Row: Kemasan badge & Harga /Kg */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="bg-slate-900 text-white font-mono font-bold text-[10px] px-2 py-0.5 rounded shadow-2xs">
-                                {kg < 1 ? `${Math.round(kg * 1000)} gr (${kg} Kg)` : `${kg} Kg`} / Kemasan
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                (${Number(variantUsd).toFixed(2)} USD/Kg)
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-xs font-black text-slate-800 font-mono">
-                                {formatIDR(variantIdr)}<span className="text-[10px] text-slate-500 font-normal">/Kg</span>
-                              </span>
-                            </div>
+                    {/* Active Price Box & Action Controls */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-black text-slate-900 font-mono">
+                            {formatIDR(variantIdr)}
+                            <span className="text-[10px] font-normal text-slate-500">/Kg</span>
                           </div>
-
-                          {/* Bottom Row: Selected Status / Total per kemasan & Action Button */}
-                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
-                            <div className="text-left flex-1 min-w-0">
-                              {currentQtyInCart > 0 ? (
-                                <div>
-                                  <span className="text-[11px] font-bold text-blue-700 font-mono block truncate">
-                                    Terpilih: {formatKg(selectedWeightKg)} ({currentQtyInCart} unit)
-                                  </span>
-                                  <span className="text-[10px] text-slate-500 font-mono block truncate">
-                                    Subtotal: {formatIDR(variantIdr * selectedWeightKg)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 block font-mono truncate">
-                                  Total: {formatIDR(variantIdr * kg)}/{kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}kg`}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Quantity Adjust Controls */}
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {variantInCart ? (
-                                <div className="flex items-center bg-white border border-blue-200 rounded-lg p-0.5 shadow-2xs">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReduceFromCart(product, kg)}
-                                    className="w-6 h-6 bg-red-50 hover:bg-red-100 text-red-600 rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer"
-                                    title="Kurangi 1 Unit"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="font-mono text-xs font-bold text-blue-700 px-2 min-w-[20px] text-center">
-                                    {variantInCart.quantity}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddToCart(product, kg)}
-                                    className="w-6 h-6 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer shadow-2xs"
-                                    title="Tambah 1 Unit"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddToCart(product, kg)}
-                                  className="h-7 px-3 rounded-lg flex items-center gap-1 font-bold text-xs transition-all cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
-                                  title="Tambah ke Pesanan"
-                                >
-                                  <span>+</span>
-                                  <span className="text-[11px]">Pesan</span>
-                                </button>
-                              )}
-                            </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            (${Number(variantUsd).toFixed(2)} USD/Kg)
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="text-right">
+                          <span className="text-[11px] font-mono text-slate-700 font-bold block">
+                            Total: {formatIDR(variantIdr * activeKg)}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono block">
+                            per kemasan {activeKg < 1 ? `${Math.round(activeKg * 1000)}g` : `${activeKg}kg`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Row */}
+                      <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                        <div className="text-left flex-1 min-w-0">
+                          {currentQtyInCart > 0 ? (
+                            <span className="text-[10px] font-bold text-blue-700 font-mono block truncate">
+                              Terpilih: {formatKg(selectedWeightKg)} ({currentQtyInCart} unit)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 block truncate">
+                              Belum dipilih
+                            </span>
+                          )}
+                        </div>
+
+                        {currentQtyInCart > 0 ? (
+                          <div className="flex items-center bg-white border border-blue-300 rounded-lg p-0.5 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleReduceFromCart(product, activeKg)}
+                              className="w-7 h-7 bg-red-50 hover:bg-red-100 text-red-600 rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer"
+                              title="Kurangi 1 Unit"
+                            >
+                              -
+                            </button>
+                            <span className="font-mono text-xs font-bold text-blue-700 px-2.5 min-w-[24px] text-center">
+                              {currentQtyInCart}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleAddToCart(product, activeKg)}
+                              className="w-7 h-7 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer shadow-2xs"
+                              title="Tambah 1 Unit"
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCart(product, activeKg)}
+                            className="h-8 px-3.5 rounded-lg flex items-center justify-center gap-1 font-bold text-xs transition-all cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Pesan</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* 2. LIST VIEW: COMPACT TABLE / ROW LIST (SUPER COMPACT FOR REPEAT ORDERING) */}
+        {!isLoading && !error && viewMode === 'list' && displayedProducts.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden divide-y divide-gray-100">
+            {displayedProducts.map((product) => {
+              const rawPackSizes = product.pack_sizes && product.pack_sizes.length > 0 ? product.pack_sizes : [25, 5, 1, 0.1];
+              const packSizes = Array.from(new Set([...rawPackSizes, 0.1])).sort((a, b) => b - a);
+              const activeKg = selectedPackSizes[product.id] ?? packSizes[0];
+
+              const variant = product.variants?.find(
+                (v) => Math.abs(Number(v.pack_size_kg) - Number(activeKg)) < 0.01
+              );
+              const variantIdr = variant?.selling_price_per_kg 
+                ? Number(variant.selling_price_per_kg) 
+                : (product.selling_price_per_kg || (activeKg === 25 ? 1353000 : activeKg === 5 ? 1090000 : activeKg === 1 ? 1100000 : 1200000));
+
+              const variantInCart = cartItems.find(
+                (item) => item.product.id === product.id && Math.abs(item.packSizeKg - activeKg) < 0.01
+              );
+              const currentQtyInCart = variantInCart ? variantInCart.quantity : 0;
+
+              return (
+                <div
+                  key={product.id}
+                  className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  {/* Left: Product Info & Notes */}
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">
+                        {product.sku}
+                      </span>
+                      <h4 className="font-bold text-sm text-slate-800 truncate">
+                        {product.name}
+                      </h4>
+                      {(product.applications || [product.application || 'Fine Fragrance']).map((app) => (
+                        <span key={app} className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                          {app}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-slate-500 truncate">
+                      <span className="font-medium text-amber-700">Aroma:</span> {product.top_notes || '-'} {product.middle_notes ? `• ${product.middle_notes}` : ''}
+                    </div>
+                  </div>
+
+                  {/* Middle: Horizontal Pack Selector */}
+                  <div className="flex items-center gap-1 overflow-x-auto shrink-0">
+                    {packSizes.map((kg) => {
+                      const isSelected = Math.abs(activeKg - kg) < 0.01;
+                      return (
+                        <button
+                          key={kg}
+                          type="button"
+                          onClick={() => setSelectedPackSizes((prev) => ({ ...prev, [product.id]: kg }))}
+                          className={`py-1 px-2 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-900 text-white shadow-2xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {kg < 1 ? `${Math.round(kg * 1000)}g` : `${kg}k`}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right: Price & Quick Add Button */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-0 border-gray-100">
+                    <div className="text-left sm:text-right">
+                      <div className="text-xs font-black font-mono text-slate-900">
+                        {formatIDR(variantIdr)}<span className="text-[10px] font-normal text-slate-400">/Kg</span>
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500">
+                        Total: {formatIDR(variantIdr * activeKg)}
+                      </div>
+                    </div>
+
+                    {currentQtyInCart > 0 ? (
+                      <div className="flex items-center bg-white border border-blue-300 rounded-lg p-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleReduceFromCart(product, activeKg)}
+                          className="w-6 h-6 bg-red-50 hover:bg-red-100 text-red-600 rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <span className="font-mono text-xs font-bold text-blue-700 px-2 min-w-[20px] text-center">
+                          {currentQtyInCart}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(product, activeKg)}
+                          className="w-6 h-6 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center font-black text-xs transition-colors cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCart(product, activeKg)}
+                        className="h-7 px-3 rounded-lg flex items-center gap-1 font-bold text-xs transition-all cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Pesan</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Load More Pagination Button */}
+        {!isLoading && !error && displayedProducts.length < sortedProducts.length && (
+          <div className="text-center pt-4">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => prev + 12)}
+              className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-6 py-2.5 rounded-xl border border-gray-200 shadow-xs transition-all cursor-pointer inline-flex items-center gap-2"
+            >
+              <span>Muat Lebih Banyak ({sortedProducts.length - displayedProducts.length} Produk Tersisa)</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </main>
 
-      {/* Floating Cart */}
+      {/* FLOATING BOTTOM CART BAR (MOBILE STICKY & DESKTOP FLOATING) */}
       {cartItems.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-40">
-          <button
-            onClick={() => setIsCheckoutOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all"
-          >
-            <ShoppingBag className="w-5 h-5" />
-            <span>Pesanan ({totalItemCount} Varian)</span>
-            <span className="bg-white text-blue-700 font-mono font-bold px-2 py-0.5 rounded-lg text-xs">
-              {formatKg(totalWeightKg)}
-            </span>
-          </button>
-        </div>
+        <>
+          {/* Mobile Full-Width Sticky Bottom Bar */}
+          <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 px-4 py-3 shadow-2xl flex items-center justify-between text-white animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-sm shadow-sm relative">
+                <ShoppingBag className="w-4 h-4 text-white" />
+                <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-slate-900 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                  {totalItemCount}
+                </span>
+              </div>
+              <div>
+                <div className="text-xs font-bold font-mono">
+                  {formatKg(totalWeightKg)} • {totalItemCount} Varian
+                </div>
+                <div className="text-[10px] text-amber-300 font-mono">
+                  Total: {formatIDR(
+                    cartItems.reduce((sum, c) => {
+                      const variant = c.product.variants?.find(
+                        (v) => Math.abs(Number(v.pack_size_kg) - c.packSizeKg) < 0.01
+                      );
+                      const pIdr = variant?.selling_price_per_kg
+                        ? Number(variant.selling_price_per_kg)
+                        : (c.product.selling_price_per_kg || 1100000);
+                      return sum + (pIdr * c.packSizeKg * c.quantity);
+                    }, 0)
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsCheckoutOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>Checkout</span>
+              <span>&rarr;</span>
+            </button>
+          </div>
+
+          {/* Desktop Floating Cart Button */}
+          <div className="hidden sm:block fixed bottom-6 right-6 z-40 animate-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setIsCheckoutOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              <span>Pesanan ({totalItemCount} Varian)</span>
+              <span className="bg-white text-blue-700 font-mono font-bold px-2 py-0.5 rounded-lg text-xs">
+                {formatKg(totalWeightKg)}
+              </span>
+            </button>
+          </div>
+        </>
       )}
 
       <CheckoutModal
