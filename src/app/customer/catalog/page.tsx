@@ -631,7 +631,8 @@ export default function CustomerCatalogPage() {
         {/* 2. LIST VIEW: COMPACT TABLE / ROW LIST (SUPER COMPACT FOR REPEAT ORDERING) */}
         {!isLoading && !error && viewMode === 'list' && displayedProducts.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden divide-y divide-gray-100">
-            {displayedProducts.map((product) => {
+            {displayedProducts.map((product, idx) => {
+              const isEven = idx % 2 === 0;
               const rawPackSizes = product.pack_sizes && product.pack_sizes.length > 0 ? product.pack_sizes : [25, 5, 1, 0.1];
               const packSizes = Array.from(new Set([...rawPackSizes, 0.1])).sort((a, b) => b - a);
               const activeKg = selectedPackSizes[product.id] ?? packSizes[0];
@@ -651,7 +652,13 @@ export default function CustomerCatalogPage() {
               return (
                 <div
                   key={product.id}
-                  className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className={`p-3.5 sm:p-4 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    currentQtyInCart > 0
+                      ? 'bg-blue-50/60 hover:bg-blue-50/90'
+                      : isEven
+                      ? 'bg-white hover:bg-slate-100/70'
+                      : 'bg-slate-50/90 hover:bg-slate-100/90'
+                  }`}
                 >
                   {/* Left: Product Info & Notes */}
                   <div className="space-y-1 min-w-0 flex-1">
