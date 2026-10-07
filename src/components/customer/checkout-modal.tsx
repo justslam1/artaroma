@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Product, Customer, PaymentMethod } from '@/lib/types';
-import { formatKg, formatIDR } from '@/lib/utils';
-import { X, Building2, Package, CheckCircle2, Send, CreditCard, Plus, Minus, Trash2, Upload } from 'lucide-react';
+import { formatKg, formatIDR, calculateQuantityDiscount } from '@/lib/utils';
+import { X, Building2, Package, CheckCircle2, Send, CreditCard, Plus, Minus, Trash2, Upload, Tag, Sparkles } from 'lucide-react';
 
 interface CartItem {
   product: Product;
@@ -124,6 +124,12 @@ export function CheckoutModal({
   const totalWeightKg = cart.reduce((sum, item) => sum + (Number(item.packSizeKg) * Number(item.quantity)), 0);
   const totalUnits = cart.reduce((sum, item) => sum + Number(item.quantity), 0);
 
+  // Diskon Kuantiti Akumulasi Total Kg Pesanan (Opsi 2):
+  // < 5 kg = 0%, 5 - 14.99 kg = 5%, >= 15 kg = 7%
+  const discountInfo = calculateQuantityDiscount(totalWeightKg);
+  const discountAmount = Math.round(estimatedTotal * (discountInfo.percent / 100));
+  const estimatedNetTotal = estimatedTotal - discountAmount;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
@@ -180,6 +186,44 @@ export function CheckoutModal({
               <div className="text-right sm:border-l border-gray-200 sm:pl-4">
                 <div className="text-xs text-gray-400">Status Akun:</div>
                 <div className="font-bold text-emerald-600">AKTIF</div>
+              </div>
+            </div>
+
+            {/* Quantity Discount Promo Callout */}
+            <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-3 ${
+              discountInfo.percent >= 7
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : discountInfo.percent >= 5
+                ? 'bg-purple-50 border-purple-300 text-purple-900'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}>
+              <Sparkles className={`w-5 h-5 shrink-0 mt-0.5 ${
+                discountInfo.percent >= 7 ? 'text-emerald-600' : discountInfo.percent >= 5 ? 'text-purple-600' : 'text-amber-600'
+              }`} />
+              <div className="flex-1 space-y-1">
+                <div className="font-bold text-sm flex items-center justify-between">
+                  <span>
+                    {discountInfo.percent > 0
+                      ? `🎉 Diskon Kuantiti ${discountInfo.percent}% Aktif!`
+                      : '💡 Program Diskon Kuantiti Pesanan'}
+                  </span>
+                  {discountInfo.percent > 0 && (
+                    <span className="font-mono bg-white px-2 py-0.5 rounded shadow-2xs font-extrabold text-xs">
+                      Hemat {formatIDR(discountAmount)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  {discountInfo.percent === 7 && (
+                    <span>Luar biasa! Pesanan Anda mencapai <strong>{formatKg(totalWeightKg)}</strong> (&ge; 15 kg) dan mendapatkan diskon maksimal <strong>7%</strong>.</span>
+                  )}
+                  {discountInfo.percent === 5 && (
+                    <span>Pesanan Anda <strong>{formatKg(totalWeightKg)}</strong> (5-14.9 kg) mendapatkan diskon <strong>5%</strong>. Tambah <strong>{formatKg(15 - totalWeightKg)}</strong> lagi untuk dapat diskon <strong>7%</strong>!</span>
+                  )}
+                  {discountInfo.percent === 0 && (
+                    <span>Beli total <strong>5 - 14 kg</strong> diskon <strong>5%</strong>, dan <strong>&ge; 15 kg</strong> diskon <strong>7%</strong>! (Kurang <strong>{formatKg(5 - totalWeightKg)}</strong> lagi untuk diskon 5%).</span>
+                  )}
+                </p>
               </div>
             </div>
 
@@ -267,19 +311,36 @@ export function CheckoutModal({
 
             {/* Estimated Total Price & Weight Summary Bar */}
             {cart.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+              <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-4 space-y-2.5">
                 <div className="flex justify-between items-center text-slate-700 text-xs">
                   <span className="font-bold flex items-center gap-1.5">
-                    <Package className="w-4 h-4 text-blue-600" /> TOTAL JUMLAH BERAT ITEM DIPESAN:
+                    <Package className="w-4 h-4 text-blue-600" /> TOTAL JUMLAH BERAT PESANAN:
                   </span>
                   <span className="font-mono text-sm font-extrabold text-slate-800 bg-white border border-blue-200 px-2.5 py-0.5 rounded-lg shadow-2xs">
                     {formatKg(totalWeightKg)} <span className="text-slate-500 font-normal text-xs">({totalUnits} Unit Kemasan)</span>
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-slate-800 font-bold text-xs pt-2 border-t border-blue-200/80">
-                  <span>ESTIMASI TOTAL NILAI BARANG:</span>
-                  <span className="font-mono text-base text-blue-700 font-extrabold">{formatIDR(estimatedTotal)}</span>
+
+                <div className="flex justify-between items-center text-slate-700 text-xs pt-1.5 border-t border-blue-200/80">
+                  <span>Subtotal Nilai Barang Kotor:</span>
+                  <span className="font-mono text-sm font-semibold text-slate-800">{formatIDR(estimatedTotal)}</span>
                 </div>
+
+                {discountInfo.percent > 0 && (
+                  <div className="flex justify-between items-center text-emerald-700 text-xs font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                      Diskon Kuantiti ({discountInfo.percent}%):
+                    </span>
+                    <span className="font-mono font-bold text-emerald-700">-{formatIDR(discountAmount)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-slate-900 font-bold text-xs pt-2 border-t border-blue-200/80">
+                  <span>ESTIMASI TOTAL NILAI BARANG SETELAH DISKON:</span>
+                  <span className="font-mono text-base text-blue-700 font-extrabold">{formatIDR(estimatedNetTotal)}</span>
+                </div>
+
                 <div className="text-[10px] text-slate-500 font-medium pt-0.5">
                   *Belum termasuk PPN (11%) dan Ongkos Kirim. Rincian total tagihan final akan tertera pada Invoice resmi dari tim Finance.
                 </div>

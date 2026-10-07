@@ -46,3 +46,21 @@ export function formatDateTime(dateString: string): string {
     minute: "2-digit",
   }).format(date);
 }
+
+/**
+ * Tier Diskon Kuantiti Berdasarkan Total Kg Pesanan (Opsi 2):
+ * - < 5 kg: 0%
+ * - 5 - 14.99 kg: 5%
+ * - >= 15 kg: 7%
+ */
+export function calculateQuantityDiscount(totalKg: number): { percent: number; label: string; nextTierKg?: number; nextTierPercent?: number } {
+  const qty = Math.round((Number(totalKg) || 0) * 100) / 100;
+  if (qty >= 15) {
+    return { percent: 7, label: '7%' };
+  }
+  if (qty >= 5) {
+    return { percent: 5, label: '5%', nextTierKg: 15, nextTierPercent: 7 };
+  }
+  return { percent: 0, label: '0%', nextTierKg: 5, nextTierPercent: 5 };
+}
+

@@ -44,13 +44,19 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
     (sum, it) => sum + (it.subtotal || (it.qty_kg * (it.unit_price_per_kg || 1500000))),
     0
   );
-  const ppn = Math.round(rawGoodsSubtotal * 0.11);
+  const totalKg = order.items.reduce((sum, it) => sum + (Number(it.qty_kg) || 0), 0);
+
+  // Ambil data diskon kuantiti dari invoice / order atau hitung dari totalKg
+  const discountPercent = Number(invoice?.discount_percent ?? order.discount_percent ?? (totalKg >= 15 ? 7 : totalKg >= 5 ? 5 : 0)) || 0;
+  const discountAmount = Number(invoice?.discount_amount ?? order.discount_amount ?? Math.round(rawGoodsSubtotal * (discountPercent / 100))) || 0;
+  const netGoodsSubtotal = Math.max(0, rawGoodsSubtotal - discountAmount);
+
+  const ppn = Math.round(netGoodsSubtotal * 0.11);
   const shippingType = order.shipping_type || invoice?.shipping_type || 'FRANCO';
   const shippingCost = shippingType === 'FRANCO' ? 0 : Number(order.shipping_cost ?? invoice?.shipping_cost ?? 0);
 
-  // For Non-PKP (Opsi A), prices in each row are inclusive of tax (price * 1.11)
-  const totalGoodsDisplay = isNonPKP ? rawGoodsSubtotal + ppn : rawGoodsSubtotal;
-  const grandTotal = totalGoodsDisplay + (isNonPKP ? 0 : ppn) + shippingCost;
+  // Grand total: Jika Non-PKP, harga barang netto digabung pajak (net * 1.11) + ongkir
+  const grandTotal = isNonPKP ? (Math.round(netGoodsSubtotal * 1.11) + shippingCost) : (netGoodsSubtotal + ppn + shippingCost);
 
   const isPaid = invoice?.status === 'PAID' || order.status === 'PROSES_GUDANG' || order.status === 'DIKIRIM' || order.status === 'DITERIMA';
 
@@ -207,12 +213,43 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
                 })}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
-                    {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
-                  </td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(totalGoodsDisplay)}</td>
-                </tr>
+                {discountPercent > 0 ? (
+                  <>
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        {isNonPKP ? 'Subtotal Barang (Sebelum Diskon):' : 'Subtotal Nilai Barang (Kotor):'}
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {formatIDR(isNonPKP ? Math.round(rawGoodsSubtotal * 1.11) : rawGoodsSubtotal)}
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-50/60 font-semibold text-emerald-800">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        Diskon Kuantiti ({discountPercent}%):
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-emerald-700">
+                        -{formatIDR(isNonPKP ? Math.round(discountAmount * 1.11) : discountAmount)}
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        {isNonPKP ? 'Total Nilai Barang (Setelah Diskon):' : 'Dasar Pengenaan Pajak (DPP Bersih):'}
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {formatIDR(isNonPKP ? Math.round(netGoodsSubtotal * 1.11) : netGoodsSubtotal)}
+                      </td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="bg-slate-50 font-semibold">
+                    <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                      {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
+                    </td>
+                    <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                      {formatIDR(isNonPKP ? Math.round(rawGoodsSubtotal * 1.11) : rawGoodsSubtotal)}
+                    </td>
+                  </tr>
+                )}
                 {/* Baris PPN 11% HANYA ditampilkan untuk customer PKP */}
                 {!isNonPKP && (
                   <tr className="bg-slate-50 font-semibold">

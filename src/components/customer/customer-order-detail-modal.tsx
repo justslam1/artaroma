@@ -257,9 +257,12 @@ export function CustomerOrderDetailModal({
                       0
                     );
                     const isNonPKP = order.customer_tax_category === 'NON_PKP';
-                    const ppnAmount = Math.round(rawGoodsTotal * 0.11);
+                    const discountPercent = Number(order.discount_percent ?? (totalWeightKg >= 15 ? 7 : totalWeightKg >= 5 ? 5 : 0)) || 0;
+                    const discountAmount = Number(order.discount_amount ?? Math.round(rawGoodsTotal * (discountPercent / 100))) || 0;
+                    const netGoodsTotal = Math.max(0, rawGoodsTotal - discountAmount);
+                    const ppnAmount = Math.round(netGoodsTotal * 0.11);
                     const shippingCost = Number(order.shipping_cost) || 0;
-                    const totalInvoice = Number(order.grand_total) || (rawGoodsTotal + ppnAmount + shippingCost);
+                    const totalInvoice = Number(order.grand_total) || (isNonPKP ? Math.round(netGoodsTotal * 1.11) + shippingCost : netGoodsTotal + ppnAmount + shippingCost);
 
                     return (
                       <>
@@ -271,12 +274,22 @@ export function CustomerOrderDetailModal({
                             {formatKg(totalWeightKg)}
                           </td>
                         </tr>
+                        {discountPercent > 0 && (
+                          <tr className="bg-emerald-50/60 border-t border-gray-100 text-emerald-800">
+                            <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold">
+                              Diskon Kuantiti ({discountPercent}%):
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono font-bold text-emerald-700 text-xs">
+                              -{formatIDR(isNonPKP ? Math.round(discountAmount * 1.11) : discountAmount)}
+                            </td>
+                          </tr>
+                        )}
                         <tr className="bg-slate-50/80 border-t border-gray-100">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
-                            {isNonPKP ? 'Total Nilai Barang (Inc. Pajak):' : 'Total Nilai Barang (DPP):'}
+                            {isNonPKP ? 'Total Nilai Barang (Setelah Diskon):' : 'Total Nilai Barang (DPP Bersih):'}
                           </td>
                           <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
-                            {formatIDR(isNonPKP ? rawGoodsTotal + ppnAmount : rawGoodsTotal)}
+                            {formatIDR(isNonPKP ? Math.round(netGoodsTotal * 1.11) : netGoodsTotal)}
                           </td>
                         </tr>
                         {!isNonPKP && (

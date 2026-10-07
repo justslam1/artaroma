@@ -18,7 +18,7 @@ import { SuratJalanPDFModal } from '@/components/common/surat-jalan-pdf-modal';
 import { PrintLabelModal } from '@/components/common/print-label-modal';
 import { PrintShippingAddressModal } from '@/components/common/print-shipping-address-modal';
 import { SalesOrder, Invoice, PurchaseOrder, Customer } from '@/lib/types';
-import { formatIDR, formatKg, formatDate, formatDateTime } from '@/lib/utils';
+import { formatIDR, formatKg, formatDate, formatDateTime, calculateQuantityDiscount } from '@/lib/utils';
 import {
   getStoredOrders,
   getStoredInvoices,
@@ -942,10 +942,17 @@ export default function OrderDetailPage() {
     const customerTaxCategory = customer?.tax_category || order.customer_tax_category || 'PKP';
     const isNonPKP = customerTaxCategory === 'NON_PKP';
 
+    // Tier Diskon Kuantiti Dinamis Berdasarkan Total Kg Terkonfirmasi (Opsi 2):
+    // < 5 kg = 0%, 5 - 14.99 kg = 5%, >= 15 kg = 7%
+    const discountInfo = calculateQuantityDiscount(totalConfirmedKg);
+    const discountPercent = discountInfo.percent;
+    const discountAmount = Math.round(calculatedGoodsTotal * (discountPercent / 100));
+    const netGoodsTotal = Math.max(0, calculatedGoodsTotal - discountAmount);
+
     const finalShippingType = shippingType;
     const finalShippingCost = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
-    const ppn = Math.round(calculatedGoodsTotal * 0.11);
-    const grandTotal = calculatedGoodsTotal + ppn + finalShippingCost;
+    const ppn = Math.round(netGoodsTotal * 0.11);
+    const grandTotal = isNonPKP ? (Math.round(netGoodsTotal * 1.11) + finalShippingCost) : (netGoodsTotal + ppn + finalShippingCost);
 
     const isCashTransfer = order.payment_method === 'LUNAS_TRANSFER' || (order.payment_method as string) === 'TUNAI';
     const termsDays = isCashTransfer ? 0 : Number(customer?.credit_terms_days || 30);
@@ -964,7 +971,9 @@ export default function OrderDetailPage() {
       customer_name: order.customer_company,
       customer_tax_category: isNonPKP ? 'NON_PKP' : 'PKP',
       is_tax_inclusive: isNonPKP,
-      dpp_amount: calculatedGoodsTotal,
+      discount_percent: discountPercent,
+      discount_amount: discountAmount,
+      dpp_amount: netGoodsTotal,
       ppn_amount: isNonPKP ? 0 : ppn,
       status: 'UNPAID',
       issue_date: issueDateStr,
@@ -1014,6 +1023,8 @@ export default function OrderDetailPage() {
       'DIKONFIRMASI',
       {
         total_goods_amount: calculatedGoodsTotal,
+        discount_percent: discountPercent,
+        discount_amount: discountAmount,
         grand_total: grandTotal,
         shipping_type: finalShippingType,
         shipping_cost: finalShippingCost,
@@ -2303,44 +2314,77 @@ export default function OrderDetailPage() {
                 {/* Live Invoice Breakdown Calculation Card */}
                 {(() => {
                   let calculatedGoods = 0;
+                  let totalConfirmedKgLive = 0;
                   order.items.forEach((item) => {
                     const initialOrderedQty = item.original_qty_kg !== undefined ? item.original_qty_kg : item.qty_kg;
                     const confirmedQty = itemConfirmedKgs[item.id] !== undefined ? itemConfirmedKgs[item.id] : initialOrderedQty;
+                    totalConfirmedKgLive += confirmedQty;
                     const price = item.unit_price_per_kg || 1500000;
                     calculatedGoods += confirmedQty * price;
                   });
+
+                  // Tier Diskon Kuantiti Dinamis Real-Time (Opsi 2):
+                  // < 5 kg = 0%, 5 - 14.99 kg = 5%, >= 15 kg = 7%
+                  const discountInfo = calculateQuantityDiscount(totalConfirmedKgLive);
+                  const discountPercent = discountInfo.percent;
+                  const discountAmount = Math.round(calculatedGoods * (discountPercent / 100));
+                  const netGoods = Math.max(0, calculatedGoods - discountAmount);
+
                   const customerTaxCategory = customer?.tax_category || order.customer_tax_category || 'PKP';
                   const isNonPKP = customerTaxCategory === 'NON_PKP';
-                  const ppn = Math.round(calculatedGoods * 0.11);
+                  const ppn = Math.round(netGoods * 0.11);
                   const ship = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
-                  const grandTotal = calculatedGoods + ppn + ship;
+                  const grandTotal = isNonPKP ? (Math.round(netGoods * 1.11) + ship) : (netGoods + ppn + ship);
 
                   return (
-                    <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center justify-between">
+                    <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200 rounded-xl p-4 space-y-2.5">
+                      <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-1.5">
                           <FileText className="w-4 h-4 text-blue-600" /> Rincian Tagihan Invoice yang Akan Diterbitkan:
                         </div>
-                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${
-                          isNonPKP ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-blue-50 text-blue-800 border-blue-300'
-                        }`}>
-                          {isNonPKP ? '🏪 Customer Non-PKP (Pajak Digabung)' : '🏢 Customer PKP (PPN 11% Terpisah)'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {discountPercent > 0 ? (
+                            <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              🎉 Diskon Qty {discountPercent}% ({formatKg(totalConfirmedKgLive)})
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                              Diskon 0% ({formatKg(totalConfirmedKgLive)} &lt; 5kg)
+                            </span>
+                          )}
+                          <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${
+                            isNonPKP ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-blue-50 text-blue-800 border-blue-300'
+                          }`}>
+                            {isNonPKP ? '🏪 Non-PKP (Pajak Digabung)' : '🏢 PKP (PPN 11% Terpisah)'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-blue-100">
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs pt-1 border-t border-blue-100">
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Nilai Barang (Kotor):</span>
+                          <span className="font-mono font-bold text-slate-800 text-sm">
+                            {formatIDR(calculatedGoods)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Diskon Qty ({discountPercent}%):</span>
+                          <span className={`font-mono font-bold text-sm ${discountPercent > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                            {discountPercent > 0 ? `-${formatIDR(discountAmount)}` : 'Rp 0'}
+                          </span>
+                        </div>
                         <div>
                           <span className="text-slate-500 block text-[11px]">
-                            {isNonPKP ? 'Subtotal Nilai Barang (Inc. Pajak):' : 'Subtotal Nilai Barang (DPP):'}
+                            {isNonPKP ? 'Total Barang (Inc. Pajak):' : 'DPP Bersih:'}
                           </span>
                           <span className="font-mono font-bold text-slate-800 text-sm">
-                            {formatIDR(isNonPKP ? calculatedGoods + ppn : calculatedGoods)}
+                            {formatIDR(isNonPKP ? Math.round(netGoods * 1.11) : netGoods)}
                           </span>
                         </div>
                         {isNonPKP ? (
                           <div>
                             <span className="text-slate-500 block text-[11px]">Status PPN:</span>
                             <span className="font-sans font-bold text-emerald-700 text-xs">
-                              Digabung ke Harga Jual
+                              Digabung ke Harga
                             </span>
                           </div>
                         ) : (

@@ -98,6 +98,8 @@ export async function PUT(
     const {
       status,
       total_goods_amount,
+      discount_percent,
+      discount_amount,
       grand_total,
       shipping_type,
       shipping_cost,
@@ -212,6 +214,14 @@ export async function PUT(
       if (total_goods_amount !== undefined) {
         updateFields.push('total_goods_amount = ?');
         updateValues.push(total_goods_amount);
+      }
+      if (discount_percent !== undefined) {
+        updateFields.push('discount_percent = ?');
+        updateValues.push(discount_percent);
+      }
+      if (discount_amount !== undefined) {
+        updateFields.push('discount_amount = ?');
+        updateValues.push(discount_amount);
       }
       if (grand_total !== undefined) {
         updateFields.push('grand_total = ?');

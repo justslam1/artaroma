@@ -34,9 +34,13 @@ export function SalesOrderPDFModal({ isOpen, onClose, order, companyConfig }: Sa
     (sum, it) => sum + (it.subtotal || (it.qty_kg * (it.unit_price_per_kg || 1500000))),
     0
   );
-  const ppn = Math.round(rawGoodsTotal * 0.11);
-  const totalGoodsDisplay = isNonPKP ? rawGoodsTotal + ppn : rawGoodsTotal;
-  const grandTotal = totalGoodsDisplay + (isNonPKP ? 0 : ppn);
+  const totalKg = order.items.reduce((sum, it) => sum + (Number(it.qty_kg) || 0), 0);
+  const discountPercent = Number(order.discount_percent ?? (totalKg >= 15 ? 7 : totalKg >= 5 ? 5 : 0)) || 0;
+  const discountAmount = Number(order.discount_amount ?? Math.round(rawGoodsTotal * (discountPercent / 100))) || 0;
+  const netGoodsTotal = Math.max(0, rawGoodsTotal - discountAmount);
+
+  const ppn = Math.round(netGoodsTotal * 0.11);
+  const grandTotal = isNonPKP ? Math.round(netGoodsTotal * 1.11) : (netGoodsTotal + ppn);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static print:z-auto">
@@ -165,12 +169,43 @@ export function SalesOrderPDFModal({ isOpen, onClose, order, companyConfig }: Sa
                 })}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
-                    {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
-                  </td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(totalGoodsDisplay)}</td>
-                </tr>
+                {discountPercent > 0 ? (
+                  <>
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        {isNonPKP ? 'Subtotal Barang (Sebelum Diskon):' : 'Subtotal Nilai Barang (Kotor):'}
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {formatIDR(isNonPKP ? Math.round(rawGoodsTotal * 1.11) : rawGoodsTotal)}
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-50/60 font-semibold text-emerald-800">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        Diskon Kuantiti ({discountPercent}%):
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-emerald-700">
+                        -{formatIDR(isNonPKP ? Math.round(discountAmount * 1.11) : discountAmount)}
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                        {isNonPKP ? 'Total Nilai Barang (Setelah Diskon):' : 'Dasar Pengenaan Pajak (DPP Bersih):'}
+                      </td>
+                      <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {formatIDR(isNonPKP ? Math.round(netGoodsTotal * 1.11) : netGoodsTotal)}
+                      </td>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="bg-slate-50 font-semibold">
+                    <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                      {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
+                    </td>
+                    <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">
+                      {formatIDR(isNonPKP ? Math.round(rawGoodsTotal * 1.11) : rawGoodsTotal)}
+                    </td>
+                  </tr>
+                )}
                 {!isNonPKP && (
                   <tr className="bg-slate-50 font-semibold">
                     <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>

@@ -142,8 +142,10 @@ export async function POST(req: NextRequest) {
 
     // Calculate total order amount with authoritative server-side price validation
     let totalGoodsAmount = 0;
+    let totalOrderKg = 0;
     const processedItems = items.map((item: any, idx: number) => {
       const qty = Math.max(0.1, parseFloat(item.qty_kg) || 1);
+      totalOrderKg += qty;
       
       // Determine authentic unit price
       let unitPrice = parseFloat(item.unit_price_per_kg) || 0;
@@ -171,10 +173,21 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    // Tier Diskon Kuantiti Berdasarkan Total Kuantiti Pesanan (Opsi 2):
+    // < 5 kg = 0%, 5 - 14.99 kg = 5%, >= 15 kg = 7%
+    let discountPercent = 0;
+    if (totalOrderKg >= 15) {
+      discountPercent = 7;
+    } else if (totalOrderKg >= 5) {
+      discountPercent = 5;
+    }
+    const discountAmount = Math.round(totalGoodsAmount * (discountPercent / 100));
+    const netGoodsAmount = Math.max(0, totalGoodsAmount - discountAmount);
+
     const finalShippingType = shipping_type === 'LOCO' ? 'LOCO' : 'FRANCO';
     const finalShippingCost = finalShippingType === 'LOCO' ? (parseFloat(shipping_cost) || 0) : 0;
-    const ppn = Math.round(totalGoodsAmount * 0.11);
-    const grandTotal = totalGoodsAmount + ppn + finalShippingCost;
+    const ppn = Math.round(netGoodsAmount * 0.11);
+    const grandTotal = netGoodsAmount + ppn + finalShippingCost;
 
     // 2. CREDIT LIMIT & OVERDUE CHECK LOGIC (B2B Requirement: Requires Super Admin Approval if Exceeded or Overdue)
     let requiresSuperAdminApproval = false;
@@ -207,8 +220,8 @@ export async function POST(req: NextRequest) {
     try {
       await executeQuery(
         `INSERT INTO sales_orders 
-        (id, so_number, customer_id, courier_id, status, payment_method, shipping_type, shipping_cost, total_goods_amount, grand_total, order_date, customer_tax_category)
-        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, ?, ?)`,
+        (id, so_number, customer_id, courier_id, status, payment_method, shipping_type, shipping_cost, total_goods_amount, grand_total, order_date, customer_tax_category, discount_percent, discount_amount)
+        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           soId,
           soNumber,
@@ -221,6 +234,8 @@ export async function POST(req: NextRequest) {
           grandTotal,
           orderDate,
           customerTaxCategory,
+          discountPercent,
+          discountAmount,
         ]
       );
 
@@ -344,6 +359,8 @@ export async function POST(req: NextRequest) {
           status: 'PENDING_APPROVAL',
           payment_method: payment_method || 'LUNAS_TRANSFER',
           total_goods_amount: totalGoodsAmount,
+          discount_percent: discountPercent,
+          discount_amount: discountAmount,
           grand_total: grandTotal,
           order_date: orderDate,
           items: processedItems,

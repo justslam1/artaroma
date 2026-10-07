@@ -5,7 +5,7 @@ import { CustomerNav } from '@/components/navigation/customer-nav';
 import { CheckoutModal } from '@/components/customer/checkout-modal';
 import { initialCustomers } from '@/lib/mock-data';
 import { Product, Customer, SalesOrder, SOItem } from '@/lib/types';
-import { formatKg, formatIDR } from '@/lib/utils';
+import { formatKg, formatIDR, calculateQuantityDiscount } from '@/lib/utils';
 import { getStoredOrders, saveStoredOrders, getStoredInvoices, saveStoredInvoices } from '@/lib/order-store';
 import { getUsdExchangeRate, convertUsdToIdr } from '@/lib/currency-store';
 import { getApplications } from '@/lib/application-store';
@@ -245,6 +245,7 @@ export default function CustomerCatalogPage() {
 
   const totalItemCount = cartItems.length;
   const totalWeightKg = cartItems.reduce((sum, item) => sum + (item.packSizeKg * item.quantity), 0);
+  const cartDiscountInfo = calculateQuantityDiscount(totalWeightKg);
 
   return (
     <div className="bg-[#f5f7fa] min-h-screen pb-28 sm:pb-20">
@@ -788,8 +789,13 @@ export default function CustomerCatalogPage() {
                 </span>
               </div>
               <div>
-                <div className="text-xs font-bold font-mono">
-                  {formatKg(totalWeightKg)} • {totalItemCount} Varian
+                <div className="text-xs font-bold font-mono flex items-center gap-1">
+                  <span>{formatKg(totalWeightKg)} • {totalItemCount} Varian</span>
+                  {cartDiscountInfo.percent > 0 && (
+                    <span className="bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-2xs">
+                      Diskon {cartDiscountInfo.percent}%
+                    </span>
+                  )}
                 </div>
                 <div className="text-[10px] text-amber-300 font-mono">
                   Total: {formatIDR(
@@ -820,13 +826,18 @@ export default function CustomerCatalogPage() {
           <div className="hidden sm:block fixed bottom-6 right-6 z-40 animate-in zoom-in-95 duration-150">
             <button
               onClick={() => setIsCheckoutOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 transition-all cursor-pointer"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl shadow-xl flex items-center gap-2.5 transition-all cursor-pointer"
             >
               <ShoppingBag className="w-5 h-5" />
               <span>Pesanan ({totalItemCount} Varian)</span>
               <span className="bg-white text-blue-700 font-mono font-bold px-2 py-0.5 rounded-lg text-xs">
                 {formatKg(totalWeightKg)}
               </span>
+              {cartDiscountInfo.percent > 0 && (
+                <span className="bg-emerald-500 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
+                  Diskon {cartDiscountInfo.percent}%
+                </span>
+              )}
             </button>
           </div>
         </>
@@ -902,6 +913,10 @@ export default function CustomerCatalogPage() {
               customer_name: currentCustomer.pic_name,
               customer_company: currentCustomer.company_name,
               customer_tax_category: currentCustomer.tax_category || 'PKP',
+              discount_percent: json.data?.discount_percent ?? cartDiscountInfo.percent,
+              discount_amount: json.data?.discount_amount ?? Math.round(orderItems.reduce((s, it) => s + (it.subtotal || 0), 0) * (cartDiscountInfo.percent / 100)),
+              total_goods_amount: json.data?.total_goods_amount ?? orderItems.reduce((s, it) => s + (it.subtotal || 0), 0),
+              grand_total: json.data?.grand_total,
               status: 'DIAJUKAN',
               payment_method: submittedData.payment_method || 'LUNAS_TRANSFER',
               order_date: nowStr,

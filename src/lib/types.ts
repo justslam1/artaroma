@@ -329,6 +329,8 @@ export interface SalesOrder {
   shipping_type?: 'FRANCO' | 'LOCO';
   shipping_cost?: number;
   customer_tax_category?: 'PKP' | 'NON_PKP';
+  discount_percent?: number;
+  discount_amount?: number;
   total_goods_amount?: number;
   grand_total?: number;
   order_date: string;
@@ -388,6 +390,8 @@ export interface Invoice {
   customer_name: string;
   customer_tax_category?: 'PKP' | 'NON_PKP';
   is_tax_inclusive?: boolean;
+  discount_percent?: number;
+  discount_amount?: number;
   dpp_amount?: number;
   ppn_amount?: number;
   status: InvoiceStatus;

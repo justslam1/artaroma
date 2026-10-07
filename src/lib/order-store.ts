@@ -129,6 +129,8 @@ export function updateSalesOrderStatus(
     body: JSON.stringify({
       status: newStatus,
       total_goods_amount: updatedOrder?.total_goods_amount,
+      discount_percent: updatedOrder?.discount_percent,
+      discount_amount: updatedOrder?.discount_amount,
       grand_total: updatedOrder?.grand_total,
       courier_name: updatedOrder?.courier_name,
       surat_jalan_number: updatedOrder?.surat_jalan_number,
