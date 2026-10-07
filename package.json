@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "tsx scripts/test-all.ts",
@@ -20,6 +20,7 @@
     "lucide-react": "^1.25.0",
     "mysql2": "^3.23.1",
     "next": "^16.4.0",
+    "postcss": "^8.5.29",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.82.0",
