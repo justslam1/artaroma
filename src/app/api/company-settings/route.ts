@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       wa_admin_phone: settings.wa_admin_phone || settings.whatsapp_number || '+62 852-2518-4422',
       wa_notify_admin: settings.wa_notify_admin !== 'false',
       wa_notify_customer: settings.wa_notify_customer !== 'false',
+      usd_exchange_rate: settings.usd_exchange_rate ? parseFloat(settings.usd_exchange_rate) : 16250,
     };
 
     return NextResponse.json({

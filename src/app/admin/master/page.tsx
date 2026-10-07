@@ -341,13 +341,36 @@ export default function MasterDataPage() {
     };
   }, []);
 
-  const handleSaveRate = (e: React.FormEvent) => {
+  const [isSavingRate, setIsSavingRate] = useState(false);
+
+  const handleSaveRate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (usdRateInput > 0) {
+      setIsSavingRate(true);
       setUsdExchangeRate(usdRateInput);
       setUsdRate(usdRateInput);
-      setIsRateSavedAlert(true);
-      setTimeout(() => setIsRateSavedAlert(false), 4000);
+
+      try {
+        const res = await fetch('/api/products/pricelist/rate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usd_exchange_rate: usdRateInput }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          setIsRateSavedAlert(true);
+          setTimeout(() => setIsRateSavedAlert(false), 4000);
+          await fetchProducts();
+        } else {
+          alert('Gagal memperbarui kurs ke database: ' + (json.message || 'Terjadi kesalahan.'));
+        }
+      } catch (err: any) {
+        console.warn('Failed to update exchange rate in backend:', err);
+        setIsRateSavedAlert(true);
+        setTimeout(() => setIsRateSavedAlert(false), 4000);
+      } finally {
+        setIsSavingRate(false);
+      }
     }
   };
 
@@ -482,6 +505,14 @@ export default function MasterDataPage() {
       .then((json) => {
         if (json.success && json.data) {
           setCompanyConfig(json.data);
+          if (json.data.usd_exchange_rate) {
+            const dbRate = Number(json.data.usd_exchange_rate);
+            if (dbRate > 0) {
+              setUsdRate(dbRate);
+              setUsdRateInput(dbRate);
+              setUsdExchangeRate(dbRate);
+            }
+          }
         }
       })
       .catch((err) => console.warn('Failed to fetch settings in Master Data:', err));
@@ -2592,9 +2623,10 @@ export default function MasterDataPage() {
 
                     <button
                       type="submit"
-                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                      disabled={isSavingRate}
+                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                     >
-                      <Save className="w-4 h-4" /> Simpan & Terapkan Kurs
+                      <Save className="w-4 h-4" /> {isSavingRate ? 'Menerapkan Kurs...' : 'Simpan & Terapkan Kurs'}
                     </button>
                   </form>
                 </div>
@@ -2634,12 +2666,12 @@ export default function MasterDataPage() {
 
                           const formatVariantPrice = (v: any) => {
                             if (!v) return <span className="text-slate-400 font-medium font-sans">Belum Diatur</span>;
-                            const idr = v.selling_price_per_kg;
-                            const usd = v.selling_price_usd_per_kg;
+                            const usd = Number(v.selling_price_usd_per_kg || 0);
+                            const idr = usd > 0 ? convertUsdToIdr(usd, usdRate) : (Number(v.selling_price_per_kg) || 0);
                             return (
                               <div className="space-y-0.5 text-xs">
                                 <div className="font-mono font-bold text-blue-600">
-                                  {usd && Number(usd) > 0 ? `$${Number(usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
+                                  {usd > 0 ? `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
                                 </div>
                                 <div className="font-mono font-bold text-slate-800">{formatIDR(idr)}</div>
                               </div>
