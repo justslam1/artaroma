@@ -27,12 +27,16 @@ export function SalesOrderPDFModal({ isOpen, onClose, order, companyConfig }: Sa
   const companyTagline = companyConfig?.company_tagline || 'B2B Fragrance Oil Supplier & Management Hub';
   const warehouseAddress = companyConfig?.warehouse_address || 'Jl. Elang Raya, Perum Kampoeng Elang Blok A5 Semarang – 50272';
 
-  const calculatedTotal = order.items.reduce(
+  const taxCategory = order.customer_tax_category || (order as any).tax_category || 'PKP';
+  const isNonPKP = taxCategory === 'NON_PKP';
+
+  const rawGoodsTotal = order.items.reduce(
     (sum, it) => sum + (it.subtotal || (it.qty_kg * (it.unit_price_per_kg || 1500000))),
     0
   );
-  const ppn = Math.round(calculatedTotal * 0.11);
-  const grandTotal = calculatedTotal + ppn;
+  const ppn = Math.round(rawGoodsTotal * 0.11);
+  const totalGoodsDisplay = isNonPKP ? rawGoodsTotal + ppn : rawGoodsTotal;
+  const grandTotal = totalGoodsDisplay + (isNonPKP ? 0 : ppn);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static print:z-auto">
@@ -132,13 +136,16 @@ export function SalesOrderPDFModal({ isOpen, onClose, order, companyConfig }: Sa
                   <th className="p-2.5 border border-slate-700">KODE SKU</th>
                   <th className="p-2.5 border border-slate-700">DESKRIPSI VARIAN BIBIT PARFUM</th>
                   <th className="p-2.5 border border-slate-700 text-right">KUANTITAS (KG)</th>
-                  <th className="p-2.5 border border-slate-700 text-right">HARGA / KG (IDR)</th>
+                  <th className="p-2.5 border border-slate-700 text-right">
+                    {isNonPKP ? 'HARGA / KG (INC. PAJAK)' : 'HARGA / KG (IDR)'}
+                  </th>
                   <th className="p-2.5 border border-slate-700 text-right">SUBTOTAL (IDR)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono text-xs">
                 {order.items.map((item, idx) => {
-                  const price = item.unit_price_per_kg || 1500000;
+                  const basePrice = item.unit_price_per_kg || 1500000;
+                  const price = isNonPKP ? Math.round(basePrice * 1.11) : basePrice;
                   const qty = item.qty_kg;
                   const subtotal = qty * price;
                   return (
@@ -159,13 +166,17 @@ export function SalesOrderPDFModal({ isOpen, onClose, order, companyConfig }: Sa
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">Subtotal:</td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(calculatedTotal)}</td>
+                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                    {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
+                  </td>
+                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(totalGoodsDisplay)}</td>
                 </tr>
-                <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
-                </tr>
+                {!isNonPKP && (
+                  <tr className="bg-slate-50 font-semibold">
+                    <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
+                    <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
+                  </tr>
+                )}
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-350">
                   <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase text-blue-900">Total Tagihan (Grand Total):</td>
                   <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono text-sm text-blue-900">{formatIDR(grandTotal)}</td>

@@ -1219,26 +1219,43 @@ export default function SalesOrdersPage() {
 
                         {/* Faktur Pajak Action */}
                         <div className="mt-1.5 pt-1 border-t border-dashed border-gray-200">
-                          {matchingInv?.faktur_pajak_file_url ? (
-                            <a
-                              href={matchingInv.faktur_pajak_file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-colors"
-                              title="Lihat / Download Faktur Pajak PDF"
-                            >
-                              <FileText className="w-3 h-3 text-emerald-600" /> Faktur Pajak PDF
-                            </a>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenTaxForSO(so)}
-                              className="text-[10px] font-semibold text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all cursor-pointer"
-                              title="Unggah berkas PDF Faktur Pajak untuk pesanan ini"
-                            >
-                              <Upload className="w-3 h-3 text-slate-400" /> + Faktur Pajak
-                            </button>
-                          )}
+                          {(() => {
+                            const soCust = customers.find((c) => c.id === so.customer_id);
+                            const isNonPKP = so.customer_tax_category === 'NON_PKP' || matchingInv?.customer_tax_category === 'NON_PKP' || soCust?.tax_category === 'NON_PKP';
+
+                            if (isNonPKP) {
+                              return (
+                                <span className="text-[10px] text-slate-400 italic font-medium" title="Customer Non-PKP tidak menerbitkan e-Faktur terpisah">
+                                  Non-PKP (Bebas e-Faktur)
+                                </span>
+                              );
+                            }
+
+                            if (matchingInv?.faktur_pajak_file_url) {
+                              return (
+                                <a
+                                  href={matchingInv.faktur_pajak_file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-colors"
+                                  title="Lihat / Download Faktur Pajak PDF"
+                                >
+                                  <FileText className="w-3 h-3 text-emerald-600" /> Faktur Pajak PDF
+                                </a>
+                              );
+                            }
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenTaxForSO(so)}
+                                className="text-[10px] font-semibold text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all cursor-pointer"
+                                title="Unggah berkas PDF Faktur Pajak untuk pesanan ini"
+                              >
+                                <Upload className="w-3 h-3 text-slate-400" /> + Faktur Pajak
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
 

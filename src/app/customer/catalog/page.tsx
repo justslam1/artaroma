@@ -901,6 +901,7 @@ export default function CustomerCatalogPage() {
               customer_id: currentCustomer.id,
               customer_name: currentCustomer.pic_name,
               customer_company: currentCustomer.company_name,
+              customer_tax_category: currentCustomer.tax_category || 'PKP',
               status: 'DIAJUKAN',
               payment_method: submittedData.payment_method || 'LUNAS_TRANSFER',
               order_date: nowStr,

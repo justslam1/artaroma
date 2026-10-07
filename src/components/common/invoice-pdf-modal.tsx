@@ -37,14 +37,20 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
   const invoiceDate = invoice?.issue_date || order.order_date || new Date().toISOString().split('T')[0];
   const dueDate = invoice?.due_date || (order.payment_method === 'TEMPO' ? '30 Hari Setelah Penerbitan (TOP)' : 'Segera (Transfer Lunas)');
 
-  const calculatedTotal = order.items.reduce(
+  const taxCategory = invoice?.customer_tax_category || order.customer_tax_category || (order as any).tax_category || 'PKP';
+  const isNonPKP = taxCategory === 'NON_PKP';
+
+  const rawGoodsSubtotal = order.items.reduce(
     (sum, it) => sum + (it.subtotal || (it.qty_kg * (it.unit_price_per_kg || 1500000))),
     0
   );
-  const ppn = Math.round(calculatedTotal * 0.11);
+  const ppn = Math.round(rawGoodsSubtotal * 0.11);
   const shippingType = order.shipping_type || invoice?.shipping_type || 'FRANCO';
   const shippingCost = shippingType === 'FRANCO' ? 0 : Number(order.shipping_cost ?? invoice?.shipping_cost ?? 0);
-  const grandTotal = calculatedTotal + ppn + shippingCost;
+
+  // For Non-PKP (Opsi A), prices in each row are inclusive of tax (price * 1.11)
+  const totalGoodsDisplay = isNonPKP ? rawGoodsSubtotal + ppn : rawGoodsSubtotal;
+  const grandTotal = totalGoodsDisplay + (isNonPKP ? 0 : ppn) + shippingCost;
 
   const isPaid = invoice?.status === 'PAID' || order.status === 'PROSES_GUDANG' || order.status === 'DIKIRIM' || order.status === 'DITERIMA';
 
@@ -122,13 +128,25 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
           <div className="grid grid-cols-2 gap-6 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs">
             {/* Bill To Customer */}
             <div className="space-y-1">
-              <div className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                <Building2 className="w-3.5 h-3.5" /> DITAGIHKAN KEPADA (CUSTOMER B2B):
+              <div className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> DITAGIHKAN KEPADA:</span>
+                <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] ${
+                  isNonPKP ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
+                }`}>
+                  {isNonPKP ? '🏪 Non-PKP (Harga All-in)' : '🏢 PKP (Faktur Pajak)'}
+                </span>
               </div>
               <div className="font-extrabold text-sm text-slate-900">{order.customer_company || order.customer_name}</div>
               <div className="text-slate-700 font-semibold">PIC: {order.customer_name}</div>
               <div className="text-slate-500">Kawasan Industri Jababeka V Blok C-12, Cikarang, Bekasi</div>
-              <div className="text-slate-500">NPWP: 02.881.921.4-412.000</div>
+              {isNonPKP ? (
+                <div className="text-slate-500 italic">NPWP / NIK: Sesuai Data Pelanggan</div>
+              ) : (
+                <>
+                  <div className="text-slate-500 font-mono">NPWP: 01.345.678.9-012.000</div>
+                  <div className="text-slate-500 font-mono">NPPKP: Terdaftar e-Faktur</div>
+                </>
+              )}
             </div>
 
             {/* Payment Bank Details */}
@@ -145,8 +163,13 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
 
           {/* Itemized Table */}
           <div className="space-y-2">
-            <div className="font-bold text-slate-800 text-xs uppercase tracking-wider">
-              Rincian Barang &amp; Layanan:
+            <div className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center justify-between">
+              <span>Rincian Barang &amp; Layanan:</span>
+              {isNonPKP && (
+                <span className="text-[11px] text-amber-700 font-normal italic lowercase">
+                  * harga per kg dan total di bawah sudah termasuk pajak
+                </span>
+              )}
             </div>
             <table className="w-full text-xs text-left border-collapse border border-slate-200">
               <thead>
@@ -155,15 +178,18 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
                   <th className="p-2.5 border border-slate-700">KODE BARANG</th>
                   <th className="p-2.5 border border-slate-700">DESKRIPSI VARIAN BIBIT PARFUM</th>
                   <th className="p-2.5 border border-slate-700 text-right">KUANTITAS (KG)</th>
-                  <th className="p-2.5 border border-slate-700 text-right">HARGA SATUAN (IDR)</th>
+                  <th className="p-2.5 border border-slate-700 text-right">
+                    {isNonPKP ? 'HARGA / KG (INC. PAJAK)' : 'HARGA SATUAN (DPP)'}
+                  </th>
                   <th className="p-2.5 border border-slate-700 text-right">TOTAL (IDR)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono text-xs">
                 {order.items.map((item, idx) => {
-                  const price = item.unit_price_per_kg || 1500000;
+                  const basePrice = item.unit_price_per_kg || 1500000;
+                  const price = isNonPKP ? Math.round(basePrice * 1.11) : basePrice;
                   const qty = item.qty_kg;
-                  const subtotal = qty * price;
+                  const itemSubtotal = qty * price;
                   return (
                     <tr key={item.id || idx} className="hover:bg-slate-50">
                       <td className="p-2.5 border border-slate-200 text-center font-bold text-slate-500">{idx + 1}</td>
@@ -175,20 +201,25 @@ export function InvoicePDFModal({ isOpen, onClose, order, invoice, companyConfig
                         {formatKg(qty)}
                       </td>
                       <td className="p-2.5 border border-slate-200 text-right text-slate-700">{formatIDR(price)}</td>
-                      <td className="p-2.5 border border-slate-200 text-right font-bold text-slate-900">{formatIDR(subtotal)}</td>
+                      <td className="p-2.5 border border-slate-200 text-right font-bold text-slate-900">{formatIDR(itemSubtotal)}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">Subtotal:</td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(calculatedTotal)}</td>
+                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
+                    {isNonPKP ? 'Total Nilai Barang (Termasuk Pajak):' : 'Subtotal (DPP):'}
+                  </td>
+                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(totalGoodsDisplay)}</td>
                 </tr>
-                <tr className="bg-slate-50 font-semibold">
-                  <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
-                  <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
-                </tr>
+                {/* Baris PPN 11% HANYA ditampilkan untuk customer PKP */}
+                {!isNonPKP && (
+                  <tr className="bg-slate-50 font-semibold">
+                    <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">PPN (11%):</td>
+                    <td colSpan={2} className="p-2.5 border border-slate-200 text-right font-mono font-bold text-slate-900">{formatIDR(ppn)}</td>
+                  </tr>
+                )}
                 <tr className="bg-slate-50 font-semibold">
                   <td colSpan={4} className="p-2.5 border border-slate-200 text-right uppercase">
                     Ongkos Kirim ({shippingType === 'FRANCO' ? 'FRANCO / Bebas Ongkir' : 'LOCO / Ditanggung Pembeli'}):

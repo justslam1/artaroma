@@ -88,6 +88,8 @@ export interface Customer {
   default_shipping_type?: 'FRANCO' | 'LOCO';
   delivery_notes?: string;
   npwp?: string;
+  nppkp?: string;
+  tax_category?: 'PKP' | 'NON_PKP'; // Default 'PKP'
   ktp_file?: string;        // filename/URL of uploaded KTP scan
   npwp_file?: string;       // filename/URL of uploaded NPWP scan
   bank_name?: string;       // e.g. 'BCA', 'Mandiri'
@@ -326,6 +328,7 @@ export interface SalesOrder {
   payment_method: PaymentMethod;
   shipping_type?: 'FRANCO' | 'LOCO';
   shipping_cost?: number;
+  customer_tax_category?: 'PKP' | 'NON_PKP';
   total_goods_amount?: number;
   grand_total?: number;
   order_date: string;
@@ -383,6 +386,10 @@ export interface Invoice {
   so_number: string;
   customer_id: string;
   customer_name: string;
+  customer_tax_category?: 'PKP' | 'NON_PKP';
+  is_tax_inclusive?: boolean;
+  dpp_amount?: number;
+  ppn_amount?: number;
   status: InvoiceStatus;
   issue_date: string;
   due_date: string;

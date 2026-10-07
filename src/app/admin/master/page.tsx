@@ -720,6 +720,8 @@ export default function MasterDataPage() {
     shipping_lat: '',
     shipping_lng: '',
     npwp: '',
+    nppkp: '',
+    tax_category: 'PKP' as 'PKP' | 'NON_PKP',
     ktp_file: '' as string,
     npwp_file: '' as string,
     bank_name: '',
@@ -1249,6 +1251,8 @@ export default function MasterDataPage() {
         shipping_lat: '',
         shipping_lng: '',
         npwp: '',
+        nppkp: '',
+        tax_category: 'PKP',
         ktp_file: '',
         npwp_file: '',
         bank_name: '',
@@ -1352,6 +1356,8 @@ export default function MasterDataPage() {
         default_shipping_type: (c as any).default_shipping_type || 'FRANCO',
         delivery_notes: (c as any).delivery_notes || '',
         npwp: c.npwp || '',
+        nppkp: (c as any).nppkp || '',
+        tax_category: (c as any).tax_category || 'PKP',
         ktp_file: c.ktp_file || '',
         npwp_file: c.npwp_file || '',
         bank_name: c.bank_name || '',
@@ -1619,7 +1625,9 @@ export default function MasterDataPage() {
         default_shipping_cost: Number(customerForm.default_shipping_cost) || 0,
         default_shipping_type: customerForm.default_shipping_type || 'FRANCO',
         delivery_notes: customerForm.delivery_notes || '',
-        npwp: customerForm.npwp,
+        npwp: customerForm.npwp || '',
+        nppkp: customerForm.nppkp || '',
+        tax_category: customerForm.tax_category || 'PKP',
         is_credit_eligible: customerForm.is_credit_eligible,
         credit_limit: customerForm.is_credit_eligible ? Number(customerForm.credit_limit) : 0,
         credit_terms_days: customerForm.is_credit_eligible ? Number(customerForm.credit_terms_days) : 0,
@@ -1840,6 +1848,9 @@ export default function MasterDataPage() {
         default_shipping_cost: Number(customerForm.default_shipping_cost) || 0,
         default_shipping_type: customerForm.default_shipping_type || 'FRANCO',
         delivery_notes: customerForm.delivery_notes || '',
+        npwp: customerForm.npwp || '',
+        nppkp: customerForm.nppkp || '',
+        tax_category: customerForm.tax_category || 'PKP',
         credit_limit: customerForm.is_credit_eligible ? Number(customerForm.credit_limit) : 0,
         credit_terms_days: customerForm.is_credit_eligible ? Number(customerForm.credit_terms_days) : 0,
         special_prices: customerForm.special_prices,
@@ -2905,6 +2916,7 @@ export default function MasterDataPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-slate-500 text-xs uppercase tracking-wide font-semibold">
                     <th className="px-6 py-3">Kode / Perusahaan</th>
+                    <th className="px-6 py-3">Pajak</th>
                     <th className="px-6 py-3">PIC & Akun Login B2B (Username)</th>
                     <th className="px-6 py-3">Plafon Kredit B2B</th>
                     <th className="px-6 py-3">Status Tempo</th>
@@ -2921,7 +2933,8 @@ export default function MasterDataPage() {
                       c.pic_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       ((c as any).pic_name_2 && (c as any).pic_name_2.toLowerCase().includes(searchTerm.toLowerCase())) ||
                       ((c as any).pic_name_3 && (c as any).pic_name_3.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                      c.email.toLowerCase().includes(searchTerm.toLowerCase())
+                      c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (c.tax_category && c.tax_category.toLowerCase().includes(searchTerm.toLowerCase()))
                     )
                     .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'id', { sensitivity: 'base' }))
                     .map((c) => {
@@ -2937,6 +2950,18 @@ export default function MasterDataPage() {
                           <td className="px-6 py-3.5">
                             <div className="font-semibold text-slate-800">{c.company_name}</div>
                             <span className="font-mono text-[11px] text-blue-600">{c.code}</span>
+                          </td>
+
+                          <td className="px-6 py-3.5">
+                            {c.tax_category === 'NON_PKP' ? (
+                              <span className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 shadow-xs" title="Customer Non-PKP: Harga jual & pajak digabung (tanpa baris PPN)">
+                                🏪 Non-PKP
+                              </span>
+                            ) : (
+                              <span className="bg-blue-50 text-blue-800 border border-blue-300 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 shadow-xs" title="Customer PKP: Harga dipisah DPP & PPN 11%">
+                                🏢 PKP
+                              </span>
+                            )}
                           </td>
 
                           <td className="px-6 py-3.5 text-xs">
@@ -5258,6 +5283,49 @@ export default function MasterDataPage() {
                         </div>
                       </div>
 
+                      {/* Kategori Pajak Customer */}
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">
+                          Kategori Pajak Customer <span className="text-red-500">*</span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, tax_category: 'PKP' })}
+                            className={`p-2.5 rounded-xl border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                              customerForm.tax_category !== 'NON_PKP'
+                                ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20'
+                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="text-base">🏢</span>
+                            <div>
+                              <div className="font-bold text-xs text-blue-900">Customer PKP</div>
+                              <div className="text-[10px] text-slate-500 leading-tight">
+                                Harga di invoice dipisah DPP &amp; PPN 11%. Terbit Faktur Pajak.
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, tax_category: 'NON_PKP' })}
+                            className={`p-2.5 rounded-xl border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                              customerForm.tax_category === 'NON_PKP'
+                                ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20'
+                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="text-base">🏪</span>
+                            <div>
+                              <div className="font-bold text-xs text-amber-900">Customer Non-PKP</div>
+                              <div className="text-[10px] text-slate-500 leading-tight">
+                                Harga jual &amp; pajak digabung (tanpa baris PPN terpisah).
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="font-bold text-slate-700 block mb-1">Nama PIC (Utama)</label>
@@ -5528,6 +5596,22 @@ export default function MasterDataPage() {
                           className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
                         />
                       </div>
+
+                      {/* NPPKP (Khusus Customer PKP) */}
+                      {customerForm.tax_category !== 'NON_PKP' && (
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5 text-blue-600" /> NPPKP (Nomor Pokok Pengusaha Kena Pajak)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="01.234.567.8-012.000"
+                            value={customerForm.nppkp || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, nppkp: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      )}
 
                       {/* Upload KTP */}
                       <div>
@@ -6957,6 +7041,49 @@ export default function MasterDataPage() {
                         </div>
                       </div>
 
+                      {/* Kategori Pajak Customer */}
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">
+                          Kategori Pajak Customer <span className="text-red-500">*</span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, tax_category: 'PKP' })}
+                            className={`p-2.5 rounded-xl border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                              customerForm.tax_category !== 'NON_PKP'
+                                ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20'
+                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="text-base">🏢</span>
+                            <div>
+                              <div className="font-bold text-xs text-blue-900">Customer PKP</div>
+                              <div className="text-[10px] text-slate-500 leading-tight">
+                                Harga di invoice dipisah DPP &amp; PPN 11%. Terbit Faktur Pajak.
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomerForm({ ...customerForm, tax_category: 'NON_PKP' })}
+                            className={`p-2.5 rounded-xl border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                              customerForm.tax_category === 'NON_PKP'
+                                ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20'
+                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="text-base">🏪</span>
+                            <div>
+                              <div className="font-bold text-xs text-amber-900">Customer Non-PKP</div>
+                              <div className="text-[10px] text-slate-500 leading-tight">
+                                Harga jual &amp; pajak digabung (tanpa baris PPN terpisah).
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="font-bold text-slate-700 block mb-1">Nama PIC (Utama)</label>
@@ -7202,6 +7329,22 @@ export default function MasterDataPage() {
                           className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
                         />
                       </div>
+
+                      {/* NPPKP (Khusus Customer PKP) */}
+                      {customerForm.tax_category !== 'NON_PKP' && (
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5 text-blue-600" /> NPPKP (Nomor Pokok Pengusaha Kena Pajak)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="01.234.567.8-012.000"
+                            value={customerForm.nppkp || ''}
+                            onChange={(e) => setCustomerForm({ ...customerForm, nppkp: e.target.value })}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-xs"
+                          />
+                        </div>
+                      )}
 
                       {/* Upload KTP */}
                       <div>

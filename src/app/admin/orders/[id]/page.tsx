@@ -939,6 +939,9 @@ export default function OrderDetailPage() {
       };
     });
 
+    const customerTaxCategory = customer?.tax_category || order.customer_tax_category || 'PKP';
+    const isNonPKP = customerTaxCategory === 'NON_PKP';
+
     const finalShippingType = shippingType;
     const finalShippingCost = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
     const ppn = Math.round(calculatedGoodsTotal * 0.11);
@@ -959,6 +962,10 @@ export default function OrderDetailPage() {
       so_number: order.so_number,
       customer_id: order.customer_id,
       customer_name: order.customer_company,
+      customer_tax_category: isNonPKP ? 'NON_PKP' : 'PKP',
+      is_tax_inclusive: isNonPKP,
+      dpp_amount: calculatedGoodsTotal,
+      ppn_amount: isNonPKP ? 0 : ppn,
       status: 'UNPAID',
       issue_date: issueDateStr,
       due_date: dueDateStr,
@@ -966,7 +973,7 @@ export default function OrderDetailPage() {
       shipping_cost: finalShippingCost,
       total_amount: grandTotal,
       paid_amount: 0,
-      faktur_pajak_file_url: '/dummy-faktur-pajak.pdf',
+      faktur_pajak_file_url: isNonPKP ? undefined : '/dummy-faktur-pajak.pdf',
     };
 
     // Construct Multi-Trip Shipments if multi-trip mode is selected and there are remaining items
@@ -2302,24 +2309,46 @@ export default function OrderDetailPage() {
                     const price = item.unit_price_per_kg || 1500000;
                     calculatedGoods += confirmedQty * price;
                   });
+                  const customerTaxCategory = customer?.tax_category || order.customer_tax_category || 'PKP';
+                  const isNonPKP = customerTaxCategory === 'NON_PKP';
                   const ppn = Math.round(calculatedGoods * 0.11);
                   const ship = shippingType === 'FRANCO' ? 0 : Number(shippingCost || 0);
                   const grandTotal = calculatedGoods + ppn + ship;
 
                   return (
                     <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-blue-600" /> Rincian Tagihan Invoice yang Akan Diterbitkan:
+                      <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-blue-600" /> Rincian Tagihan Invoice yang Akan Diterbitkan:
+                        </div>
+                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${
+                          isNonPKP ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-blue-50 text-blue-800 border-blue-300'
+                        }`}>
+                          {isNonPKP ? '🏪 Customer Non-PKP (Pajak Digabung)' : '🏢 Customer PKP (PPN 11% Terpisah)'}
+                        </span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-blue-100">
                         <div>
-                          <span className="text-slate-500 block text-[11px]">Subtotal Nilai Barang:</span>
-                          <span className="font-mono font-bold text-slate-800 text-sm">{formatIDR(calculatedGoods)}</span>
+                          <span className="text-slate-500 block text-[11px]">
+                            {isNonPKP ? 'Subtotal Nilai Barang (Inc. Pajak):' : 'Subtotal Nilai Barang (DPP):'}
+                          </span>
+                          <span className="font-mono font-bold text-slate-800 text-sm">
+                            {formatIDR(isNonPKP ? calculatedGoods + ppn : calculatedGoods)}
+                          </span>
                         </div>
-                        <div>
-                          <span className="text-slate-500 block text-[11px]">PPN (11%):</span>
-                          <span className="font-mono font-bold text-slate-800 text-sm">{formatIDR(ppn)}</span>
-                        </div>
+                        {isNonPKP ? (
+                          <div>
+                            <span className="text-slate-500 block text-[11px]">Status PPN:</span>
+                            <span className="font-sans font-bold text-emerald-700 text-xs">
+                              Digabung ke Harga Jual
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-slate-500 block text-[11px]">PPN (11%):</span>
+                            <span className="font-mono font-bold text-slate-800 text-sm">{formatIDR(ppn)}</span>
+                          </div>
+                        )}
                         <div>
                           <span className="text-slate-500 block text-[11px]">Ongkos Kirim ({shippingType}):</span>
                           <span className="font-mono font-bold text-slate-800 text-sm">{ship > 0 ? formatIDR(ship) : 'Rp 0 (GRATIS)'}</span>

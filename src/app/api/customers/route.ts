@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
 
       customers[i] = {
         ...c,
+        tax_category: c.tax_category || 'PKP',
+        nppkp: c.nppkp || '',
         special_prices: specPrices || {},
         allowed_product_ids: allowedProds || [],
         current_piutang: Number(currentPiutang.toFixed(2)),
@@ -113,6 +115,8 @@ export async function POST(req: NextRequest) {
       default_shipping_type,
       delivery_notes,
       npwp,
+      nppkp,
+      tax_category,
       is_credit_eligible,
       credit_limit,
       credit_terms_days,
@@ -133,12 +137,13 @@ export async function POST(req: NextRequest) {
     const parsedShippingCost = parseFloat(default_shipping_cost || 0);
     const specPricesStr = JSON.stringify(special_prices || {});
     const allowedProdsStr = JSON.stringify(allowed_product_ids || []);
+    const finalTaxCategory = tax_category === 'NON_PKP' ? 'NON_PKP' : 'PKP';
 
     try {
       await executeQuery(
         `INSERT INTO customers 
-        (id, code, company_name, pic_name, email, phone, pic_name_2, phone_2, pic_name_3, phone_3, address, office_address, shipping_lat, shipping_lng, default_courier_id, default_courier_name, default_shipping_cost, default_shipping_type, delivery_notes, npwp, credit_limit, credit_terms_days, special_prices, allowed_product_ids, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+        (id, code, company_name, pic_name, email, phone, pic_name_2, phone_2, pic_name_3, phone_3, address, office_address, shipping_lat, shipping_lng, default_courier_id, default_courier_name, default_shipping_cost, default_shipping_type, delivery_notes, npwp, nppkp, tax_category, credit_limit, credit_terms_days, special_prices, allowed_product_ids, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
         [
           id,
           code,
@@ -160,6 +165,8 @@ export async function POST(req: NextRequest) {
           default_shipping_type || 'FRANCO',
           delivery_notes || null,
           npwp || '',
+          nppkp || null,
+          finalTaxCategory,
           parsedLimit,
           parsedTerms,
           specPricesStr,
@@ -237,6 +244,9 @@ export async function PUT(req: NextRequest) {
       default_shipping_cost,
       default_shipping_type,
       delivery_notes,
+      npwp,
+      nppkp,
+      tax_category,
       credit_limit,
       credit_terms_days,
       special_prices,
@@ -274,6 +284,9 @@ export async function PUT(req: NextRequest) {
           default_shipping_cost = ?,
           default_shipping_type = ?,
           delivery_notes = ?,
+          npwp = COALESCE(?, npwp),
+          nppkp = COALESCE(?, nppkp),
+          tax_category = COALESCE(?, tax_category),
           credit_limit = COALESCE(?, credit_limit),
           credit_terms_days = COALESCE(?, credit_terms_days),
           special_prices = COALESCE(?, special_prices),
@@ -298,6 +311,9 @@ export async function PUT(req: NextRequest) {
           default_shipping_cost !== undefined ? parseFloat(default_shipping_cost) : 0,
           default_shipping_type !== undefined ? default_shipping_type : 'FRANCO',
           delivery_notes !== undefined ? (delivery_notes || null) : null,
+          npwp !== undefined ? npwp : null,
+          nppkp !== undefined ? nppkp : null,
+          tax_category !== undefined ? tax_category : null,
           credit_limit !== undefined ? parseFloat(credit_limit) : null,
           credit_terms_days !== undefined ? parseInt(credit_terms_days) : null,
           specPricesStr,

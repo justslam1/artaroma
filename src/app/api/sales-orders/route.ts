@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     let orders: any[] = [];
     try {
       orders = await executeQuery<any[]>(
-        `SELECT so.*, c.company_name as customer_company, c.pic_name as customer_name 
+        `SELECT so.*, c.company_name as customer_company, c.pic_name as customer_name, COALESCE(so.customer_tax_category, c.tax_category, 'PKP') as customer_tax_category 
          FROM sales_orders so 
          LEFT JOIN customers c ON so.customer_id = c.id 
          ORDER BY so.order_date DESC`
@@ -202,11 +202,13 @@ export async function POST(req: NextRequest) {
     const soNumber = await generateNextSONumber();
     const orderDate = new Date().toISOString();
 
+    const customerTaxCategory = customer?.tax_category || 'PKP';
+
     try {
       await executeQuery(
         `INSERT INTO sales_orders 
-        (id, so_number, customer_id, courier_id, status, payment_method, shipping_type, shipping_cost, total_goods_amount, grand_total, order_date)
-        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, ?)`,
+        (id, so_number, customer_id, courier_id, status, payment_method, shipping_type, shipping_cost, total_goods_amount, grand_total, order_date, customer_tax_category)
+        VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, ?, ?)`,
         [
           soId,
           soNumber,
@@ -218,6 +220,7 @@ export async function POST(req: NextRequest) {
           totalGoodsAmount,
           grandTotal,
           orderDate,
+          customerTaxCategory,
         ]
       );
 

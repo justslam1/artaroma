@@ -256,6 +256,7 @@ export function CustomerOrderDetailModal({
                       (sum, item) => sum + (Number(item.subtotal) || 0),
                       0
                     );
+                    const isNonPKP = order.customer_tax_category === 'NON_PKP';
                     const ppnAmount = Math.round(rawGoodsTotal * 0.11);
                     const shippingCost = Number(order.shipping_cost) || 0;
                     const totalInvoice = Number(order.grand_total) || (rawGoodsTotal + ppnAmount + shippingCost);
@@ -272,26 +273,28 @@ export function CustomerOrderDetailModal({
                         </tr>
                         <tr className="bg-slate-50/80 border-t border-gray-100">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
-                            Total Nilai Barang (DPP):
+                            {isNonPKP ? 'Total Nilai Barang (Inc. Pajak):' : 'Total Nilai Barang (DPP):'}
                           </td>
                           <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
-                            {formatIDR(rawGoodsTotal)}
+                            {formatIDR(isNonPKP ? rawGoodsTotal + ppnAmount : rawGoodsTotal)}
                           </td>
                         </tr>
-                        <tr className="bg-slate-50/80 border-t border-gray-100">
-                          <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
-                            PPN 11%:
-                          </td>
-                          <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
-                            {isConfirmedOrLater ? (
-                              formatIDR(ppnAmount)
-                            ) : (
-                              <span className="text-amber-600 font-sans text-[11px] italic font-normal">
-                                Dihitung saat Invoice Terbit
-                              </span>
-                            )}
-                          </td>
-                        </tr>
+                        {!isNonPKP && (
+                          <tr className="bg-slate-50/80 border-t border-gray-100">
+                            <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
+                              PPN 11%:
+                            </td>
+                            <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 text-xs">
+                              {isConfirmedOrLater ? (
+                                formatIDR(ppnAmount)
+                              ) : (
+                                <span className="text-amber-600 font-sans text-[11px] italic font-normal">
+                                  Dihitung saat Invoice Terbit
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        )}
                         <tr className="bg-slate-50/80 border-t border-gray-100">
                           <td colSpan={3} className="px-4 py-2 text-slate-600 text-right text-xs font-semibold">
                             Ongkos Kirim ({order.shipping_type || 'Kurir'}):
