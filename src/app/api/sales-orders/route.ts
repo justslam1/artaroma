@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     let orders: any[] = [];
     try {
       orders = await executeQuery<any[]>(
-        `SELECT so.*, c.company_name as customer_company, c.pic_name as customer_name, COALESCE(so.customer_tax_category, c.tax_category, 'PKP') as customer_tax_category 
+        `SELECT so.*, c.company_name as customer_company, c.pic_name as customer_name 
          FROM sales_orders so 
          LEFT JOIN customers c ON so.customer_id = c.id 
          ORDER BY so.order_date DESC`
@@ -17,18 +17,29 @@ export async function GET(req: NextRequest) {
       if (!orders) {
         orders = [];
       } else if (orders.length > 0) {
-        // Load child items from so_items for each order
+        // Load child items from so_items for each order & normalize fields
         for (let i = 0; i < orders.length; i++) {
-          const items = await executeQuery(
-            'SELECT * FROM so_items WHERE so_id = ?',
-            [orders[i].id]
-          );
-          orders[i].items = items || [];
+          const o = orders[i];
+          o.customer_tax_category = o.customer_tax_category || 'PKP';
+          o.discount_percent = Number(o.discount_percent || 0);
+          o.discount_amount = Number(o.discount_amount || 0);
+          try {
+            const items = await executeQuery(
+              'SELECT * FROM so_items WHERE so_id = ?',
+              [o.id]
+            );
+            o.items = items || [];
+          } catch {
+            o.items = o.items || [];
+          }
         }
       }
-    } catch (dbErr) {
-      console.warn('DB sales-orders query failed:', dbErr);
-      orders = [];
+    } catch (dbErr: any) {
+      console.warn('DB sales-orders query failed:', dbErr.message);
+      return NextResponse.json(
+        { success: false, message: `Database query failed: ${dbErr.message}`, data: [] },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -38,7 +49,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, message: error.message || 'Internal Server Error' },
+      { success: false, message: error.message || 'Internal Server Error', data: [] },
       { status: 500 }
     );
   }

@@ -57,6 +57,9 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
         { col: 'cancellation_reason', sql: "ALTER TABLE sales_orders ADD COLUMN cancellation_reason TEXT DEFAULT NULL" },
         { col: 'cancelled_at', sql: "ALTER TABLE sales_orders ADD COLUMN cancelled_at VARCHAR(100) DEFAULT NULL" },
         { col: 'cancelled_by', sql: "ALTER TABLE sales_orders ADD COLUMN cancelled_by VARCHAR(100) DEFAULT NULL" },
+        { col: 'customer_tax_category', sql: "ALTER TABLE sales_orders ADD COLUMN customer_tax_category ENUM('PKP', 'NON_PKP') NOT NULL DEFAULT 'PKP'" },
+        { col: 'discount_percent', sql: "ALTER TABLE sales_orders ADD COLUMN discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00" },
+        { col: 'discount_amount', sql: "ALTER TABLE sales_orders ADD COLUMN discount_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00" },
       ];
 
       for (const m of soMigrations) {
@@ -80,6 +83,24 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
         }
         if (!invColNames.has('shipping_cost')) {
           await conn.query("ALTER TABLE invoices ADD COLUMN shipping_cost DECIMAL(15,2) DEFAULT 0.00");
+        }
+        if (!invColNames.has('customer_tax_category')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN customer_tax_category ENUM('PKP', 'NON_PKP') NOT NULL DEFAULT 'PKP'");
+        }
+        if (!invColNames.has('is_tax_inclusive')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN is_tax_inclusive TINYINT(1) NOT NULL DEFAULT 0");
+        }
+        if (!invColNames.has('dpp_amount')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN dpp_amount DECIMAL(15,2) NULL");
+        }
+        if (!invColNames.has('ppn_amount')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN ppn_amount DECIMAL(15,2) NULL");
+        }
+        if (!invColNames.has('discount_percent')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00");
+        }
+        if (!invColNames.has('discount_amount')) {
+          await conn.query("ALTER TABLE invoices ADD COLUMN discount_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00");
         }
       } catch (e: any) {
         console.warn('[Schema Migration Invoices Warning]:', e.message);
@@ -136,6 +157,8 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
           { col: 'delivery_notes', sql: "ALTER TABLE customers ADD COLUMN delivery_notes TEXT DEFAULT NULL" },
           { col: 'is_active', sql: "ALTER TABLE customers ADD COLUMN is_active TINYINT(1) DEFAULT 1" },
           { col: 'password', sql: "ALTER TABLE customers ADD COLUMN password VARCHAR(255) DEFAULT 'Artaroma2026!'" },
+          { col: 'tax_category', sql: "ALTER TABLE customers ADD COLUMN tax_category ENUM('PKP', 'NON_PKP') NOT NULL DEFAULT 'PKP'" },
+          { col: 'nppkp', sql: "ALTER TABLE customers ADD COLUMN nppkp VARCHAR(50) NULL" },
         ];
 
         for (const m of custMigrations) {
