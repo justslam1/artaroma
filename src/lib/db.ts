@@ -348,6 +348,55 @@ export async function ensureSchemaMigrations(force = false): Promise<void> {
         console.warn('[Schema Migration Price Logs Warning]:', e.message);
       }
 
+      // 2h. Ensure stock_repackage_logs table exists with scale weight & QC columns
+      try {
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS stock_repackage_logs (
+            id VARCHAR(50) PRIMARY KEY,
+            product_id VARCHAR(50) NOT NULL,
+            source_batch_id VARCHAR(50) NOT NULL,
+            source_pack_size DECIMAL(10,2) NOT NULL,
+            target_pack_size DECIMAL(10,2) NOT NULL,
+            qty_processed_kg DECIMAL(10,3) NOT NULL,
+            units_created INT NOT NULL,
+            loss_kg DECIMAL(10,3) DEFAULT 0.000,
+            loss_percentage DECIMAL(5,2) DEFAULT 0.00,
+            weight_before_kg DECIMAL(10,3) DEFAULT NULL,
+            weight_remaining_source_kg DECIMAL(10,3) DEFAULT NULL,
+            weight_after_kg DECIMAL(10,3) DEFAULT NULL,
+            scale_notes TEXT DEFAULT NULL,
+            scale_operator VARCHAR(100) DEFAULT NULL,
+            processed_by VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+
+        const [srlCols]: any = await conn.query('SHOW COLUMNS FROM stock_repackage_logs');
+        const srlColNames = new Set(srlCols.map((c: any) => c.Field.toLowerCase()));
+
+        const srlMigrations = [
+          { col: 'loss_percentage', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN loss_percentage DECIMAL(5,2) DEFAULT 0.00" },
+          { col: 'weight_before_kg', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN weight_before_kg DECIMAL(10,3) DEFAULT NULL" },
+          { col: 'weight_remaining_source_kg', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN weight_remaining_source_kg DECIMAL(10,3) DEFAULT NULL" },
+          { col: 'weight_after_kg', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN weight_after_kg DECIMAL(10,3) DEFAULT NULL" },
+          { col: 'scale_notes', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN scale_notes TEXT DEFAULT NULL" },
+          { col: 'scale_operator', sql: "ALTER TABLE stock_repackage_logs ADD COLUMN scale_operator VARCHAR(100) DEFAULT NULL" },
+        ];
+
+        for (const m of srlMigrations) {
+          if (!srlColNames.has(m.col.toLowerCase())) {
+            try {
+              await conn.query(m.sql);
+              console.log(`[Schema Migration] Added column stock_repackage_logs.${m.col}`);
+            } catch (e: any) {
+              console.warn(`[Schema Migration Warning] stock_repackage_logs.${m.col}:`, e.message);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Schema Migration stock_repackage_logs Warning]:', e.message);
+      }
+
       // 3. Ensure operational_logs table exists
       try {
         await conn.query(`

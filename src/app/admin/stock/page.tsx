@@ -38,6 +38,8 @@ import {
   Sparkles,
   Filter,
   Tag,
+  Scale,
+  History,
 } from 'lucide-react';
 import { exportStockInventoryToXLSX } from '@/lib/export-excel';
 import { canUserExportXLSX } from '@/lib/auth';
@@ -121,12 +123,17 @@ export default function StockInventoryPage() {
   // Mode Repack: 'SINGLE' (Pecah 1 Batch) | 'MULTI' (Gabung Banyak Batch Berbeda)
   const [repackMode, setRepackMode] = useState<'SINGLE' | 'MULTI'>('SINGLE');
 
-  // Form State for Single Repacking Varian Stok
+  // Form State for Single Repacking Varian Stok (dengan Pencatatan Timbangan Opsi A)
   const [repackForm, setRepackForm] = useState({
     source_batch_id: '',
     target_pack_size: 1,
     repack_qty_kg: 1.0,
     loss_kg: 0.0,
+    weight_before_kg: '', // Berat kotor wadah asal sebelum penuangan
+    weight_remaining_source_kg: '', // Berat sisa wadah asal sesudah penuangan
+    weight_after_kg: '', // Berat riil total kemasan baru hasil repack
+    scale_notes: '',
+    scale_operator: '',
   });
 
   // Form State for Multi-Batch Repacking (Kombinasi / Blending)
@@ -135,8 +142,46 @@ export default function StockInventoryPage() {
     target_pack_size: 5,
     new_batch_number: '',
     selectedSources: {} as Record<string, number>, // batchId -> qty_kg
+    weight_before_kg: '',
+    weight_after_kg: '',
+    scale_notes: '',
+    scale_operator: '',
   });
   const [isRepackingSubmitting, setIsRepackingSubmitting] = useState(false);
+
+  // Riwayat Repack & Hasil Timbangan State
+  const [isRepackHistoryOpen, setIsRepackHistoryOpen] = useState(false);
+  const [repackHistory, setRepackHistory] = useState<any[]>([]);
+  const [isLoadingRepackHistory, setIsLoadingRepackHistory] = useState(false);
+
+  // Helper Toleransi Susut Berjenjang berdasarkan Kemasan Hasil
+  const getRepackTolerance = (targetPackSize: number) => {
+    if (targetPackSize === 1) {
+      return { maxPct: 1.0, label: 'Maks. 1.0% (Botol 1 Kg)' };
+    }
+    if (targetPackSize === 5) {
+      return { maxPct: 0.6, label: 'Maks. 0.6% (Jerigen 5 Kg)' };
+    }
+    if (targetPackSize === 25) {
+      return { maxPct: 0.3, label: 'Maks. 0.3% (Drum 25 Kg)' };
+    }
+    return { maxPct: 0.5, label: 'Maks. 0.5%' };
+  };
+
+  const fetchRepackHistory = async () => {
+    setIsLoadingRepackHistory(true);
+    try {
+      const res = await fetch('/api/stock-batches/repack', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setRepackHistory(json.data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch repack history:', err);
+    } finally {
+      setIsLoadingRepackHistory(false);
+    }
+  };
 
   // Stock Disposal Modal State
   const [isDisposalOpen, setIsDisposalOpen] = useState(false);
@@ -663,6 +708,20 @@ export default function StockInventoryPage() {
         }
       }
 
+      // Hitung toleransi susut multi-batch jika timbangan diisi
+      const weightBefore = multiRepackForm.weight_before_kg ? Number(multiRepackForm.weight_before_kg) : totalInputKg;
+      const weightAfter = multiRepackForm.weight_after_kg ? Number(multiRepackForm.weight_after_kg) : totalInputKg;
+      const lossKg = Math.max(0, weightBefore - weightAfter);
+      const lossPct = weightBefore > 0 ? (lossKg / weightBefore) * 100 : 0;
+      const tol = getRepackTolerance(targetPackSize);
+
+      if (lossPct > tol.maxPct * 1.5 && (!multiRepackForm.scale_notes || !multiRepackForm.scale_notes.trim())) {
+        alert(
+          `⚠️ Peringatan QC Timbangan:\nSusut penimbangan (${lossPct.toFixed(2)}%) melebihi ambang batas toleransi wajar kemasan ${targetPackSize} Kg (${tol.maxPct}%).\n\nHarap lengkapi alasan/catatan pada kolom Catatan Hasil Timbangan sebelum melanjutkan.`
+        );
+        return;
+      }
+
       setIsRepackingSubmitting(true);
       try {
         const res = await fetch('/api/stock-batches/repack', {
@@ -674,7 +733,12 @@ export default function StockInventoryPage() {
             target_pack_size: targetPackSize,
             new_batch_number: multiRepackForm.new_batch_number,
             sources: activeSources,
-            loss_kg: 0,
+            loss_kg: Number(lossKg.toFixed(2)),
+            loss_percentage: Number(lossPct.toFixed(2)),
+            weight_before_kg: multiRepackForm.weight_before_kg ? Number(multiRepackForm.weight_before_kg) : null,
+            weight_after_kg: multiRepackForm.weight_after_kg ? Number(multiRepackForm.weight_after_kg) : null,
+            scale_notes: multiRepackForm.scale_notes || null,
+            scale_operator: multiRepackForm.scale_operator || currentUser?.name || 'Staf Gudang',
           }),
         });
 
@@ -713,6 +777,26 @@ export default function StockInventoryPage() {
         return;
       }
 
+      const targetPackSize = Number(repackForm.target_pack_size);
+
+      // Hitung berat keluar dari timbangan wadah sebelum & sisa wadah (Opsi A)
+      let grossTaken = 0;
+      if (repackForm.weight_before_kg && repackForm.weight_remaining_source_kg) {
+        grossTaken = Math.max(0, Number(repackForm.weight_before_kg) - Number(repackForm.weight_remaining_source_kg));
+      }
+      const actualProcessed = grossTaken > 0 ? grossTaken : qty;
+      const weightAfter = repackForm.weight_after_kg ? Number(repackForm.weight_after_kg) : actualProcessed;
+      const lossKg = Math.max(0, actualProcessed - weightAfter);
+      const lossPct = actualProcessed > 0 ? (lossKg / actualProcessed) * 100 : 0;
+      const tol = getRepackTolerance(targetPackSize);
+
+      if (lossPct > tol.maxPct * 1.5 && (!repackForm.scale_notes || !repackForm.scale_notes.trim())) {
+        alert(
+          `⚠️ Peringatan QC Timbangan:\nSusut penimbangan (${lossPct.toFixed(2)}%) melebihi ambang batas toleransi wajar kemasan ${targetPackSize} Kg (${tol.maxPct}%).\n\nHarap lengkapi alasan/catatan pada kolom Catatan Hasil Timbangan sebelum melanjutkan.`
+        );
+        return;
+      }
+
       setIsRepackingSubmitting(true);
       try {
         const res = await fetch('/api/stock-batches/repack', {
@@ -721,9 +805,15 @@ export default function StockInventoryPage() {
           body: JSON.stringify({
             mode: 'SINGLE',
             source_batch_id: repackForm.source_batch_id,
-            target_pack_size: Number(repackForm.target_pack_size),
+            target_pack_size: targetPackSize,
             repack_qty_kg: qty,
-            loss_kg: 0,
+            loss_kg: Number(lossKg.toFixed(2)),
+            loss_percentage: Number(lossPct.toFixed(2)),
+            weight_before_kg: repackForm.weight_before_kg ? Number(repackForm.weight_before_kg) : null,
+            weight_remaining_source_kg: repackForm.weight_remaining_source_kg ? Number(repackForm.weight_remaining_source_kg) : null,
+            weight_after_kg: repackForm.weight_after_kg ? Number(repackForm.weight_after_kg) : null,
+            scale_notes: repackForm.scale_notes || null,
+            scale_operator: repackForm.scale_operator || currentUser?.name || 'Staf Gudang',
           }),
         });
 
@@ -861,13 +951,29 @@ export default function StockInventoryPage() {
                       target_pack_size: 1,
                       repack_qty_kg: 1.0,
                       loss_kg: 0.0,
+                      weight_before_kg: '',
+                      weight_remaining_source_kg: '',
+                      weight_after_kg: '',
+                      scale_notes: '',
+                      scale_operator: currentUser?.name || '',
                     });
                   }
                   setIsRepackOpen(true);
                 }}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all"
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow flex items-center gap-2 transition-all cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" /> 3. Repack Varian Stok
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  fetchRepackHistory();
+                  setIsRepackHistoryOpen(true);
+                }}
+                className="bg-slate-700 hover:bg-slate-800 text-purple-200 hover:text-white text-xs font-bold px-3 py-2.5 rounded-xl border border-purple-400/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Lihat riwayat proses repack dan catatan hasil timbangan sebelum & sesudah"
+              >
+                <Scale className="w-4 h-4 text-purple-300" /> Log Timbangan Repack
               </button>
               <Link
                 href="/admin/sales-orders"
@@ -2187,10 +2293,10 @@ export default function StockInventoryPage() {
 
       {/* MODAL 4: REPACK VARIAN STOK (SINGLE & MULTI-BATCH BLENDING) */}
       {isRepackOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8 animate-in fade-in">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in">
             {/* Modal Header */}
-            <div className="bg-purple-700 px-6 py-4 flex items-center justify-between text-white">
+            <div className="bg-purple-700 px-6 py-4 flex items-center justify-between text-white shrink-0">
               <div className="flex items-center gap-2.5">
                 <RotateCcw className="w-5 h-5 text-purple-200" />
                 <div>
@@ -2198,17 +2304,17 @@ export default function StockInventoryPage() {
                   <p className="text-xs text-purple-200">Pecah kemasan besar atau gabungkan sisa batch (Multi-Batch Blending)</p>
                 </div>
               </div>
-              <button onClick={() => setIsRepackOpen(false)} className="text-purple-200 hover:text-white p-1 rounded-lg">
+              <button onClick={() => setIsRepackOpen(false)} className="text-purple-200 hover:text-white p-1 rounded-lg cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Mode Tab Switcher */}
-            <div className="flex border-b border-purple-100 bg-purple-50/50 p-1.5 gap-1.5">
+            <div className="flex border-b border-purple-100 bg-purple-50/50 p-1.5 gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setRepackMode('SINGLE')}
-                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   repackMode === 'SINGLE'
                     ? 'bg-purple-700 text-white shadow-sm'
                     : 'bg-transparent text-purple-800 hover:bg-purple-100/60'
@@ -2225,6 +2331,7 @@ export default function StockInventoryPage() {
                     if (firstProd) {
                       const autoBatch = `RPK-${firstProd.sku || 'MIX'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
                       setMultiRepackForm({
+                        ...multiRepackForm,
                         product_id: firstProd.id,
                         target_pack_size: 5,
                         new_batch_number: autoBatch,
@@ -2233,7 +2340,7 @@ export default function StockInventoryPage() {
                     }
                   }
                 }}
-                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   repackMode === 'MULTI'
                     ? 'bg-purple-700 text-white shadow-sm'
                     : 'bg-transparent text-purple-800 hover:bg-purple-100/60'
@@ -2243,7 +2350,7 @@ export default function StockInventoryPage() {
               </button>
             </div>
 
-            <form onSubmit={handleRepackSubmit} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleRepackSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
               {repackMode === 'MULTI' ? (
                 /* ───────────────────────────────────────────────────────────── */
                 /* MODE MULTI-BATCH (BLENDING / GABUNG BATCH BERBEDA)            */
@@ -2471,6 +2578,89 @@ export default function StockInventoryPage() {
                       </div>
                     );
                   })()}
+
+                  {/* 6. Catatan Timbangan Sebelum & Sesudah Repack Gabungan */}
+                  <div className="bg-gradient-to-br from-purple-50/70 via-white to-indigo-50/60 border border-purple-200 rounded-2xl p-4 space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-purple-100">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-purple-600 text-white rounded-lg shadow-sm">
+                          <Scale className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-xs">Pencatatan Hasil Timbangan Digital &amp; QC Susut (Gabung Batch)</h4>
+                          <p className="text-[10px] text-slate-500">Timbang wadah sebelum &amp; sesudah blending/repack untuk kontrol akurasi stok</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                        {getRepackTolerance(Number(multiRepackForm.target_pack_size)).label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                        <label className="font-bold text-slate-700 flex items-center justify-between">
+                          <span>1. Total Bahan Sebelum Repack</span>
+                          <span className="text-[9px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded">Timbangan Awal</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={multiRepackForm.weight_before_kg}
+                            onChange={(e) => setMultiRepackForm({ ...multiRepackForm, weight_before_kg: e.target.value })}
+                            placeholder="Opsional / Default estimasi"
+                            className="w-full bg-slate-50 border border-gray-300 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-800 pr-8"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">Kg</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                        <label className="font-bold text-slate-700 flex items-center justify-between">
+                          <span>2. Berat Riil Total Hasil Kemasan Baru</span>
+                          <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Produk Jadi</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={multiRepackForm.weight_after_kg}
+                            onChange={(e) => setMultiRepackForm({ ...multiRepackForm, weight_after_kg: e.target.value })}
+                            placeholder="Contoh: 15.00"
+                            className="w-full bg-slate-50 border border-gray-300 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-800 pr-8"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">Kg</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-1 space-y-1">
+                        <label className="font-bold text-slate-700 block text-[11px]">Petugas Penimbang (QC)</label>
+                        <input
+                          type="text"
+                          value={multiRepackForm.scale_operator || currentUser?.name || ''}
+                          onChange={(e) => setMultiRepackForm({ ...multiRepackForm, scale_operator: e.target.value })}
+                          placeholder="Nama Operator Timbangan"
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-medium text-xs text-slate-800"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="font-bold text-slate-700 block text-[11px]">
+                          Catatan Hasil Timbangan &amp; Kondisi Penimbangan
+                        </label>
+                        <input
+                          type="text"
+                          value={multiRepackForm.scale_notes}
+                          onChange={(e) => setMultiRepackForm({ ...multiRepackForm, scale_notes: e.target.value })}
+                          placeholder="Contoh: Tera timbangan digital normal..."
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-medium text-xs text-slate-800"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 /* ───────────────────────────────────────────────────────────── */
@@ -2599,15 +2789,213 @@ export default function StockInventoryPage() {
                       </div>
                     );
                   })()}
+
+                  {/* 5. Catatan Timbangan Sebelum & Sesudah Repack (Opsi A - QC Susut) */}
+                  <div className="bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/60 border border-indigo-200 rounded-2xl p-4 space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-sm">
+                          <Scale className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-xs">Pencatatan Hasil Timbangan Digital &amp; QC Susut (Opsi A)</h4>
+                          <p className="text-[10px] text-slate-500">Timbang wadah sebelum &amp; sesudah penuangan untuk kontrol akurasi stok fisik</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                        {getRepackTolerance(Number(repackForm.target_pack_size)).label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Timbangan Sebelum Repack */}
+                      <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                        <label className="font-bold text-slate-700 flex items-center justify-between">
+                          <span>1. Timbangan Sebelum Repack</span>
+                          <span className="text-[9px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded">Wadah Awal (Gross)</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={repackForm.weight_before_kg}
+                            onChange={(e) => setRepackForm({ ...repackForm, weight_before_kg: e.target.value })}
+                            placeholder="Contoh: 25.40"
+                            className="w-full bg-slate-50 border border-gray-300 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-800 pr-8"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">Kg</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Timbang drum/wadah induk di atas timbangan digital sebelum penuangan cairan.
+                        </p>
+                      </div>
+
+                      {/* Timbangan Sesudah Repack */}
+                      <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                        <label className="font-bold text-slate-700 flex items-center justify-between">
+                          <span>2. Timbangan Sisa Wadah Asal</span>
+                          <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded">Sisa di Drum</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={repackForm.weight_remaining_source_kg}
+                            onChange={(e) => setRepackForm({ ...repackForm, weight_remaining_source_kg: e.target.value })}
+                            placeholder="Contoh: 20.37"
+                            className="w-full bg-slate-50 border border-gray-300 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-800 pr-8"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">Kg</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Timbang kembali drum asal setelah penuangan selesai.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Timbangan Hasil Kemasan Baru (Produk Jadi) */}
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">
+                          3. Berat Riil Total Hasil Kemasan Baru ({repackForm.target_pack_size} Kg)
+                        </label>
+                        <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Produk Jadi</span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={repackForm.weight_after_kg}
+                          onChange={(e) => setRepackForm({ ...repackForm, weight_after_kg: e.target.value })}
+                          placeholder={`Contoh: ${Number(repackForm.repack_qty_kg || 1).toFixed(2)}`}
+                          className="w-full bg-slate-50 border border-gray-300 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-800 pr-8"
+                        />
+                        <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">Kg</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        Total berat bersih cairan dari seluruh botol/jerigen baru hasil repack.
+                      </p>
+                    </div>
+
+                    {/* Real-Time Live Calculation & Status Susut */}
+                    {(() => {
+                      const before = Number(repackForm.weight_before_kg) || 0;
+                      const remaining = Number(repackForm.weight_remaining_source_kg) || 0;
+                      const grossTaken = (before > 0 && remaining > 0) ? Math.max(0, before - remaining) : 0;
+                      const processedKg = grossTaken > 0 ? grossTaken : Number(repackForm.repack_qty_kg || 0);
+                      const afterKg = Number(repackForm.weight_after_kg) || processedKg;
+                      const lossKg = Math.max(0, processedKg - afterKg);
+                      const lossPct = processedKg > 0 ? (lossKg / processedKg) * 100 : 0;
+                      const targetSize = Number(repackForm.target_pack_size);
+                      const tol = getRepackTolerance(targetSize);
+
+                      const isNormal = lossPct <= tol.maxPct;
+                      const isWarning = lossPct > tol.maxPct && lossPct <= tol.maxPct * 1.5;
+                      const isAbnormal = lossPct > tol.maxPct * 1.5;
+
+                      return (
+                        <div className={`p-3.5 rounded-xl border transition-all ${
+                          isAbnormal
+                            ? 'bg-rose-50 border-rose-200 text-rose-900'
+                            : isWarning
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
+                            : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                        }`}>
+                          <div className="flex items-center justify-between font-bold text-[11px] mb-2">
+                            <span className="flex items-center gap-1.5">
+                              {isAbnormal ? (
+                                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                              ) : isWarning ? (
+                                <AlertCircle className="w-4 h-4 text-amber-600" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              )}
+                              <span>
+                                {isAbnormal
+                                  ? 'Susut Melebihi Batas Toleransi Wajar!'
+                                  : isWarning
+                                  ? 'Susut Sedikit Di Atas Batas Normal (Perhatian)'
+                                  : 'Susut Normal & Sesuai Standar QC'}
+                              </span>
+                            </span>
+                            <span className="font-mono text-xs">
+                              {lossKg > 0 ? `-${lossKg.toFixed(2)} Kg (${lossPct.toFixed(2)}%)` : '0.00 Kg (0%)'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] pt-2 border-t border-current/10 font-medium">
+                            <div>
+                              <span className="opacity-75 block">Bahan Keluar:</span>
+                              <span className="font-bold font-mono text-xs">{processedKg.toFixed(2)} Kg</span>
+                            </div>
+                            <div>
+                              <span className="opacity-75 block">Hasil Kemasan:</span>
+                              <span className="font-bold font-mono text-xs">{afterKg.toFixed(2)} Kg</span>
+                            </div>
+                            <div>
+                              <span className="opacity-75 block">Toleransi {targetSize} Kg:</span>
+                              <span className="font-bold font-mono text-xs">Maks. {tol.maxPct}%</span>
+                            </div>
+                            <div>
+                              <span className="opacity-75 block">Status QC:</span>
+                              <span className={`font-bold uppercase text-[9px] px-1.5 py-0.5 rounded inline-block ${
+                                isAbnormal
+                                  ? 'bg-rose-600 text-white'
+                                  : isWarning
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}>
+                                {isAbnormal ? 'Wajib Alasan' : isWarning ? 'Perhatian' : 'Lolos QC'}
+                              </span>
+                            </div>
+                          </div>
+                          {isAbnormal && (
+                            <p className="text-[10px] text-rose-700 mt-2 font-bold flex items-center gap-1">
+                              * Wajib mencantumkan alasan selisih pada kolom Catatan Timbangan di bawah.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Operator & Catatan Timbangan */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-1 space-y-1">
+                        <label className="font-bold text-slate-700 block text-[11px]">Petugas Penimbang (QC)</label>
+                        <input
+                          type="text"
+                          value={repackForm.scale_operator || currentUser?.name || ''}
+                          onChange={(e) => setRepackForm({ ...repackForm, scale_operator: e.target.value })}
+                          placeholder="Nama Operator Timbangan"
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-medium text-xs text-slate-800"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="font-bold text-slate-700 block text-[11px]">
+                          Catatan Hasil Timbangan &amp; Kondisi Penimbangan
+                        </label>
+                        <input
+                          type="text"
+                          value={repackForm.scale_notes}
+                          onChange={(e) => setRepackForm({ ...repackForm, scale_notes: e.target.value })}
+                          placeholder="Contoh: Tera timbangan normal, residu menempel di corong penuangan..."
+                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-medium text-xs text-slate-800"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+              {/* Action Buttons (Sticky at bottom) */}
+              <div className="sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 bg-slate-50/95 backdrop-blur-sm px-6 py-3.5 border-t border-gray-200 flex justify-end gap-3 mt-4 shrink-0 shadow-sm z-20">
                 <button
                   type="button"
                   onClick={() => setIsRepackOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
@@ -2628,6 +3016,217 @@ export default function StockInventoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4B: RIWAYAT REPACK & LOG TIMBANGAN DIGITAL */}
+      {isRepackHistoryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-2xl max-w-5xl w-full shadow-2xl overflow-hidden my-8 animate-in fade-in flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 px-6 py-4 flex items-center justify-between text-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-600 rounded-xl shadow">
+                  <Scale className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base flex items-center gap-2">
+                    Riwayat Repack &amp; Log Timbangan Digital
+                    <span className="text-[10px] bg-purple-500/30 text-purple-200 border border-purple-400/30 px-2 py-0.5 rounded-full font-mono">
+                      QC Audit Gudang
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300">Catatan penimbangan wadah sebelum &amp; sesudah repack, susut/residu, dan operator QC</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchRepackHistory}
+                  disabled={isLoadingRepackHistory}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Muat ulang riwayat"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isLoadingRepackHistory ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+                <button
+                  onClick={() => setIsRepackHistoryOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
+              {isLoadingRepackHistory ? (
+                <div className="py-20 text-center space-y-3">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-purple-600" />
+                  <p className="text-slate-500 font-medium">Memuat data log timbangan repack...</p>
+                </div>
+              ) : repackHistory.length === 0 ? (
+                <div className="py-16 text-center space-y-3 bg-slate-50 rounded-2xl border border-dashed border-gray-200">
+                  <Scale className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div className="font-bold text-slate-700">Belum Ada Riwayat Repack Tersimpan</div>
+                  <p className="text-slate-400 max-w-sm mx-auto text-[11px]">
+                    Setiap proses repack varian dan penimbangan digital yang dilakukan staf gudang akan tercatat di sini secara otomatis.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Summary Bar */}
+                  {(() => {
+                    const totalLogs = repackHistory.length;
+                    const totalQty = repackHistory.reduce((acc, l) => acc + Number(l.qty_processed_kg || 0), 0);
+                    const totalLoss = repackHistory.reduce((acc, l) => acc + Number(l.loss_kg || 0), 0);
+                    const avgLossPct = totalQty > 0 ? ((totalLoss / totalQty) * 100).toFixed(2) : '0.00';
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 border border-gray-200 rounded-xl p-3">
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Total Transaksi:</span>
+                          <div className="font-extrabold text-slate-800 text-sm">{totalLogs} Kali</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Total Di-repack:</span>
+                          <div className="font-extrabold text-purple-700 font-mono text-sm">{formatKg(totalQty)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Total Susut Tercatat:</span>
+                          <div className="font-extrabold text-amber-700 font-mono text-sm">{formatKg(totalLoss)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Rata-rata Susut:</span>
+                          <div className="font-extrabold text-slate-800 font-mono text-sm">{avgLossPct}%</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Table */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left divide-y divide-gray-200">
+                        <thead className="bg-slate-100/80 text-[11px] font-bold text-slate-600">
+                          <tr>
+                            <th className="py-3 px-3.5">Waktu &amp; Operator</th>
+                            <th className="py-3 px-3.5">Produk &amp; Batch Asal</th>
+                            <th className="py-3 px-3.5">Hasil Repack</th>
+                            <th className="py-3 px-3.5 text-right">Timbangan Sebelum</th>
+                            <th className="py-3 px-3.5 text-right">Timbangan Sesudah</th>
+                            <th className="py-3 px-3.5 text-right">Susut / Selisih</th>
+                            <th className="py-3 px-3.5">Catatan QC</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white text-slate-700 text-xs">
+                          {repackHistory.map((item) => {
+                            const lossKg = Number(item.loss_kg || 0);
+                            const lossPct = Number(item.loss_percentage || 0);
+                            const targetSize = Number(item.target_pack_size || 1);
+                            const tol = getRepackTolerance(targetSize);
+
+                            const isNormal = lossPct <= tol.maxPct;
+                            const isWarning = lossPct > tol.maxPct && lossPct <= tol.maxPct * 1.5;
+                            const isAbnormal = lossPct > tol.maxPct * 1.5;
+
+                            return (
+                              <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-3 px-3.5 whitespace-nowrap">
+                                  <div className="font-medium text-slate-800">
+                                    {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <span className="font-semibold text-purple-700">{item.scale_operator || item.processed_by || 'Staf Gudang'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <div className="font-bold text-slate-800">{item.product_name || 'Bibit Parfum'}</div>
+                                  <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                    <span className="text-blue-700 font-bold">{item.source_batch_number || item.source_batch_id}</span>
+                                    <span>({item.source_pack_size || 25} Kg)</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3.5 whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1 font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                                    Kemasan {item.target_pack_size} Kg
+                                  </span>
+                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                    {item.units_created > 0 ? `${item.units_created} unit dibuat` : `Total ${formatKg(item.qty_processed_kg)}`}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                  {item.weight_before_kg !== null && item.weight_before_kg !== undefined ? (
+                                    <>
+                                      <div className="font-mono font-bold text-slate-800">{Number(item.weight_before_kg).toFixed(2)} Kg</div>
+                                      {item.weight_remaining_source_kg !== null && (
+                                        <div className="text-[10px] text-slate-400 font-mono">
+                                          Sisa: {Number(item.weight_remaining_source_kg).toFixed(2)} Kg
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="font-mono text-slate-600">{Number(item.qty_processed_kg || 0).toFixed(2)} Kg</div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                  {item.weight_after_kg !== null && item.weight_after_kg !== undefined ? (
+                                    <div className="font-mono font-bold text-slate-800">{Number(item.weight_after_kg).toFixed(2)} Kg</div>
+                                  ) : (
+                                    <div className="font-mono text-slate-600">
+                                      {(Number(item.qty_processed_kg || 0) - lossKg).toFixed(2)} Kg
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                  <div className="font-mono font-bold text-xs text-slate-800">
+                                    {lossKg > 0 ? `-${lossKg.toFixed(2)} Kg` : '0.00 Kg'}
+                                  </div>
+                                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
+                                    isAbnormal
+                                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                      : isWarning
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  }`}>
+                                    {lossPct.toFixed(2)}% {isAbnormal ? '⚠️ Di Luar Batas' : isWarning ? '⚡ Perhatian' : '✓ Wajar'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3.5 max-w-xs text-[11px]">
+                                  {item.scale_notes ? (
+                                    <div className="text-slate-700 italic bg-slate-50 p-1.5 rounded border border-gray-100">
+                                      &ldquo;{item.scale_notes}&rdquo;
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[10px]">- Tidak ada catatan -</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-6 py-3 border-t border-gray-200 flex justify-between items-center text-xs shrink-0">
+              <span className="text-slate-500 text-[11px]">
+                Menampilkan maksimal 100 log repack terakhir dari database MySQL.
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsRepackHistoryOpen(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

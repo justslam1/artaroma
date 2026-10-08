@@ -5,6 +5,30 @@ import { verifyApiAuth } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+export async function GET(req: NextRequest) {
+  const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
+  if (auth.error) return auth.error;
+
+  try {
+    const logs = await executeQuery(`
+      SELECT 
+        l.*,
+        p.name AS product_name,
+        p.sku AS product_sku,
+        sb.batch_number AS source_batch_number
+      FROM stock_repackage_logs l
+      LEFT JOIN products p ON l.product_id = p.id
+      LEFT JOIN stock_batches sb ON l.source_batch_id = sb.id
+      ORDER BY l.created_at DESC
+      LIMIT 100
+    `);
+    return NextResponse.json({ success: true, data: logs || [] });
+  } catch (err: any) {
+    console.error('Error in GET /api/stock-batches/repack:', err);
+    return NextResponse.json({ success: false, message: err.message || 'Gagal memuat riwayat repack' }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const auth = await verifyApiAuth(req, ['Lihat Stok (Gudang)']);
   if (auth.error) return auth.error;
@@ -19,7 +43,14 @@ export async function POST(req: NextRequest) {
       new_batch_number,
       target_pack_size, // 1, 5, 25
       repack_qty_kg,     // for SINGLE mode
-      loss_kg = 0
+      loss_kg = 0,
+      // Scale measurement fields
+      weight_before_kg = null,
+      weight_remaining_source_kg = null,
+      weight_after_kg = null,
+      loss_percentage = null,
+      scale_notes = null,
+      scale_operator = null
     } = body;
 
     // Auto-create log table if it doesn't exist
@@ -31,9 +62,15 @@ export async function POST(req: NextRequest) {
           source_batch_id VARCHAR(50) NOT NULL,
           source_pack_size DECIMAL(10,2) NOT NULL,
           target_pack_size DECIMAL(10,2) NOT NULL,
-          qty_processed_kg DECIMAL(10,2) NOT NULL,
+          qty_processed_kg DECIMAL(10,3) NOT NULL,
           units_created INT NOT NULL,
-          loss_kg DECIMAL(10,2) DEFAULT 0.00,
+          loss_kg DECIMAL(10,3) DEFAULT 0.000,
+          loss_percentage DECIMAL(5,2) DEFAULT 0.00,
+          weight_before_kg DECIMAL(10,3) DEFAULT NULL,
+          weight_remaining_source_kg DECIMAL(10,3) DEFAULT NULL,
+          weight_after_kg DECIMAL(10,3) DEFAULT NULL,
+          scale_notes TEXT DEFAULT NULL,
+          scale_operator VARCHAR(100) DEFAULT NULL,
           processed_by VARCHAR(100) NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -157,10 +194,14 @@ export async function POST(req: NextRequest) {
 
           // Log per source batch
           const logId = `repack-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const calculatedLossPct = loss_percentage !== null && !isNaN(Number(loss_percentage))
+            ? Number(loss_percentage)
+            : (totalInputKg > 0 ? Number(((loss / totalInputKg) * 100).toFixed(2)) : 0);
+
           await conn.query(
             `INSERT INTO stock_repackage_logs 
-            (id, product_id, source_batch_id, source_pack_size, target_pack_size, qty_processed_kg, units_created, loss_kg, processed_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, product_id, source_batch_id, source_pack_size, target_pack_size, qty_processed_kg, units_created, loss_kg, loss_percentage, weight_before_kg, weight_remaining_source_kg, weight_after_kg, scale_notes, scale_operator, processed_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               logId,
               product_id,
@@ -169,8 +210,14 @@ export async function POST(req: NextRequest) {
               targetSize,
               src.qty_kg,
               0, // fractional units recorded
-              0,
-              'Warehouse Manager (Multi-Batch Repack)'
+              loss,
+              calculatedLossPct,
+              weight_before_kg !== null && weight_before_kg !== '' ? Number(weight_before_kg) : null,
+              weight_remaining_source_kg !== null && weight_remaining_source_kg !== '' ? Number(weight_remaining_source_kg) : null,
+              weight_after_kg !== null && weight_after_kg !== '' ? Number(weight_after_kg) : null,
+              scale_notes || null,
+              scale_operator || 'Warehouse Staff',
+              scale_operator || 'Warehouse Manager (Multi-Batch Repack)'
             ]
           );
         }
@@ -340,10 +387,14 @@ export async function POST(req: NextRequest) {
 
         // 4. Log the repack action
         const logId = `repack-${Date.now()}`;
+        const calculatedLossPct = loss_percentage !== null && !isNaN(Number(loss_percentage))
+          ? Number(loss_percentage)
+          : (qtyProcessed > 0 ? Number(((loss / qtyProcessed) * 100).toFixed(2)) : 0);
+
         await conn.query(
           `INSERT INTO stock_repackage_logs 
-          (id, product_id, source_batch_id, source_pack_size, target_pack_size, qty_processed_kg, units_created, loss_kg, processed_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, product_id, source_batch_id, source_pack_size, target_pack_size, qty_processed_kg, units_created, loss_kg, loss_percentage, weight_before_kg, weight_remaining_source_kg, weight_after_kg, scale_notes, scale_operator, processed_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             logId,
             sourceBatch.product_id,
@@ -353,7 +404,13 @@ export async function POST(req: NextRequest) {
             qtyProcessed,
             targetUnitCount,
             loss,
-            'Warehouse Manager'
+            calculatedLossPct,
+            weight_before_kg !== null && weight_before_kg !== '' ? Number(weight_before_kg) : null,
+            weight_remaining_source_kg !== null && weight_remaining_source_kg !== '' ? Number(weight_remaining_source_kg) : null,
+            weight_after_kg !== null && weight_after_kg !== '' ? Number(weight_after_kg) : null,
+            scale_notes || null,
+            scale_operator || 'Warehouse Staff',
+            scale_operator || 'Warehouse Manager'
           ]
         );
 
