@@ -11,7 +11,7 @@ export const INITIAL_CASH_ACCOUNTS: CashAccount[] = [
     initial_balance: 0,
     current_balance: 0,
     pic_name: 'Finance Treasury',
-    description: 'Rekening penerimaan utama tagihan invoice customer & pembayaran suplier',
+    description: 'Kas Besar - Rekening transfer utama invoice customer & suplier',
     badge_color: 'bg-blue-600',
     is_active: true,
   },
@@ -25,52 +25,30 @@ export const INITIAL_CASH_ACCOUNTS: CashAccount[] = [
     initial_balance: 0,
     current_balance: 0,
     pic_name: 'Finance Treasury',
-    description: 'Rekening giro penampungan transaksi B2B & pajak',
+    description: 'Kas Besar - Rekening giro transaksi B2B & pajak',
     badge_color: 'bg-amber-600',
     is_active: true,
   },
   {
     id: 'acc-pusat',
-    name: 'Kas Tunai Pusat',
+    name: 'Kas Tunai Customer (Brankas)',
     type: 'KAS_BESAR_TUNAI',
     initial_balance: 0,
     current_balance: 0,
     pic_name: 'Head of Finance',
-    description: 'Brankas kas tunai utama kantor pusat Artaroma',
+    description: 'Kas Besar - Brankas penerimaan tunai customer & transaksi tunai',
     badge_color: 'bg-emerald-700',
     is_active: true,
   },
   {
-    id: 'acc-kantor',
-    name: 'Kas Operasional Kantor',
-    type: 'KAS_KANTOR',
-    initial_balance: 0,
-    current_balance: 0,
-    pic_name: 'General Affair (GA)',
-    description: 'Biaya rutin bulanan listrik PLN, WiFi kantor, maintenance AC, & perbaikan sarana',
-    badge_color: 'bg-purple-600',
-    is_active: true,
-  },
-  {
     id: 'acc-petty',
-    name: 'Kas Kecil (Petty Cash)',
+    name: 'Kas Kecil Operasional',
     type: 'KAS_KECIL',
     initial_balance: 0,
     current_balance: 0,
-    pic_name: 'Staf Finance Kasir',
-    description: 'Pengeluaran mikro harian (< Rp 500rb): konsumsi, galon air, kurir darurat, & parkir',
+    pic_name: 'Finance & GA',
+    description: 'Kas Kecil - Biaya rutin kantor (listrik/WiFi/ATK) & operasional salesmen di lapangan',
     badge_color: 'bg-teal-600',
-    is_active: true,
-  },
-  {
-    id: 'acc-sales',
-    name: 'Kas Operasional Sales',
-    type: 'KAS_SALES',
-    initial_balance: 0,
-    current_balance: 0,
-    pic_name: 'Tim Sales B2B',
-    description: 'Dana jalan visit customer, BBM, akomodasi luar kota, & sampling aroma',
-    badge_color: 'bg-indigo-600',
     is_active: true,
   },
 ];
@@ -96,7 +74,89 @@ export function getStoredCashAccounts(): CashAccount[] {
       localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(INITIAL_CASH_ACCOUNTS));
       return INITIAL_CASH_ACCOUNTS;
     }
-    return JSON.parse(raw);
+    let list: CashAccount[] = JSON.parse(raw);
+
+    // Auto-migrate legacy Model (separate acc-kantor and acc-sales) into Model 1 (Unified Kas Kecil)
+    const legacyKantor = list.find((a) => a.id === 'acc-kantor');
+    const legacySales = list.find((a) => a.id === 'acc-sales');
+    if (legacyKantor || legacySales) {
+      let petty = list.find((a) => a.id === 'acc-petty');
+      if (!petty) {
+        petty = {
+          id: 'acc-petty',
+          name: 'Kas Kecil Operasional',
+          type: 'KAS_KECIL',
+          initial_balance: 0,
+          current_balance: 0,
+          pic_name: 'Finance & GA',
+          description: 'Kas Kecil - Biaya rutin kantor & operasional salesmen di lapangan',
+          badge_color: 'bg-teal-600',
+          is_active: true,
+        };
+        list.push(petty);
+      }
+      petty.name = 'Kas Kecil Operasional';
+      petty.description = 'Kas Kecil - Biaya rutin kantor & operasional salesmen di lapangan';
+
+      const kantorInit = Number(legacyKantor?.initial_balance) || 0;
+      const salesInit = Number(legacySales?.initial_balance) || 0;
+      petty.initial_balance = (Number(petty.initial_balance) || 0) + kantorInit + salesInit;
+
+      // Migrate any existing transactions pointing to acc-kantor or acc-sales
+      try {
+        const rawTxs = localStorage.getItem(STORAGE_KEY_TXS);
+        if (rawTxs) {
+          let txs: CashTransaction[] = JSON.parse(rawTxs);
+          let changed = false;
+          txs = txs.map((tx) => {
+            if (tx.account_id === 'acc-kantor') {
+              changed = true;
+              return {
+                ...tx,
+                account_id: 'acc-petty',
+                account_name: 'Kas Kecil Operasional',
+                category: tx.category || 'OPERASIONAL_KANTOR',
+                petty_sub_category: 'KANTOR' as const,
+              };
+            }
+            if (tx.account_id === 'acc-sales') {
+              changed = true;
+              return {
+                ...tx,
+                account_id: 'acc-petty',
+                account_name: 'Kas Kecil Operasional',
+                category: 'SALES_OPS' as const,
+                petty_sub_category: 'SALES' as const,
+              };
+            }
+            if (tx.account_id === 'acc-petty' && !tx.petty_sub_category) {
+              const sub = tx.category === 'SALES_OPS' ? ('SALES' as const) : ('KANTOR' as const);
+              return { ...tx, petty_sub_category: sub };
+            }
+            return tx;
+          });
+          if (changed) {
+            localStorage.setItem(STORAGE_KEY_TXS, JSON.stringify(txs));
+          }
+        }
+      } catch (err) {
+        console.error('Error migrating cash transactions:', err);
+      }
+
+      // Filter out removed legacy accounts
+      list = list.filter((a) => a.id !== 'acc-kantor' && a.id !== 'acc-sales');
+
+      // Update acc-pusat name if present
+      const pusat = list.find((a) => a.id === 'acc-pusat');
+      if (pusat) {
+        pusat.name = 'Kas Tunai Customer (Brankas)';
+        pusat.description = 'Kas Besar - Brankas penerimaan tunai customer & transaksi tunai';
+      }
+
+      saveStoredCashAccounts(list, true);
+    }
+
+    return list;
   } catch (e) {
     console.error('Error loading cash accounts:', e);
     return INITIAL_CASH_ACCOUNTS;
@@ -480,8 +540,18 @@ export function recordCashTransaction(
   const currentBal = Number(targetAcc.current_balance) || 0;
   const newBal = txData.tx_type === 'IN' ? currentBal + Number(txData.amount) : currentBal - Number(txData.amount);
 
+  let pettySub = txData.petty_sub_category;
+  if (!pettySub) {
+    if (txData.category === 'SALES_OPS') {
+      pettySub = 'SALES';
+    } else if (txData.category === 'OPERASIONAL_KANTOR' || txData.category === 'PETTY_CASH') {
+      pettySub = 'KANTOR';
+    }
+  }
+
   const newTx: CashTransaction = {
     ...txData,
+    petty_sub_category: pettySub,
     id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     tx_number: txNumber,
     account_name: targetAcc.name,

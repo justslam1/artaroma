@@ -17,6 +17,10 @@ import {
   Download,
   Image as ImageIcon,
   DollarSign,
+  Car,
+  Wallet,
+  ArrowRightLeft,
+  Sparkles,
 } from 'lucide-react';
 
 /* =========================================================================
@@ -33,6 +37,7 @@ interface RecordTransactionModalProps {
     account_id: string;
     tx_type: CashTxType;
     category: CashCategory;
+    petty_sub_category?: 'KANTOR' | 'SALES';
     amount: number;
     date: string;
     recipient_or_payer: string;
@@ -56,6 +61,7 @@ export function RecordTransactionModal({
 
   const [accountId, setAccountId] = useState(defaultAccId);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [pettySubCategory, setPettySubCategory] = useState<'KANTOR' | 'SALES'>('KANTOR');
   const [category, setCategory] = useState<CashCategory>(
     txType === 'IN' ? 'PENJUALAN_SO' : 'OPERASIONAL_KANTOR'
   );
@@ -75,8 +81,17 @@ export function RecordTransactionModal({
   }, [selectedAccountId, accounts]);
 
   React.useEffect(() => {
-    setCategory(txType === 'IN' ? 'PENJUALAN_SO' : 'OPERASIONAL_KANTOR');
-  }, [txType]);
+    const acc = accounts.find((a) => a.id === accountId);
+    if (txType === 'IN') {
+      setCategory('PENJUALAN_SO');
+    } else {
+      if (acc?.type === 'KAS_KECIL') {
+        setCategory(pettySubCategory === 'KANTOR' ? 'OPERASIONAL_KANTOR' : 'SALES_OPS');
+      } else {
+        setCategory('PEMBELIAN_PO');
+      }
+    }
+  }, [txType, accountId, accounts]);
 
   if (!isOpen) return null;
 
@@ -105,10 +120,12 @@ export function RecordTransactionModal({
       return;
     }
 
+    const isPetty = selectedAccount?.type === 'KAS_KECIL';
     onSuccess({
       account_id: accountId,
       tx_type: txType,
       category,
+      petty_sub_category: isPetty ? pettySubCategory : (category === 'SALES_OPS' ? 'SALES' : category === 'OPERASIONAL_KANTOR' ? 'KANTOR' : undefined),
       amount: numAmount,
       date,
       recipient_or_payer: recipientOrPayer.trim(),
@@ -143,7 +160,7 @@ export function RecordTransactionModal({
                 {isMasuk ? 'Catat Kas Masuk (Bukti Kas Masuk / BKM)' : 'Catat Kas Keluar (Bukti Kas Keluar / BKK)'}
               </h3>
               <p className="text-[11px] text-white/80">
-                {isMasuk ? 'Penerimaan dana, piutang customer, atau tambahan modal' : 'Pengeluaran operasional, hutang suplier, atau biaya kantor'}
+                {isMasuk ? 'Penerimaan dana order customer, transfer, atau tambahan modal' : 'Pengeluaran operasional kantor, salesmen, atau PO suplier'}
               </p>
             </div>
           </div>
@@ -174,7 +191,7 @@ export function RecordTransactionModal({
               </select>
               {selectedAccount && (
                 <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                  PIC: {selectedAccount.pic_name || 'Finance'} | Saldo: <span className="font-bold text-slate-700">{formatIDR(selectedAccount.current_balance)}</span>
+                  Tipe: <span className="font-bold text-blue-700">{selectedAccount.type.replace(/_/g, ' ')}</span> | Saldo: <span className="font-bold text-slate-700">{formatIDR(selectedAccount.current_balance)}</span>
                 </div>
               )}
             </div>
@@ -193,6 +210,66 @@ export function RecordTransactionModal({
             </div>
           </div>
 
+          {/* Special Helper for Kas Besar Tunai Customer */}
+          {selectedAccount?.type === 'KAS_BESAR_TUNAI' && isMasuk && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-[11px] text-emerald-800 flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div>
+                <span className="font-bold block">Penerimaan Kas Besar Tunai (Brankas):</span>
+                <span>Untuk pelunasan nota/invoice penjualan tunai dari customer langsung.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-Pos Kas Kecil Selector: Model 1 */}
+          {selectedAccount?.type === 'KAS_KECIL' && !isMasuk && (
+            <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-teal-900 text-[11px] uppercase tracking-wide flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-teal-600" /> Pos Pengeluaran Kas Kecil:
+                </span>
+                <span className="text-[10px] bg-teal-200/70 text-teal-800 px-2 py-0.5 rounded-full font-bold">
+                  Model 1: 1 Kas Kecil Terpadu
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPettySubCategory('KANTOR');
+                    setCategory('OPERASIONAL_KANTOR');
+                  }}
+                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                    pettySubCategory === 'KANTOR'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" /> 🏢 Pos Kas Kantor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPettySubCategory('SALES');
+                    setCategory('SALES_OPS');
+                  }}
+                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                    pettySubCategory === 'SALES'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50'
+                  }`}
+                >
+                  <Car className="w-3.5 h-3.5" /> 🚗 Pos Kas Salesmen
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                {pettySubCategory === 'KANTOR'
+                  ? '🏢 Pos Kantor: Listrik PLN, WiFi kantor, ATK, konsumsi, galon air, maintenance AC & perbaikan sarana.'
+                  : '🚗 Pos Salesmen: Biaya lapangan salesmen (BBM kendaraan, tarif tol, parkir, konsumsi visit B2B, sampling aroma).'}
+              </p>
+            </div>
+          )}
+
           {/* Kategori Transaksi */}
           <div>
             <label className="block text-slate-700 font-bold mb-1">
@@ -200,13 +277,18 @@ export function RecordTransactionModal({
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as CashCategory)}
+              onChange={(e) => {
+                const val = e.target.value as CashCategory;
+                setCategory(val);
+                if (val === 'SALES_OPS') setPettySubCategory('SALES');
+                if (val === 'OPERASIONAL_KANTOR' || val === 'PETTY_CASH') setPettySubCategory('KANTOR');
+              }}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-blue-500 focus:bg-white"
               required
             >
               {isMasuk ? (
                 <>
-                  <option value="PENJUALAN_SO">Penjualan SO (Piutang Customer)</option>
+                  <option value="PENJUALAN_SO">Penjualan SO (Pelunasan Customer - Kas Besar)</option>
                   <option value="TOPUP_KAS">Penerimaan Top-Up Kas</option>
                   <option value="SETOR_BALIK">Setor Balik Sisa Dana (Sales / Lapangan)</option>
                   <option value="MODAL_PEMILIK">Setoran Modal Pemilik / Investor</option>
@@ -214,13 +296,23 @@ export function RecordTransactionModal({
                 </>
               ) : (
                 <>
-                  <option value="OPERASIONAL_KANTOR">Operasional Kantor (Listrik, Wifi, Sewa, Maintenance)</option>
-                  <option value="PETTY_CASH">Kas Kecil (Petty Cash - Galon, Konsumsi, ATK Mikro)</option>
-                  <option value="SALES_OPS">Operasional Sales (BBM, Tol, Akomodasi Visit)</option>
-                  <option value="PEMBELIAN_PO">Pembayaran PO Suplier (Hutang Dagang)</option>
-                  <option value="GAJI_KARYAWAN">Gaji & Insentif Karyawan</option>
-                  <option value="PAJAK">Pajak (PPN / PPh / Retribusi)</option>
-                  <option value="LAINNYA">Pengeluaran Lainnya</option>
+                  {selectedAccount?.type === 'KAS_KECIL' ? (
+                    <>
+                      <option value="OPERASIONAL_KANTOR">🏢 Pos Kantor (Listrik, Wifi, ATK, Galon, Maintenance)</option>
+                      <option value="SALES_OPS">🚗 Pos Salesmen (BBM, Tol, Parkir, Visit B2B, Sampling)</option>
+                      <option value="PETTY_CASH">Konsumsi & Pengeluaran Mikro Harian</option>
+                      <option value="LAINNYA">Pengeluaran Kas Kecil Lainnya</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="PEMBELIAN_PO">Pembayaran PO Suplier (Hutang Dagang - Kas Besar)</option>
+                      <option value="OPERASIONAL_KANTOR">Operasional Kantor (Listrik, Wifi, Sewa, Maintenance)</option>
+                      <option value="SALES_OPS">Operasional Sales (BBM, Tol, Akomodasi Visit)</option>
+                      <option value="GAJI_KARYAWAN">Gaji & Insentif Karyawan</option>
+                      <option value="PAJAK">Pajak (PPN / PPh / Retribusi)</option>
+                      <option value="LAINNYA">Pengeluaran Lainnya</option>
+                    </>
+                  )}
                 </>
               )}
             </select>
@@ -486,6 +578,66 @@ export function TransferCashModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Quick Presets for Awam / Non-finance */}
+          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2">
+            <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" /> Shortcut Transfer Paling Sering:
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const bca = accounts.find((a) => a.type === 'KAS_BESAR_BANK') || accounts[0];
+                  const petty = accounts.find((a) => a.type === 'KAS_KECIL');
+                  if (bca && petty) {
+                    setFromAccountId(bca.id);
+                    setToAccountId(petty.id);
+                    setCategory('TOPUP_KAS');
+                    setNotes('Top-up saldo Kas Kecil operasional (kantor & salesmen)');
+                  }
+                }}
+                className="text-left px-2.5 py-2 bg-white border border-blue-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg text-slate-700 font-semibold text-[11px] transition-all cursor-pointer shadow-xs"
+              >
+                <span className="font-bold text-blue-700 block">➔ Top-Up Kas Kecil</span>
+                <span className="text-[10px] text-slate-500">Dari Kas Besar Bank BCA ke Kas Kecil</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const bca = accounts.find((a) => a.type === 'KAS_BESAR_BANK') || accounts[0];
+                  const petty = accounts.find((a) => a.type === 'KAS_KECIL');
+                  if (bca && petty) {
+                    setFromAccountId(petty.id);
+                    setToAccountId(bca.id);
+                    setCategory('SETOR_BALIK');
+                    setNotes('Penyetoran balik sisa saldo kas kecil ke rekening bank');
+                  }
+                }}
+                className="text-left px-2.5 py-2 bg-white border border-blue-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg text-slate-700 font-semibold text-[11px] transition-all cursor-pointer shadow-xs"
+              >
+                <span className="font-bold text-indigo-700 block">➔ Setor Balik Kas Kecil</span>
+                <span className="text-[10px] text-slate-500">Dari Kas Kecil ke Kas Besar Bank BCA</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const bca = accounts.find((a) => a.type === 'KAS_BESAR_BANK') || accounts[0];
+                  const tunai = accounts.find((a) => a.type === 'KAS_BESAR_TUNAI');
+                  if (bca && tunai) {
+                    setFromAccountId(tunai.id);
+                    setToAccountId(bca.id);
+                    setCategory('SETOR_BALIK');
+                    setNotes('Setor tunai brankas pembayaran customer ke rekening bank BCA');
+                  }
+                }}
+                className="text-left px-2.5 py-2 bg-white border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50 rounded-lg text-slate-700 font-semibold text-[11px] transition-all cursor-pointer shadow-xs sm:col-span-2"
+              >
+                <span className="font-bold text-emerald-700 block">➔ Setor Kas Tunai Customer ke Bank</span>
+                <span className="text-[10px] text-slate-500">Dari Kas Besar Tunai (Brankas Customer) ke Rekening Bank BCA/Mandiri</span>
+              </button>
+            </div>
+          </div>
+
           {/* Visual Transfer Flow Indicator */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
             <div className="flex-1 text-center">

@@ -483,6 +483,7 @@ export interface CashTransaction {
   account_name: string;
   tx_type: CashTxType;
   category: CashCategory;
+  petty_sub_category?: 'KANTOR' | 'SALES'; // Sub-pos Kas Kecil: Operasional Kantor vs Operasional Salesmen
   amount: number;
   balance_after: number;
   recipient_or_payer: string;

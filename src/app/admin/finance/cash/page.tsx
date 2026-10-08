@@ -55,6 +55,7 @@ import {
   Briefcase,
   AlertCircle,
   ShoppingBag,
+  Car,
 } from 'lucide-react';
 
 export default function CashManagementPage() {
@@ -63,7 +64,8 @@ export default function CashManagementPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters state
-  const [selectedTab, setSelectedTab] = useState<string>('ALL'); // 'ALL' or specific account.id or 'KAS_BESAR' | 'KAS_KANTOR' | 'KAS_KECIL' | 'KAS_SALES'
+  const [selectedTab, setSelectedTab] = useState<string>('ALL'); // 'ALL' | 'KAS_BESAR' | 'KAS_KECIL' | specific account.id
+  const [selectedSubFilter, setSelectedSubFilter] = useState<'ALL' | 'KANTOR' | 'SALES' | 'BANK' | 'TUNAI'>('ALL');
   const [selectedTxType, setSelectedTxType] = useState<string>('ALL'); // 'ALL' | 'IN' | 'OUT' | 'TRANSFER'
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -192,38 +194,74 @@ export default function CashManagementPage() {
   // Calculations
   const totalAllBalance = accounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
 
-  const totalKasBesar = accounts
-    .filter((a) => a.type === 'KAS_BESAR_BANK' || a.type === 'KAS_BESAR_TUNAI')
-    .reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const kasBesarBankAccounts = accounts.filter((a) => a.type === 'KAS_BESAR_BANK');
+  const kasBesarTunaiAccounts = accounts.filter((a) => a.type === 'KAS_BESAR_TUNAI');
+  const kasKecilAccounts = accounts.filter(
+    (a) => a.type === 'KAS_KECIL' || a.id === 'acc-petty' || a.type === 'KAS_KANTOR' || a.type === 'KAS_SALES'
+  );
 
-  const totalKasKantor = accounts
-    .filter((a) => a.type === 'KAS_KANTOR')
-    .reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const totalKasBesarBank = kasBesarBankAccounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const totalKasBesarTunai = kasBesarTunaiAccounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const totalKasBesar = totalKasBesarBank + totalKasBesarTunai;
 
-  const totalKasKecil = accounts
-    .filter((a) => a.type === 'KAS_KECIL')
-    .reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  const totalKasKecil = kasKecilAccounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
 
-  const totalKasSales = accounts
-    .filter((a) => a.type === 'KAS_SALES')
-    .reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
+  // Calculate current month expenses for Kas Kecil breakdown (Pos Kantor vs Pos Salesmen)
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const currentMonthTransactions = transactions.filter((t) => {
+    if (!t.date) return false;
+    const d = new Date(t.date);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const pettyKantorMonth = currentMonthTransactions
+    .filter((t) => {
+      const isOut = t.tx_type === 'OUT';
+      const isPettyAcc = kasKecilAccounts.some((a) => a.id === t.account_id);
+      const isKantorCategory =
+        t.category === 'OPERASIONAL_KANTOR' || t.category === 'PETTY_CASH' || t.petty_sub_category === 'KANTOR';
+      return isOut && (isPettyAcc || isKantorCategory);
+    })
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+  const pettySalesMonth = currentMonthTransactions
+    .filter((t) => {
+      const isOut = t.tx_type === 'OUT';
+      const isPettyAcc = kasKecilAccounts.some((a) => a.id === t.account_id);
+      const isSalesCategory = t.category === 'SALES_OPS' || t.petty_sub_category === 'SALES';
+      return isOut && (isPettyAcc || isSalesCategory);
+    })
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Filter Transactions
   const filteredTransactions = transactions.filter((t) => {
-    // 1. Account Filter
+    // 1. Account / Tab Filter
     if (selectedTab !== 'ALL') {
       if (selectedTab === 'KAS_BESAR') {
         const acc = accounts.find((a) => a.id === t.account_id);
         if (!acc || (acc.type !== 'KAS_BESAR_BANK' && acc.type !== 'KAS_BESAR_TUNAI')) return false;
-      } else if (selectedTab === 'KAS_KANTOR') {
-        const acc = accounts.find((a) => a.id === t.account_id);
-        if (!acc || acc.type !== 'KAS_KANTOR') return false;
+        if (selectedSubFilter === 'BANK' && acc.type !== 'KAS_BESAR_BANK') return false;
+        if (selectedSubFilter === 'TUNAI' && acc.type !== 'KAS_BESAR_TUNAI') return false;
       } else if (selectedTab === 'KAS_KECIL') {
         const acc = accounts.find((a) => a.id === t.account_id);
-        if (!acc || acc.type !== 'KAS_KECIL') return false;
-      } else if (selectedTab === 'KAS_SALES') {
-        const acc = accounts.find((a) => a.id === t.account_id);
-        if (!acc || acc.type !== 'KAS_SALES') return false;
+        const isPettyAcc =
+          acc?.type === 'KAS_KECIL' ||
+          t.account_id === 'acc-petty' ||
+          acc?.type === 'KAS_KANTOR' ||
+          acc?.type === 'KAS_SALES';
+        if (!isPettyAcc) return false;
+
+        if (selectedSubFilter === 'KANTOR') {
+          const isKantor =
+            t.category === 'OPERASIONAL_KANTOR' || t.category === 'PETTY_CASH' || t.petty_sub_category === 'KANTOR';
+          if (!isKantor) return false;
+        } else if (selectedSubFilter === 'SALES') {
+          const isSales = t.category === 'SALES_OPS' || t.petty_sub_category === 'SALES';
+          if (!isSales) return false;
+        }
       } else {
         // Specific account ID
         if (t.account_id !== selectedTab) return false;
@@ -291,10 +329,10 @@ export default function CashManagementPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                  Manajemen Kas
+                  Manajemen Kas & Bank
                 </h1>
                 <p className="text-xs text-slate-500 font-medium">
-                  Pengelolaan Kas Besar Bank, Kas Kantor, Kas Kecil (Petty Cash), Kas Sales & Rekonsiliasi SO/PO
+                  Kas Besar (Penerimaan Customer & Suplier) & Kas Kecil (Operasional Kantor & Sales Lapangan)
                 </p>
               </div>
             </div>
@@ -333,9 +371,9 @@ export default function CashManagementPage() {
                 setIsTransferModalOpen(true);
               }}
               className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Transfer Antar Rekening / Top Up Kas Subordinat"
+              title="Transfer Antar Rekening / Top Up Kas Kecil"
             >
-              <ArrowRightLeft className="w-4 h-4" /> Transfer Antar Kas
+              <ArrowRightLeft className="w-4 h-4" /> Transfer / Top-Up Kas
             </button>
 
             <button
@@ -348,195 +386,279 @@ export default function CashManagementPage() {
           </div>
         </div>
 
-        {/* 1. TOP CARDS: MULTI-WALLET SUMMARY OVERVIEW */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {/* Card 1: TOTAL KESELURUHAN */}
-          <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-5 text-white shadow-md flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-xl -mr-6 -mt-6"></div>
+        {/* 1. TOP CARDS: SIMPLIFIED 3 CARDS (KAS BESAR & KAS KECIL - MODEL 1) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: TOTAL KAS & BANK */}
+          <div
+            onClick={() => {
+              setSelectedTab('ALL');
+              setSelectedSubFilter('ALL');
+            }}
+            className={`bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-5 text-white shadow-md flex flex-col justify-between relative overflow-hidden cursor-pointer hover:shadow-lg transition-all ${
+              selectedTab === 'ALL' ? 'ring-2 ring-blue-400' : ''
+            }`}
+          >
+            <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-xl -mr-6 -mt-6"></div>
             <div>
               <div className="flex items-center justify-between text-blue-300">
-                <span className="text-[11px] font-bold uppercase tracking-wider">Total Kas & Bank</span>
-                <Landmark className="w-4 h-4 text-blue-400" />
+                <span className="text-[11px] font-bold uppercase tracking-wider">Total Kas & Bank Perusahaan</span>
+                <Landmark className="w-5 h-5 text-blue-400" />
               </div>
-              <div className="text-xl lg:text-2xl font-black font-mono mt-2 tracking-tight text-white">
+              <div className="text-2xl lg:text-3xl font-black font-mono mt-2 tracking-tight text-white">
                 {formatIDR(totalAllBalance)}
               </div>
             </div>
-            <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[10px] text-blue-200">
-              <span>{accounts.length} Akun Terdaftar</span>
-              <span className="font-bold text-emerald-400">● Aktif Semua</span>
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-blue-200">
+              <span>Kas Besar + Kas Kecil</span>
+              <span className="font-bold text-emerald-400">● {accounts.length} Akun Aktif</span>
             </div>
           </div>
 
-          {/* Card 2: KAS BESAR (BANK & PUSAT) */}
+          {/* Card 2: KAS BESAR (BANK & TUNAI CUSTOMER) */}
           <div
-            onClick={() => setSelectedTab('KAS_BESAR')}
-            className={`bg-white border rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
+            onClick={() => {
+              setSelectedTab('KAS_BESAR');
+              setSelectedSubFilter('ALL');
+            }}
+            className={`bg-white border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
               selectedTab === 'KAS_BESAR' ? 'border-blue-500 ring-2 ring-blue-100 bg-blue-50/20' : 'border-slate-200'
             }`}
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Besar</span>
-                <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-                  <CreditCard className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Pilar 1: Kas Besar
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <CreditCard className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-lg font-black font-mono text-slate-800 mt-1.5">
+              <div className="text-2xl font-black font-mono text-slate-800 mt-2">
                 {formatIDR(totalKasBesar)}
               </div>
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded-md border border-blue-200">
+                  🏦 Bank: {formatIDR(totalKasBesarBank)}
+                </span>
+                <span className="bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-md border border-emerald-200">
+                  💵 Tunai Customer: {formatIDR(totalKasBesarTunai)}
+                </span>
+              </div>
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-              <span>BCA, Mandiri, Brankas</span>
-              <span className="font-bold text-blue-600">Klik Filter ➔</span>
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+              <span>Pelunasan Customer & PO Suplier</span>
+              <span className="font-bold text-blue-600">Filter Kas Besar ➔</span>
             </div>
           </div>
 
-          {/* Card 3: KAS KANTOR */}
+          {/* Card 3: KAS KECIL OPERASIONAL (KANTOR & SALESMEN) */}
           <div
-            onClick={() => setSelectedTab('KAS_KANTOR')}
-            className={`bg-white border rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
-              selectedTab === 'KAS_KANTOR' ? 'border-purple-500 ring-2 ring-purple-100 bg-purple-50/20' : 'border-slate-200'
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Kantor</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-                  <Building2 className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-lg font-black font-mono text-purple-900 mt-1.5">
-                {formatIDR(totalKasKantor)}
-              </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-              <span>Listrik, Wifi, Sewa</span>
-              <span className="font-bold text-purple-600">Klik Filter ➔</span>
-            </div>
-          </div>
-
-          {/* Card 4: KAS KECIL (PETTY CASH) */}
-          <div
-            onClick={() => setSelectedTab('KAS_KECIL')}
-            className={`bg-white border rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
+            onClick={() => {
+              setSelectedTab('KAS_KECIL');
+              setSelectedSubFilter('ALL');
+            }}
+            className={`bg-white border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
               selectedTab === 'KAS_KECIL' ? 'border-teal-500 ring-2 ring-teal-100 bg-teal-50/20' : 'border-slate-200'
             }`}
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Kecil (Petty)</span>
-                <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-                  <PiggyBank className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Pilar 2: Kas Kecil Operasional
+                  </span>
+                  <span className="text-[9px] bg-teal-100 text-teal-800 font-extrabold px-1.5 py-0.5 rounded">
+                    Model 1
+                  </span>
+                </div>
+                <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                  <PiggyBank className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-lg font-black font-mono text-teal-900 mt-1.5">
+              <div className="text-2xl font-black font-mono text-teal-900 mt-2">
                 {formatIDR(totalKasKecil)}
               </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-              <span>Konsumsi, Galon, ATK</span>
-              <span className="font-bold text-teal-600">Klik Filter ➔</span>
-            </div>
-          </div>
-
-          {/* Card 5: KAS SALES */}
-          <div
-            onClick={() => setSelectedTab('KAS_SALES')}
-            className={`bg-white border rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
-              selectedTab === 'KAS_SALES' ? 'border-indigo-500 ring-2 ring-indigo-100 bg-indigo-50/20' : 'border-slate-200'
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kas Sales Lapangan</span>
-                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <Briefcase className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div className="text-lg font-black font-mono text-indigo-900 mt-1.5">
-                {formatIDR(totalKasSales)}
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="bg-purple-50 text-purple-700 font-semibold px-2 py-0.5 rounded-md border border-purple-200" title="Total pengeluaran Pos Kantor bulan ini">
+                  🏢 Pos Kantor: {formatIDR(pettyKantorMonth)}
+                </span>
+                <span className="bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-md border border-indigo-200" title="Total pengeluaran Pos Salesmen bulan ini">
+                  🚗 Pos Sales: {formatIDR(pettySalesMonth)}
+                </span>
               </div>
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-              <span>BBM, Tol, Visit B2B</span>
-              <span className="font-bold text-indigo-600">Klik Filter ➔</span>
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+              <span>Dana Operasional Kantor & Sales</span>
+              <span className="font-bold text-teal-600">Filter Kas Kecil ➔</span>
             </div>
           </div>
         </div>
 
-        {/* 2. MINI-WALLETS REKENING KAS GRID */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Wallet className="w-4 h-4 text-blue-600" /> Rincian Akun Kas & Rekening Bank Artaroma:
-            </span>
+        {/* 2. REKENING & DOMPET KAS GRID (KAS BESAR & KAS KECIL) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-blue-600" />
+                Rincian Akun Kas & Rekening Bank Artaroma:
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Pilih akun di bawah untuk memfilter transaksi pada buku kas
+              </p>
+            </div>
             <button
-              onClick={() => setSelectedTab('ALL')}
-              className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+              onClick={() => {
+                setSelectedTab('ALL');
+                setSelectedSubFilter('ALL');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                selectedTab === 'ALL'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-50 text-blue-600 border-slate-200 hover:bg-slate-100'
+              }`}
             >
               Lihat Semua Akun ({accounts.length})
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {accounts.map((acc) => {
-              const isSelected = selectedTab === acc.id;
-              return (
-                <div
-                  key={acc.id}
-                  onClick={() => setSelectedTab(acc.id)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50/40 ring-2 ring-blue-100 shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 hover:bg-white'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block truncate max-w-[80%]">
-                        {acc.bank_name || (acc.type === 'KAS_BESAR_TUNAI' ? 'Brankas' : acc.type.replace('KAS_', ''))}
-                      </span>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    </div>
-                    <h4 className="font-bold text-slate-800 text-xs mt-1 truncate" title={acc.name}>
-                      {acc.name}
-                    </h4>
-                    {acc.account_number && (
-                      <span className="text-[10px] text-slate-400 font-mono block truncate">
-                        {acc.account_number}
-                      </span>
-                    )}
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* GRUP 1: KAS BESAR (Bank & Tunai Customer) - 8 cols */}
+            <div className="lg:col-span-8 bg-blue-50/30 border border-blue-100 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+                  Kas Besar (Bank Transfer & Brankas Tunai Customer)
+                </span>
+                <span className="font-mono text-xs font-bold text-blue-700">
+                  Total: {formatIDR(totalKasBesar)}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {accounts
+                  .filter((a) => a.type === 'KAS_BESAR_BANK' || a.type === 'KAS_BESAR_TUNAI')
+                  .map((acc) => {
+                    const isSelected = selectedTab === acc.id;
+                    const isTunai = acc.type === 'KAS_BESAR_TUNAI';
+                    return (
+                      <div
+                        key={acc.id}
+                        onClick={() => {
+                          setSelectedTab(acc.id);
+                          setSelectedSubFilter('ALL');
+                        }}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'border-blue-500 bg-white ring-2 ring-blue-300 shadow-sm'
+                            : 'border-blue-200/60 bg-white/80 hover:bg-white hover:border-blue-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">
+                              {isTunai ? '💵 Tunai Customer' : `🏦 ${acc.bank_name || 'Bank'}`}
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          </div>
+                          <h4 className="font-bold text-slate-800 text-xs mt-1 truncate" title={acc.name}>
+                            {acc.name}
+                          </h4>
+                          {acc.account_number && (
+                            <span className="text-[10px] text-slate-400 font-mono block truncate">
+                              {acc.account_number}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <span className="text-xs font-black font-mono text-slate-800 block truncate">
+                            {formatIDR(acc.current_balance)}
+                          </span>
+                          <span className="text-[9px] text-slate-400 block truncate">
+                            PIC: {acc.pic_name || 'Finance'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
 
-                  <div className="mt-2 pt-2 border-t border-slate-200/60">
-                    <span className="text-xs font-black font-mono text-slate-800 block truncate">
-                      {formatIDR(acc.current_balance)}
-                    </span>
-                    <span className="text-[9px] text-slate-400 block truncate">PIC: {acc.pic_name || '-'}</span>
-                  </div>
+            {/* GRUP 2: KAS KECIL OPERASIONAL (KANTOR & SALES) - 4 cols */}
+            <div className="lg:col-span-4 bg-teal-50/40 border border-teal-200/80 rounded-xl p-3.5 space-y-2.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-teal-900 uppercase tracking-wide flex items-center gap-1.5">
+                    <PiggyBank className="w-3.5 h-3.5 text-teal-600" />
+                    Kas Kecil Operasional
+                  </span>
+                  <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full font-bold">
+                    Model 1
+                  </span>
                 </div>
-              );
-            })}
+                {accounts
+                  .filter((a) => a.type === 'KAS_KECIL' || a.id === 'acc-petty')
+                  .slice(0, 1)
+                  .map((acc) => {
+                    const isSelected = selectedTab === acc.id || selectedTab === 'KAS_KECIL';
+                    return (
+                      <div
+                        key={acc.id}
+                        onClick={() => {
+                          setSelectedTab('KAS_KECIL');
+                          setSelectedSubFilter('ALL');
+                        }}
+                        className={`mt-2 p-3 rounded-xl border transition-all cursor-pointer bg-white ${
+                          isSelected
+                            ? 'border-teal-500 ring-2 ring-teal-300 shadow-sm'
+                            : 'border-teal-200 hover:border-teal-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-teal-700">
+                            💼 1 Dompet Terpadu
+                          </span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        </div>
+                        <h4 className="font-bold text-slate-800 text-xs mt-1">
+                          {acc.name}
+                        </h4>
+                        <div className="text-base font-black font-mono text-teal-900 mt-1">
+                          {formatIDR(acc.current_balance)}
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px]">
+                          <div className="bg-purple-50 text-purple-800 p-1.5 rounded-lg border border-purple-100">
+                            <span className="font-bold block">🏢 Pos Kantor</span>
+                            <span className="font-mono text-[9px] text-purple-600">Listrik, Wifi, ATK</span>
+                          </div>
+                          <div className="bg-indigo-50 text-indigo-800 p-1.5 rounded-lg border border-indigo-100">
+                            <span className="font-bold block">🚗 Pos Salesmen</span>
+                            <span className="font-mono text-[9px] text-indigo-600">BBM, Tol, Sampling</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* 3. FILTER & SEARCH CONTROLS BAR */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-            {/* Account Tabs */}
+            {/* Primary Account Tabs */}
             <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0">
               {[
-                { id: 'ALL', label: 'Semua Akun' },
-                { id: 'KAS_BESAR', label: 'Kas Besar' },
-                { id: 'KAS_KANTOR', label: 'Kas Kantor' },
-                { id: 'KAS_KECIL', label: 'Kas Kecil' },
-                { id: 'KAS_SALES', label: 'Kas Sales' },
+                { id: 'ALL', label: 'Semua Kas' },
+                { id: 'KAS_BESAR', label: '🏦 Kas Besar (Bank & Tunai)' },
+                { id: 'KAS_KECIL', label: '💼 Kas Kecil (Kantor & Sales)' },
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setSelectedTab(tab.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${
+                  onClick={() => {
+                    setSelectedTab(tab.id);
+                    setSelectedSubFilter('ALL');
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border cursor-pointer ${
                     selectedTab === tab.id
                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -559,6 +681,82 @@ export default function CashManagementPage() {
               />
             </div>
           </div>
+
+          {/* Sub-Filters: Pos Kas Kecil Toggles or Kas Besar Toggles */}
+          {(selectedTab === 'KAS_KECIL' || selectedTab === 'KAS_BESAR') && (
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+              <span className="text-slate-400 font-semibold text-[11px] flex items-center gap-1">
+                Sub-Pos Filter:
+              </span>
+              {selectedTab === 'KAS_KECIL' ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setSelectedSubFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                      selectedSubFilter === 'ALL'
+                        ? 'bg-teal-700 text-white border-teal-700'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Semua Pos Kas Kecil
+                  </button>
+                  <button
+                    onClick={() => setSelectedSubFilter('KANTOR')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1 ${
+                      selectedSubFilter === 'KANTOR'
+                        ? 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-slate-50 text-purple-700 border-purple-200 hover:bg-purple-50'
+                    }`}
+                  >
+                    <Building2 className="w-3.5 h-3.5" /> 🏢 Pos Kas Kantor
+                  </button>
+                  <button
+                    onClick={() => setSelectedSubFilter('SALES')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1 ${
+                      selectedSubFilter === 'SALES'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-slate-50 text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                    }`}
+                  >
+                    <Car className="w-3.5 h-3.5" /> 🚗 Pos Kas Salesmen
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setSelectedSubFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                      selectedSubFilter === 'ALL'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Semua Kas Besar
+                  </button>
+                  <button
+                    onClick={() => setSelectedSubFilter('BANK')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1 ${
+                      selectedSubFilter === 'BANK'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-slate-50 text-blue-700 border-blue-200 hover:bg-blue-50'
+                    }`}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> 🏦 Rekening Bank
+                  </button>
+                  <button
+                    onClick={() => setSelectedSubFilter('TUNAI')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1 ${
+                      selectedSubFilter === 'TUNAI'
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+                    }`}
+                  >
+                    💵 Kas Tunai Customer
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Sub-Filters: Tx Type, Category, & Date Filter */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
@@ -585,16 +783,17 @@ export default function CashManagementPage() {
               className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-semibold focus:outline-none focus:border-blue-400"
             >
               <option value="ALL">Semua Kategori</option>
-              <option value="PENJUALAN_SO">Penjualan SO (Customer)</option>
-              <option value="PEMBELIAN_PO">Pembelian PO (Suplier)</option>
-              <option value="TOPUP_KAS">Top-Up Dana Kas</option>
-              <option value="OPERASIONAL_KANTOR">Operasional Kantor</option>
-              <option value="PETTY_CASH">Kas Kecil (Petty Cash)</option>
-              <option value="SALES_OPS">Operasional Sales</option>
-              <option value="SETOR_BALIK">Setor Balik</option>
+              <option value="PENJUALAN_SO">Penjualan SO (Customer - Kas Besar)</option>
+              <option value="PEMBELIAN_PO">Pembelian PO (Suplier - Kas Besar)</option>
+              <option value="OPERASIONAL_KANTOR">🏢 Pos Kantor (Listrik/WiFi/ATK - Kas Kecil)</option>
+              <option value="SALES_OPS">🚗 Pos Salesmen (BBM/Tol/Visit - Kas Kecil)</option>
+              <option value="PETTY_CASH">Konsumsi & Mikro Harian</option>
+              <option value="TOPUP_KAS">Top-Up Kas Kecil</option>
+              <option value="SETOR_BALIK">Setor Balik Sisa Kas</option>
               <option value="GAJI_KARYAWAN">Gaji Karyawan</option>
-              <option value="PAJAK">Pajak</option>
+              <option value="PAJAK">Pajak Perusahaan</option>
               <option value="MODAL_PEMILIK">Modal Pemilik</option>
+              <option value="LAINNYA">Lainnya</option>
             </select>
 
             {/* Date Quick Filter */}
@@ -687,10 +886,21 @@ export default function CashManagementPage() {
 
                         {/* Akun Kas */}
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="font-bold text-slate-800 block truncate max-w-[150px]">
+                          <span className="font-bold text-slate-800 block truncate max-w-[170px]">
                             {tx.account_name}
                           </span>
-                          <span className="text-[10px] text-slate-400 block">Oleh: {tx.created_by || '-'}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {tx.petty_sub_category === 'KANTOR' || tx.category === 'OPERASIONAL_KANTOR' ? (
+                              <span className="bg-purple-100 text-purple-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-purple-200">
+                                🏢 Pos Kantor
+                              </span>
+                            ) : tx.petty_sub_category === 'SALES' || tx.category === 'SALES_OPS' ? (
+                              <span className="bg-indigo-100 text-indigo-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-indigo-200">
+                                🚗 Pos Salesmen
+                              </span>
+                            ) : null}
+                            <span className="text-[10px] text-slate-400">Oleh: {tx.created_by || '-'}</span>
+                          </div>
                         </td>
 
                         {/* Kategori & Tipe */}
