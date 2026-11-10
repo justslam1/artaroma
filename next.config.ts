@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  experimental: {
+    cpus: 4,
+    workerThreads: false,
+  },
   turbopack: {
     root: process.cwd(),
   },
